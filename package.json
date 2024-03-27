@@ -9,8 +9,12 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
   },
   "dependencies": {
+    "buffer": "^6.0.3",
+    "ethers": "^5.5.2",
     "react": "^18.2",
     "react-dom": "^18.2",
+    "react-responsive-carousel": "^3.2.23",
+    "rollup-plugin-polyfill-node": "^0.13.0",
     "thirdweb": "beta"
   },
   "devDependencies": {
