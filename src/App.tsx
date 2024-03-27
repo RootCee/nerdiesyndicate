@@ -1,8 +1,7 @@
 import { ethers } from 'ethers';
 import MintingForm from './MintingForm';
 import abi from './contractABI';
-import { ConnectButton, ThirdwebProvider } from "thirdweb/react";
-import { client } from "./client";
+// Removed the duplicate imports
 import logo from './images/logo.png'; // Adjust the path as needed
 import merchandise1 from './images/merchandise1.png';
 import merchandise2 from './images/merchandise2.png';
@@ -19,12 +18,31 @@ import telegram from './images/telegram.png';
 import instagram from './images/instagram.png';
 import mainlogo from './images/mainlogo.png';
 import { Carousel } from 'react-responsive-carousel';
+import {
+  ThirdwebProvider,
+  ConnectWallet,
+  metamaskWallet,
+  coinbaseWallet,
+  walletConnect,
+  safeWallet,
+  embeddedWallet,
+  trustWallet,
+  zerionWallet,
+  bloctoWallet,
+  frameWallet,
+  rainbowWallet,
+  phantomWallet,
+} from "@thirdweb-dev/react";
 import "react-responsive-carousel/lib/styles/carousel.min.css";
 
 const Header: React.FC = () => {
   // ...same as before...
 
-  return null; // or return <></>;
+  return (
+    <header>
+      <h1>My Header</h1>
+    </header>
+  );
 };
 const handleMint = async (quantity: number) => {
   // This assumes you have MetaMask or another web3 provider enabled
@@ -67,19 +85,83 @@ function Toolbar() {
   );
 }
 
-export function App() {
+function App() {
   return (
-    <ThirdwebProvider client={client}>
-      <div className="App">
-        <Header />
-        <Toolbar /> {/* Added toolbar */}
-        <ConnectButton
-          appMetadata={{
-            name: "Nerdie Blaq Clubhouse",
-            url: "https://www.nerdieblaq.xyz/",
-          }}
-        />
-        <MintingForm onMint={handleMint} />
+    <>
+    <Toolbar />
+    <ThirdwebProvider
+      activeChain="optimism"
+      clientId="2d743b51e09ce76dd604f51a067a3b4c"
+      supportedWallets={[
+        metamaskWallet(),
+        coinbaseWallet({ recommended: true }),
+        walletConnect(),
+        safeWallet({
+          personalWallets: [
+            metamaskWallet(),
+            coinbaseWallet({ recommended: true }),
+            walletConnect(),
+            embeddedWallet({
+              auth: {
+                options: [
+                  "email",
+                  "google",
+                  "apple",
+                  "facebook",
+                ],
+              },
+            }),
+            trustWallet(),
+            zerionWallet(),
+            bloctoWallet(),
+            frameWallet(),
+            rainbowWallet(),
+            phantomWallet(),
+          ],
+        }),
+        embeddedWallet({
+          auth: {
+            options: [
+              "email",
+              "google",
+              "apple",
+              "facebook",
+            ],
+          },
+        }),
+        trustWallet(),
+        zerionWallet(),
+        bloctoWallet(),
+        frameWallet(),
+        rainbowWallet(),
+        phantomWallet(),
+      ]}
+      authConfig={{
+        authUrl: "/api/auth",
+        domain: "https://example.com",
+      }}
+    >
+      <ConnectWallet
+        theme={"dark"}
+        auth={{ loginOptional: false }}
+        switchToActiveChain={true}
+        modalSize={"wide"}
+        welcomeScreen={{
+          title:
+            "Welcome To The Nerdie Blaq Clubhouse",
+          img: {
+            src: "https://i1.sndcdn.com/artworks-BgT0E2U58re2u0jY-E3EOJw-t240x240.jpg",
+            width: 150,
+            height: 150,
+          },
+        }}
+        modalTitleIconUrl={
+          "https://i1.sndcdn.com/artworks-BgT0E2U58re2u0jY-E3EOJw-t240x240.jpg"
+        }
+        showThirdwebBranding={false}
+      />
+    </ThirdwebProvider>
+    <MintingForm onMint={handleMint} />
         <div className="about-us">
           <img src={mainlogo} alt="Main Logo" className="main-logo" />
           <h2>About Us</h2>
@@ -206,7 +288,7 @@ export function App() {
 <div className="team-section">
   <div className="team-member">
     <h2>Team Members</h2>
-  <img src={placeholder} alt="Item 1" style={{ width: '10%', height: 'auto', borderRadius: '50%' }} />
+    <img src={placeholder} alt="Item 1" style={{ width: '10%', height: 'auto', borderRadius: '50%' }} />
     <div className="team-member-info">
       <h3 className="team-member-title">RootCee</h3>
       <h4 className="subtext">Creator, Developer, Reggae Artist, Producer</h4>
@@ -219,9 +301,6 @@ export function App() {
   {/* Repeat for other team members */}
 </div>
 
-{/* Repeat for other team members */}
-</div>
-
 <div className="social-links">
   <a href="https://twitter.com/rootcee"><img src={twitter} alt="Twitter" style={{ width: '20%', height: 'auto' }} /></a>
   <a href="https://discord.com/invite/S874axwJyY"><img src={discord} alt="Discord" style={{ width: '20%', height: 'auto' }} /></a>
@@ -229,7 +308,8 @@ export function App() {
   <a href="https://instagram.com/rootcee_"><img src={instagram} alt="Instagram" style={{ width: '20%', height: 'auto' }} /></a>
 </div>
 <p>© 2024 Nerdie Blaq Clubhouse</p>
-
-</ThirdwebProvider>
-);
+</>
+  );
 }
+
+export default App; // Add this line to export the App component
