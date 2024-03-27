@@ -44,7 +44,7 @@ const Header: React.FC = () => {
     </header>
   );
 };
-const handleMint = async (quantity: number) => {
+const handleMint = async (quantity: number): Promise<ethers.ContractTransaction> => {
   // This assumes you have MetaMask or another web3 provider enabled
   const provider = new ethers.providers.Web3Provider(window.ethereum);
   const signer = provider.getSigner();
@@ -64,8 +64,10 @@ const handleMint = async (quantity: number) => {
     const receipt = await tx.wait();
     console.log(`Transaction mined! ${receipt.transactionHash}`);
 
+    return tx; // Return the transaction object
   } catch (err) {
     console.error('Error minting NFT:', err);
+    throw err; // Re-throw the error so it can be caught and handled by the caller
   }
 };
 
