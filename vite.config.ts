@@ -4,8 +4,10 @@ import polyfillNode from 'rollup-plugin-polyfill-node'; // Add this line
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [
-    react(),
-    polyfillNode(), // Add this line
-  ],
+  plugins: [react()],
+  resolve: {
+    alias: {
+      '@ethersproject/keccak256': '@ethersproject/keccak256/lib.esm/index.js',
+    },
+  },
 });
