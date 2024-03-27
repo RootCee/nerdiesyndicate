@@ -7,7 +7,11 @@ import myImage from './images/myImage.png';
 const contractAddress = '0xb9fBFA1c0de2DFC7947C7bbDaD629888461CbE4E';
 const pricePerNFT = ethers.utils.parseEther('0.01'); // Price per NFT in ETH
 
-const MintingForm = () => {
+interface MintingFormProps {
+  onMint: (quantity: number) => Promise<void>;
+}
+
+const MintingForm: React.FC<MintingFormProps> = ({ onMint }) => {
   const [quantity, setQuantity] = useState(1);
   const [totalSupply, setTotalSupply] = useState(0);
   const [myBalance, setMyBalance] = useState(0);
@@ -53,9 +57,7 @@ const MintingForm = () => {
       return;
     }
   
-    const tx = await contract.mint(quantity, {
-      value: cost // Send the correct amount of ETH
-    });
+    const tx = await onMint(quantity);
     const receipt = await tx.wait();
     console.log('Transaction receipt', receipt);
   };
@@ -83,4 +85,4 @@ const MintingForm = () => {
   );
 };
 
-export default MintingForm; // This should be at the top level, outside the MintingForm function
+export default MintingForm;

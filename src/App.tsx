@@ -21,10 +21,11 @@ import mainlogo from './images/mainlogo.png';
 import { Carousel } from 'react-responsive-carousel';
 import "react-responsive-carousel/lib/styles/carousel.min.css";
 
-function Header() {
+const Header: React.FC = () => {
   // ...same as before...
-}
 
+  return null; // or return <></>;
+};
 const handleMint = async (quantity: number) => {
   // This assumes you have MetaMask or another web3 provider enabled
   const provider = new ethers.providers.Web3Provider(window.ethereum);
