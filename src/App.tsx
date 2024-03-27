@@ -74,7 +74,6 @@ export function App() {
         <Header />
         <Toolbar /> {/* Added toolbar */}
         <ConnectButton
-          client={client}
           appMetadata={{
             name: "Nerdie Blaq Clubhouse",
             url: "https://www.nerdieblaq.xyz/",
