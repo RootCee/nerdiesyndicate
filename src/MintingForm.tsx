@@ -1,3 +1,9 @@
+declare global {
+  interface Window {
+    ethereum: any;
+  }
+}
+
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import contractABI from './contractABI';
