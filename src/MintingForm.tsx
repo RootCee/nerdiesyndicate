@@ -14,7 +14,7 @@ const contractAddress = '0xb9fBFA1c0de2DFC7947C7bbDaD629888461CbE4E';
 const pricePerNFT = ethers.utils.parseEther('0.01'); // Price per NFT in ETH
 
 interface MintingFormProps {
-  onMint: (quantity: number) => Promise<void>;
+  onMint: (quantity: number) => Promise<ethers.ContractTransaction>;
 }
 
 const MintingForm: React.FC<MintingFormProps> = ({ onMint }) => {

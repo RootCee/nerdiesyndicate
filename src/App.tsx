@@ -62,9 +62,9 @@ const handleMint = async (quantity: number): Promise<ethers.ContractTransaction>
 
     // Wait for the transaction to be mined
     const receipt = await tx.wait();
-    console.log(`Transaction mined! ${receipt.transactionHash}`);
 
-    return tx; // Return the transaction object
+    // Return the transaction object
+    return tx;
   } catch (err) {
     console.error('Error minting NFT:', err);
     throw err; // Re-throw the error so it can be caught and handled by the caller
