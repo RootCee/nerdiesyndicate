@@ -1,7 +1,7 @@
 import { ethers } from 'ethers';
 import MintingForm from './MintingForm';
 import abi from './contractABI';
-import client from './client';
+import { client } from './client';
 import logo from './images/logo.png'; // Adjust the path as needed
 import merchandise1 from './images/merchandise1.png';
 import merchandise2 from './images/merchandise2.png';

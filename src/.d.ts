@@ -1,11 +1,11 @@
 // contractABI.d.ts
 declare module '*.json' {
-    const value: any;
-    export default value;
+  const value: any;
+  export default value;
 }
-  
-  declare global {
-    interface Window {
-      ethereum: any;
-    }
+
+declare global {
+  interface Window {
+    ethereum: any;
   }
+}
