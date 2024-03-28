@@ -1,3 +1,9 @@
+declare global {
+  interface Window {
+    ethereum: any;
+  }
+}
+
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import contractABI from './contractABI';
@@ -8,7 +14,7 @@ const contractAddress = '0xb9fBFA1c0de2DFC7947C7bbDaD629888461CbE4E';
 const pricePerNFT = ethers.utils.parseEther('0.01'); // Price per NFT in ETH
 
 interface MintingFormProps {
-  onMint: (quantity: number) => Promise<ethers.ContractTransaction>; // Changed return type
+  onMint: (quantity: number) => Promise<void>;
 }
 
 const MintingForm: React.FC<MintingFormProps> = ({ onMint }) => {
@@ -22,12 +28,10 @@ const MintingForm: React.FC<MintingFormProps> = ({ onMint }) => {
     const fetchContractData = async () => {
       if (typeof window.ethereum !== 'undefined') {
         const provider = new ethers.providers.Web3Provider(window.ethereum);
-        const signer = provider.getSigner();
-        const contract = new ethers.Contract(contractAddress, contractABI, signer);
+        const contract = new ethers.Contract(contractAddress, contractABI, provider);
         const totalSupply = await contract.totalSupply();
         const maxSupply = await contract.MAX_SUPPLY();
-        const account = await signer.getAddress();
-        const myBalance = await contract.balanceOf(account);
+        const myBalance = await contract.balanceOf(window.ethereum.selectedAddress);
         setTotalSupply(totalSupply.toNumber());
         setMaxSupply(maxSupply.toNumber());
         setMyBalance(myBalance.toNumber());
@@ -50,8 +54,7 @@ const MintingForm: React.FC<MintingFormProps> = ({ onMint }) => {
     const contract = new ethers.Contract(contractAddress, contractABI, signer);
   
     // Get the user's balance
-    const account = await signer.getAddress();
-    const balance = await provider.getBalance(account);
+    const balance = await provider.getBalance(window.ethereum.selectedAddress);
     const cost = ethers.utils.parseEther((0.01 * quantity).toString());
   
     // Check if the user has enough ETH

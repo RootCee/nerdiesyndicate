@@ -1,7 +1,7 @@
 import { ethers } from 'ethers';
 import MintingForm from './MintingForm';
 import abi from './contractABI';
-import { client } from './client';
+// Removed the duplicate imports
 import logo from './images/logo.png'; // Adjust the path as needed
 import merchandise1 from './images/merchandise1.png';
 import merchandise2 from './images/merchandise2.png';
@@ -18,6 +18,21 @@ import telegram from './images/telegram.png';
 import instagram from './images/instagram.png';
 import mainlogo from './images/mainlogo.png';
 import { Carousel } from 'react-responsive-carousel';
+import {
+  ThirdwebProvider,
+  ConnectWallet,
+  metamaskWallet,
+  coinbaseWallet,
+  walletConnect,
+  safeWallet,
+  embeddedWallet,
+  trustWallet,
+  zerionWallet,
+  bloctoWallet,
+  frameWallet,
+  rainbowWallet,
+  phantomWallet,
+} from "@thirdweb-dev/react";
 import "react-responsive-carousel/lib/styles/carousel.min.css";
 
 const Header: React.FC = () => {
@@ -76,6 +91,78 @@ function App() {
   return (
     <>
     <Toolbar />
+    <ThirdwebProvider
+      activeChain="optimism"
+      clientId="2d743b51e09ce76dd604f51a067a3b4c"
+      supportedWallets={[
+        metamaskWallet(),
+        coinbaseWallet({ recommended: true }),
+        walletConnect(),
+        safeWallet({
+          personalWallets: [
+            metamaskWallet(),
+            coinbaseWallet({ recommended: true }),
+            walletConnect(),
+            embeddedWallet({
+              auth: {
+                options: [
+                  "email",
+                  "google",
+                  "apple",
+                  "facebook",
+                ],
+              },
+            }),
+            trustWallet(),
+            zerionWallet(),
+            bloctoWallet(),
+            frameWallet(),
+            rainbowWallet(),
+            phantomWallet(),
+          ],
+        }),
+        embeddedWallet({
+          auth: {
+            options: [
+              "email",
+              "google",
+              "apple",
+              "facebook",
+            ],
+          },
+        }),
+        trustWallet(),
+        zerionWallet(),
+        bloctoWallet(),
+        frameWallet(),
+        rainbowWallet(),
+        phantomWallet(),
+      ]}
+      authConfig={{
+        authUrl: "/api/auth",
+        domain: "https://nerdieblaq.xyz",
+      }}
+    >
+      <ConnectWallet
+        theme={"dark"}
+        auth={{ loginOptional: false }}
+        switchToActiveChain={true}
+        modalSize={"wide"}
+        welcomeScreen={{
+          title:
+            "Welcome To The Nerdie Blaq Clubhouse",
+          img: {
+            src: "https://i1.sndcdn.com/artworks-BgT0E2U58re2u0jY-E3EOJw-t240x240.jpg",
+            width: 150,
+            height: 150,
+          },
+        }}
+        modalTitleIconUrl={
+          "https://i1.sndcdn.com/artworks-BgT0E2U58re2u0jY-E3EOJw-t240x240.jpg"
+        }
+        showThirdwebBranding={false}
+      />
+    </ThirdwebProvider>
     <MintingForm onMint={handleMint} />
         <div className="about-us">
           <img src={mainlogo} alt="Main Logo" className="main-logo" />
