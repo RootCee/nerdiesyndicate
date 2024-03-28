@@ -140,12 +140,12 @@ function App() {
       ]}
       authConfig={{
         authUrl: "/api/auth",
-        domain: "https://nerdieblaq.xyz",
+        domain: "https://example.com",
       }}
     >
       <ConnectWallet
         theme={"dark"}
-        auth={{ loginOptional: false }}
+        auth={{ loginOptional: true }}
         switchToActiveChain={true}
         modalSize={"wide"}
         welcomeScreen={{
