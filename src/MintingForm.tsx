@@ -20,28 +20,20 @@ const MintingForm: React.FC<MintingFormProps> = ({ onMint }) => {
 
   useEffect(() => {
     const fetchContractData = async () => {
-      try {
-        if (typeof window.ethereum !== 'undefined') {
-          const provider = new ethers.providers.Web3Provider(window.ethereum);
-          const signer = provider.getSigner();
-          const contract = new ethers.Contract(contractAddress, contractABI, signer);
-          const totalSupply = await contract.totalSupply();
-          const maxSupply = await contract.MAX_SUPPLY();
-          const account = await signer.getAddress();
-          const myBalance = await contract.balanceOf(account);
-          setTotalSupply(totalSupply.toNumber());
-          setMaxSupply(maxSupply.toNumber());
-          setMyBalance(myBalance.toNumber());
-        }
-      } catch (err) {
-        if (err instanceof DOMException && err.name === 'SecurityError') {
-          console.error('Caught a SecurityError:', err.message);
-        } else {
-          throw err; // Re-throw the error if it's not a SecurityError
-        }
+      if (typeof window.ethereum !== 'undefined') {
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const signer = provider.getSigner();
+        const contract = new ethers.Contract(contractAddress, contractABI, signer);
+        const totalSupply = await contract.totalSupply();
+        const maxSupply = await contract.MAX_SUPPLY();
+        const account = await signer.getAddress();
+        const myBalance = await contract.balanceOf(account);
+        setTotalSupply(totalSupply.toNumber());
+        setMaxSupply(maxSupply.toNumber());
+        setMyBalance(myBalance.toNumber());
       }
     };
-  
+
     fetchContractData();
   }, []);
 
