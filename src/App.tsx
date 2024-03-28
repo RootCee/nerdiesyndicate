@@ -50,7 +50,7 @@ const handleMint = async (quantity: number): Promise<ethers.ContractTransaction>
   const signer = provider.getSigner();
 
   // Use your actual contract address
-  const contract = new ethers.Contract('0x41Aa49d4a2efcF7ca06fc6C8A03972703F96AF28', abi, signer);
+  const contract = new ethers.Contract('0xb9fBFA1c0de2DFC7947C7bbDaD629888461CbE4E', abi, signer);
 
   try {
     // Define the amount of NFTs to mint and calculate the value of Ether to send
