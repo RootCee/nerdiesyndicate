@@ -80,7 +80,7 @@ function Toolbar() {
         <a href="https://syndicate-wallet-link.vercel.app/" className="toolbar-tab">Syndicate NFT Wallet</a>
         <a href="https://mirror.xyz/rootcee.eth" className="toolbar-tab">Blog</a>
         <a href="https://nerdiemerch.company.site/products/" className="toolbar-tab">Merch</a>
-        <a href="add_site" className="toolbar-tab">NFT Art Gallery ( Coming Soon )</a>
+        <a href="add_site" className="toolbar-tab">Marketplace (Coming Soon)</a>
         <a href="https://linkup.top/rootee" className="toolbar-tab">Links</a>
       </div>
     </div>
@@ -168,6 +168,21 @@ function App() {
           <img src={mainlogo} alt="Main Logo" className="main-logo" />
           <h2>About Us</h2>
           <p>Welcome to the Nerdie Blaq Clubhouse, the hub of innovation, creativity, and education in the decentralized finance (DeFi) space. Founded by the visionary mind of RootCee, Nerdie Blaq is a pioneering project that converges music, merchandise, art, and educational resources, all within the realm of blockchain technology. From virtual live events that bring together enthusiasts from around the globe to a vibrant NFT community where digital art comes to life, Nerdie Blaq offers a dynamic and engaging experience for all. Join us at the Nerdie Blaq Clubhouse and embark on a journey of discovery, creativity, and empowerment. Together, we'll unlock the potential of blockchain technology and pave the way for a brighter, decentralized future.</p>
+
+          <h2>Blaq Token</h2>
+  <p>Our native token, Nerdie Blaq Clubhouse Tokens (BLAQ), is an essential part of our ecosystem with a total supply of 432 billion tokens, deployed on the Optimism blockchain. BLAQ Tokens are designed to empower our community members with exclusive access, governance, and participation in minting activities within the Nerdie Blaq Clubhouse.</p>
+  <p>Use BLAQ Tokens to:</p>
+  <ul>
+    <li>Access Exclusive Areas: Unlock token-gated areas where only token holders can enter.</li>
+    <li>Participate in Governance: Have a voice in key decisions and vote on important matters within the clubhouse.</li>
+    <li>Mint New Offerings: Be the first to mint and acquire new and exciting assets we offer.</li>
+  </ul>
+  <p>For trading and more details, visit our token on Uniswap.</p>
+  <a href="https://app.uniswap.org/explore/tokens/optimism/0xd32cbdeecc96232291e1fffbc5dbd9edb3d15603" target="_blank" rel="noopener noreferrer">
+  <button style={{ color: 'white', backgroundColor: 'red', padding: '10px 20px', border: 'none', borderRadius: '5px', cursor: 'pointer', marginBottom: '20px' }}>
+    Visit Uniswap
+  </button>
+</a>
         </div>
         <Carousel showThumbs={false} autoPlay={true} infiniteLoop={true} showArrows={false} showStatus={false} showIndicators={false}>
   <div>
