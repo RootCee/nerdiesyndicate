@@ -184,6 +184,8 @@ function App() {
   </button>
 </a>
         </div>
+        <iframe src="https://embed.sound.xyz/v1/playlist/e26f8026-a86b-4613-90db-ef0e693b29ab/dark" style={{borderRadius: '8px', boxShadow: '0px 6px 16px 1px rgba(0, 0, 0, 0.08)'}} width="100%" height="355px" allow="clipboard-write" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"></iframe>
+
         <Carousel showThumbs={false} autoPlay={true} infiniteLoop={true} showArrows={false} showStatus={false} showIndicators={false}>
   <div>
     <a href="https://nerdiemerch.company.site/products/Official-Nerdie-Blaq-Hoodie-p596626535">
@@ -289,9 +291,9 @@ function App() {
 <section id="blog-section">
   <h2 className="blog-title">My Blogs</h2>
   <div className="blog-post">
-    <h3>Revolutionizing Music: Blockchain, NFTs, and Empowering Artists</h3>
+    <h3>Unveiling the Secrets of the Nerdie Blaq Syndicate: A Pathway to Empowerment and Prosperity</h3>
     <img src={blogpost1} alt="Item 1" style={{ width: '20%', height: 'auto' }} />
-    <p>In a world of constant change, the music industry stands on the brink of a paradigm shift...<a href="https://mirror.xyz/rootcee.eth/TkMepsshti-GFAM6KwFkhjottTxulZsL6Szcfz3p1iM?referrerAddress=0xA25dF7E09D6ABB5B3c2ed4B12b1EF9fd46A01937">Read More</a></p>
+    <p>Welcome to the Nerdie Blaq Syndicate – where tradition meets innovation, and where the ethos of the mafia syndicate is reimagined for the digital age...<a href="https://mirror.xyz/rootcee.eth/35HfmjO53F0K0ZzJAkDSiNw_jME6Mq_2D3n_Lm3Du_E">Read More</a></p>
   </div>
   <div className="blog-post">
     <h3>Liberating Through Educating: The Nerdie Blaq Clubhouse and the Legacy of Black Caesar</h3>
