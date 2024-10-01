@@ -3,9 +3,9 @@ import MintingForm from './MintingForm';
 import abi from './contractABI';
 // Removed the duplicate imports
 import logo from './images/logo.png'; // Adjust the path as needed
-import merchandise1 from './images/merchandise1.png';
-import merchandise2 from './images/merchandise2.png';
-import merchandise3 from './images/merchandise3.png';
+import lockin1 from './images/lockin1.png';
+import lockin2 from './images/lockin2.png';
+import lockin3 from './images/lockin3.png';
 import image1 from './images/image1.png';
 import image2 from './images/image2.png';
 import image3 from './images/image3.png';
@@ -163,54 +163,59 @@ function App() {
         showThirdwebBranding={false}
       />
     </ThirdwebProvider>
-    <MintingForm onMint={handleMint} />
-        <div className="about-us">
-          <img src={mainlogo} alt="Main Logo" className="main-logo" />
-          <h2>About Us</h2>
-          <p>Welcome to the Nerdie Blaq Clubhouse, the hub of innovation, creativity, and education in the decentralized finance (DeFi) space. Founded by the visionary mind of RootCee, Nerdie Blaq is a pioneering project that converges music, merchandise, art, and educational resources, all within the realm of blockchain technology. From virtual live events that bring together enthusiasts from around the globe to a vibrant NFT community where digital art comes to life, Nerdie Blaq offers a dynamic and engaging experience for all. Join us at the Nerdie Blaq Clubhouse and embark on a journey of discovery, creativity, and empowerment. Together, we'll unlock the potential of blockchain technology and pave the way for a brighter, decentralized future.</p>
+<MintingForm onMint={handleMint} />
+    <div className="about-us">
+      <img src={mainlogo} alt="Main Logo" className="main-logo" />
+      <h2>About Us</h2>
+      <p>Welcome to the Nerdie Blaq Clubhouse, the hub of innovation, creativity, and education in the decentralized finance (DeFi) space. Founded by the visionary mind of RootCee, Nerdie Blaq is a pioneering project that converges music, merchandise, art, and educational resources, all within the realm of blockchain technology. From virtual live events that bring together enthusiasts from around the globe to a vibrant NFT community where digital art comes to life, Nerdie Blaq offers a dynamic and engaging experience for all. Join us at the Nerdie Blaq Clubhouse and embark on a journey of discovery, creativity, and empowerment. Together, we'll unlock the potential of blockchain technology and pave the way for a brighter, decentralized future.</p>
 
-          <h2>Blaq Token</h2>
-  <p>Our native token, Nerdie Blaq Clubhouse Tokens (BLAQ), is an essential part of our ecosystem with a total supply of 432 billion tokens, deployed on the Optimism blockchain. BLAQ Tokens are designed to empower our community members with exclusive access, governance, and participation in minting activities within the Nerdie Blaq Clubhouse.</p>
-  <p>Use BLAQ Tokens to:</p>
-  <ul>
-    <li>Access Exclusive Areas: Unlock token-gated areas where only token holders can enter.</li>
-    <li>Participate in Governance: Have a voice in key decisions and vote on important matters within the clubhouse.</li>
-    <li>Mint New Offerings: Be the first to mint and acquire new and exciting assets we offer.</li>
-  </ul>
-  <p>For trading and more details, visit our token on Uniswap.</p>
-  <a href="https://app.uniswap.org/explore/tokens/optimism/0xd32cbdeecc96232291e1fffbc5dbd9edb3d15603" target="_blank" rel="noopener noreferrer">
-  <button style={{ color: 'white', backgroundColor: 'red', padding: '10px 20px', border: 'none', borderRadius: '5px', cursor: 'pointer', marginBottom: '20px' }}>
-    Visit Uniswap
-  </button>
-</a>
-        </div>
+      <h2>Blaq Token</h2>
+      <p>Our native token, Nerdie Blaq Clubhouse Token (BLAQ), is an essential part of our ecosystem with a total supply of 432 billion tokens, deployed on the Base Network. BLAQ Tokens are designed to empower our community members with exclusive access, governance, and participation in minting activities within the Nerdie Blaq Clubhouse.</p>
+      <p>Use BLAQ Tokens to:</p>
+      <ul>
+        <li>Access Exclusive Areas: Unlock token-gated areas where only token holders can enter.</li>
+        <li>Participate in Governance: Have a voice in key decisions and vote on important matters within the clubhouse.</li>
+        <li>Mint New Offerings: Be the first to mint and acquire new and exciting assets we offer.</li>
+      </ul>
+      <p>For trading and more details, visit our token on Uniswap.</p>
+      <a href="https://app.uniswap.org/explore/tokens/base/0xe5fb6d9abc552aa3260bd7b2b458c1adb64fa6c3" target="_blank" rel="noopener noreferrer">
+        <button style={{ color: 'white', backgroundColor: 'red', padding: '10px 20px', border: 'none', borderRadius: '5px', cursor: 'pointer', marginBottom: '20px' }}>
+          Visit Uniswap
+        </button>
+      </a>
+      <a href="https://dexscreener.com/base/0x22f99d44917722d967ADd199eCE7ba349cf9CCE5" target="_blank" rel="noopener noreferrer">
+        <button style={{ color: 'white', backgroundColor: 'red', padding: '10px 20px', border: 'none', borderRadius: '5px', cursor: 'pointer', marginBottom: '20px' }}>
+          Visit Dexscreener
+        </button>
+      </a>
+    </div>
         <iframe src="https://embed.sound.xyz/v1/playlist/e26f8026-a86b-4613-90db-ef0e693b29ab/dark" style={{borderRadius: '8px', boxShadow: '0px 6px 16px 1px rgba(0, 0, 0, 0.08)'}} width="100%" height="355px" allow="clipboard-write" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"></iframe>
 
         <Carousel showThumbs={false} autoPlay={true} infiniteLoop={true} showArrows={false} showStatus={false} showIndicators={false}>
   <div>
-    <a href="https://nerdiemerch.company.site/products/Official-Nerdie-Blaq-Hoodie-p596626535">
-      <img src={merchandise1} alt="Item 1" style={{ width: '20%', height: 'auto' }} />
-      <p>Nerdie Hoodie</p>
+    <a href="https://nerdiemerch.company.site/products/Lock-in-Hoodie-p699195941">
+      <img src={lockin1} alt="Item 1" style={{ width: '20%', height: 'auto' }} />
+      <p>Lock In Hoodie</p>
     </a>
-    <a href="https://nerdiemerch.company.site/products/Official-Nerdie-Blaq-Hoodie-p596626535">
+    <a href="https://nerdiemerch.company.site/products/Lock-in-Hoodie-p699195941">
     <button type="button" className="circle-button">Shop Now</button>
     </a>
   </div>
   <div>
-    <a href="https://nerdiemerch.company.site/products/Irie-Elmo-p633781816">
-      <img src={merchandise2} alt="Item 2" style={{ width: '20%', height: 'auto' }} />
-      <p>Irie Elmo Hoodie</p>
+    <a href="https://nerdiemerch.company.site/products/Lock-in-Hoodie-p699195941">
+      <img src={lockin2} alt="Item 2" style={{ width: '20%', height: 'auto' }} />
+      <p>Lock In Hoodie</p>
     </a>
-    <a href="https://nerdiemerch.company.site/products/Irie-Elmo-p633781816">
+    <a href="https://nerdiemerch.company.site/products/Lock-in-Hoodie-p699195941">
     <button type="button" className="circle-button">Shop Now</button>
     </a>
   </div>
   <div>
-    <a href="https://nerdiemerch.company.site/products/Official-Nerdie-Blaq-Clubhouse-T-Shirt-p596626501">
-      <img src={merchandise3} alt="Item 3" style={{ width: '20%', height: 'auto' }} />
-      <p>Nerdie Blaq Tee</p>
+    <a href="https://nerdiemerch.company.site/products/Lock-in-Hoodie-p699195941">
+      <img src={lockin3} alt="Item 3" style={{ width: '20%', height: 'auto' }} />
+      <p>Lock In Hoddie</p>
     </a>
-    <a href="https://nerdiemerch.company.site/products/Official-Nerdie-Blaq-Clubhouse-T-Shirt-p596626501">
+    <a href="https://nerdiemerch.company.site/products/Lock-in-Hoodie-p699195941">
     <button type="button" className="circle-button">Shop Now</button>
     </a>
   </div>
