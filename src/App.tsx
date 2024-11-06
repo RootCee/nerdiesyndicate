@@ -79,7 +79,7 @@ function Toolbar() {
         <a href="https://www.spatial.io/s/RootCee-Gates-61c67a40a6447c00018eb5e5?share=5226556397810733564" className="toolbar-tab">RootCee Gates</a>
         <a href="https://syndicate-wallet-link.vercel.app/" className="toolbar-tab">Syndicate NFT Wallet</a>
         <a href="https://mirror.xyz/rootcee.eth" className="toolbar-tab">Blog</a>
-        <a href="https://nerdiemerch.company.site/products/" className="toolbar-tab">Merch</a>
+        <a href="https://nerdie-blaq.square.site" className="toolbar-tab">Merch</a>
         <a href="add_site" className="toolbar-tab">Marketplace (Coming Soon)</a>
         <a href="https://linkup.top/rootee" className="toolbar-tab">Links</a>
       </div>
@@ -193,29 +193,29 @@ function App() {
 
         <Carousel showThumbs={false} autoPlay={true} infiniteLoop={true} showArrows={false} showStatus={false} showIndicators={false}>
   <div>
-    <a href="https://nerdiemerch.company.site/products/Lock-in-Hoodie-p699195941">
+    <a href="https://nerdie-blaq.square.site/product/nerdie-degen-hoodie/9?cs=true&cst=custom">
       <img src={lockin1} alt="Item 1" style={{ width: '20%', height: 'auto' }} />
       <p>Lock In Hoodie</p>
     </a>
-    <a href="https://nerdiemerch.company.site/products/Lock-in-Hoodie-p699195941">
+    <a href="https://nerdie-blaq.square.site/product/nerdie-degen-hoodie/9?cs=true&cst=custom">
     <button type="button" className="circle-button">Shop Now</button>
     </a>
   </div>
   <div>
-    <a href="https://nerdiemerch.company.site/products/Lock-in-Hoodie-p699195941">
+    <a href="https://nerdie-blaq.square.site/product/nerdie-degen-hoodie/9?cs=true&cst=custom">
       <img src={lockin2} alt="Item 2" style={{ width: '20%', height: 'auto' }} />
       <p>Lock In Hoodie</p>
     </a>
-    <a href="https://nerdiemerch.company.site/products/Lock-in-Hoodie-p699195941">
+    <a href="https://nerdie-blaq.square.site/product/nerdie-degen-hoodie/9?cs=true&cst=custom">
     <button type="button" className="circle-button">Shop Now</button>
     </a>
   </div>
   <div>
-    <a href="https://nerdiemerch.company.site/products/Lock-in-Hoodie-p699195941">
+    <a href="https://nerdie-blaq.square.site/product/nerdie-degen-hoodie/9?cs=true&cst=custom">
       <img src={lockin3} alt="Item 3" style={{ width: '20%', height: 'auto' }} />
       <p>Lock In Hoddie</p>
     </a>
-    <a href="https://nerdiemerch.company.site/products/Lock-in-Hoodie-p699195941">
+    <a href="https://nerdie-blaq.square.site/product/nerdie-degen-hoodie/9?cs=true&cst=custom">
     <button type="button" className="circle-button">Shop Now</button>
     </a>
   </div>
