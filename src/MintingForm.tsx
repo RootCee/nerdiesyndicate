@@ -64,7 +64,9 @@ const MintingForm: React.FC<MintingFormProps> = ({ onMint }) => {
 
   return (
     <div className="centered-form">
-      <h1>Nerdie Blaq Syndicate NFT Collection</h1>
+      <h1>Nerdie Blaq Syndicate NFT Collection 
+        (Coming Soon)
+      </h1>
       <img src={myImage} alt="My Image" className="my-image" /> {/* Added class name */}
       <form onSubmit={handleSubmit}>
         <label>
