@@ -50,7 +50,7 @@ const handleMint = async (quantity: number): Promise<ethers.ContractTransaction>
   const signer = provider.getSigner();
 
   // Use your actual contract address
-  const contract = new ethers.Contract('0xb9fBFA1c0de2DFC7947C7bbDaD629888461CbE4E', abi, signer);
+  const contract = new ethers.Contract('place-address-here', abi, signer);
 
   try {
     // Define the amount of NFTs to mint and calculate the value of Ether to send
@@ -169,23 +169,25 @@ function App() {
       <h2>About Us</h2>
       <p>Welcome to the Nerdie Blaq Clubhouse, the hub of innovation, creativity, and education in the decentralized finance (DeFi) space. Founded by the visionary mind of RootCee, Nerdie Blaq is a pioneering project that converges music, merchandise, art, and educational resources, all within the realm of blockchain technology. From virtual live events that bring together enthusiasts from around the globe to a vibrant NFT community where digital art comes to life, Nerdie Blaq offers a dynamic and engaging experience for all. Join us at the Nerdie Blaq Clubhouse and embark on a journey of discovery, creativity, and empowerment. Together, we'll unlock the potential of blockchain technology and pave the way for a brighter, decentralized future.</p>
 
-      <h2>Blaq Token</h2>
-      <p>Our native token, Nerdie Blaq Token (NBT), is an essential part of our ecosystem with a total supply of 432 billion tokens, deployed on the Base Network. NBT Tokens are designed to empower our community members with exclusive access, governance, and participation in minting activities within the Nerdie Blaq Clubhouse.</p>
-      <p>Use NBT Tokens to:</p>
+      <h2>$GWAN Token</h2>
+      <p>$GWAN is a community-driven token inspired by reggae culture, good vibes, and financial freedom. Built for those who move with the rhythm of the market, $GWAN is more than just a token—it’s a movement. Whether you're here for the meme magic, the DeFi potential, or just to vibe with the community, $GWAN is all about spreading positivity and riding the waves of opportunity.
+
+With a strong community, engaging memes, and a vision for growth, $GWAN is here to bring the energy while making its mark in the crypto space. So, Wah $GWAN? Join the movement and let’s ride to the top together! 🚀🔥🎶.</p>
+      <p>Use $GWAN Tokens to:</p>
       <ul>
-        <li>Access Exclusive Areas: Unlock token-gated areas where only token holders can enter.</li>
-        <li>Participate in Governance: Have a voice in key decisions and vote on important matters within the clubhouse.</li>
-        <li>Mint New Offerings: Be the first to mint and acquire new and exciting assets we offer.</li>
+        <li>Download Exclusive Content.</li>
+        <li>Recieve Future Airdrops.</li>
+        <li>Take A Ride To The Moon.</li>
       </ul>
-      <p>For trading and more details, visit our token on Uniswap.</p>
-      <a href="https://www.omnipump.io/token/0x3c7813aaa4683c344afab0ae23f6a3c5442f820f" target="_blank" rel="noopener noreferrer">
+      <p>For trading and more details, visit DexScreener.</p>
+      <a href="https://dexscreener.com/solana/42bt6rxsvnekksuqzrj3cnphkm1yqh6zednixqkmshnj" target="_blank" rel="noopener noreferrer">
         <button style={{ color: 'white', backgroundColor: 'red', padding: '10px 20px', border: 'none', borderRadius: '5px', cursor: 'pointer', marginBottom: '20px' }}>
-          Buy Here
+          DexScreener
         </button>
       </a>
-      <a href="https://basescan.org/address/0x3c7813aaa4683c344afab0ae23f6a3c5442f820f" target="_blank" rel="noopener noreferrer">
+      <a href="https://pump.fun/coin/2rpsFctHpgfGE6ajkQnx6QPNrXEZ8JnSgrRxLB734z2y" target="_blank" rel="noopener noreferrer">
         <button style={{ color: 'white', backgroundColor: 'red', padding: '10px 20px', border: 'none', borderRadius: '5px', cursor: 'pointer', marginBottom: '20px' }}>
-          View on BaseScan
+          Buy Here
         </button>
       </a>
     </div>
@@ -223,7 +225,7 @@ function App() {
 
 <div className="nerdie-syndicate-section" id="nerdie-syndicate-section">
   <h2>Nerdie Blaq Syndicate</h2>
-  <p>The Mob where innovation meets community in the world of blockchain and gaming. Our project features 404 unique ERC-6551 NFTs, each embodying a mafia-style character with its own story and secrets. Holders gain access to the Nerdie Blaq Clubhouse, exclusive virtual events, and even an alpha pass to Nerdie City, our 3D blockchain game. Join us for chess competitions, rap battles, coding courses, and more as we build a collaborative community driven by passion and learning.</p>
+  <p>The Mob where innovation meets community in the world of blockchain and gaming. Our project features 130 unique ERC-6551 NFTs, each embodying a mafia-style character with its own story and secrets. Holders gain access to the Nerdie Blaq Clubhouse, exclusive virtual events, and even an alpha pass to Nerdie City, our 3D blockchain game. Join us for chess competitions, rap battles, coding courses, and more as we build a collaborative community driven by passion and learning.</p>
 </div>
 
 <div className="image-container">

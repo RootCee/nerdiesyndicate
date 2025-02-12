@@ -4,7 +4,7 @@ import contractABI from './contractABI';
 import './MintingForm.css';
 import myImage from './images/myImage.png';
 
-const contractAddress = '0xb9fBFA1c0de2DFC7947C7bbDaD629888461CbE4E';
+const contractAddress = 'contract-address-here';
 const pricePerNFT = ethers.utils.parseEther('0.01'); // Price per NFT in ETH
 
 interface MintingFormProps {
