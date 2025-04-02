@@ -3,6 +3,7 @@ import MintingForm from './MintingForm';
 import abi from './contractABI';
 // Removed the duplicate imports
 import logo from './images/logo.png'; // Adjust the path as needed
+import superlove from './images/superlove.png';
 import lockin1 from './images/lockin1.png';
 import lockin2 from './images/lockin2.png';
 import lockin3 from './images/lockin3.png';
@@ -79,7 +80,7 @@ function Toolbar() {
         <a href="https://www.spatial.io/s/RootCee-Gates-61c67a40a6447c00018eb5e5?share=5226556397810733564" className="toolbar-tab">RootCee Gates</a>
         <a href="https://syndicate-wallet-link.vercel.app/" className="toolbar-tab">Syndicate NFT Wallet</a>
         <a href="https://mirror.xyz/rootcee.eth" className="toolbar-tab">Blog</a>
-        <a href="https://nerdie-blaq.square.site" className="toolbar-tab">Merch</a>
+        <a href="https://nerdie-blaq-merch.square.site" className="toolbar-tab">Merch</a>
         <a href="add_site" className="toolbar-tab">Marketplace (Coming Soon)</a>
         <a href="https://linkup.top/rootee" className="toolbar-tab">Links</a>
       </div>
@@ -92,43 +93,20 @@ function App() {
     <>
     <Toolbar />
     <ThirdwebProvider
-      activeChain="optimism"
-      clientId="2d743b51e09ce76dd604f51a067a3b4c"
-      supportedWallets={[
+  activeChain="base"  // ✅ Switched from "optimism" to "base"
+  clientId="2d743b51e09ce76dd604f51a067a3b4c"
+  supportedWallets={[
+    metamaskWallet(),
+    coinbaseWallet({ recommended: true }),
+    walletConnect(),
+    safeWallet({
+      personalWallets: [
         metamaskWallet(),
         coinbaseWallet({ recommended: true }),
         walletConnect(),
-        safeWallet({
-          personalWallets: [
-            metamaskWallet(),
-            coinbaseWallet({ recommended: true }),
-            walletConnect(),
-            embeddedWallet({
-              auth: {
-                options: [
-                  "email",
-                  "google",
-                  "apple",
-                  "facebook",
-                ],
-              },
-            }),
-            trustWallet(),
-            zerionWallet(),
-            bloctoWallet(),
-            frameWallet(),
-            rainbowWallet(),
-            phantomWallet(),
-          ],
-        }),
         embeddedWallet({
           auth: {
-            options: [
-              "email",
-              "google",
-              "apple",
-              "facebook",
-            ],
+            options: ["email", "google", "apple", "facebook"],
           },
         }),
         trustWallet(),
@@ -137,57 +115,70 @@ function App() {
         frameWallet(),
         rainbowWallet(),
         phantomWallet(),
-      ]}
-      authConfig={{
-        authUrl: "/api/auth",
-        domain: "https://example.com",
-      }}
-    >
-      <ConnectWallet
-        theme={"dark"}
-        auth={{ loginOptional: true }}
-        switchToActiveChain={true}
-        modalSize={"wide"}
-        welcomeScreen={{
-          title:
-            "Welcome To The Nerdie Blaq Clubhouse",
-          img: {
-            src: "https://i1.sndcdn.com/artworks-BgT0E2U58re2u0jY-E3EOJw-t240x240.jpg",
-            width: 150,
-            height: 150,
-          },
-        }}
-        modalTitleIconUrl={
-          "https://i1.sndcdn.com/artworks-BgT0E2U58re2u0jY-E3EOJw-t240x240.jpg"
-        }
-        showThirdwebBranding={false}
-      />
-    </ThirdwebProvider>
+      ],
+    }),
+    embeddedWallet({
+      auth: {
+        options: ["email", "google", "apple", "facebook"],
+      },
+    }),
+    trustWallet(),
+    zerionWallet(),
+    bloctoWallet(),
+    frameWallet(),
+    rainbowWallet(),
+    phantomWallet(),
+  ]}
+  authConfig={{
+    authUrl: "/api/auth",
+    domain: "https://example.com", // Replace with your real domain
+  }}
+>
+  <ConnectWallet
+    theme={"dark"}
+    auth={{ loginOptional: true }}
+    switchToActiveChain={true}
+    modalSize={"wide"}
+    welcomeScreen={{
+      title: "Welcome To The Nerdie Blaq Clubhouse",
+      img: {
+        src: "https://i1.sndcdn.com/artworks-BgT0E2U58re2u0jY-E3EOJw-t240x240.jpg",
+        width: 150,
+        height: 150,
+      },
+    }}
+    modalTitleIconUrl="https://i1.sndcdn.com/artworks-BgT0E2U58re2u0jY-E3EOJw-t240x240.jpg"
+    showThirdwebBranding={false}
+  />
+</ThirdwebProvider>
+
 <MintingForm onMint={handleMint} />
     <div className="about-us">
       <img src={mainlogo} alt="Main Logo" className="main-logo" />
       <h2>About Us</h2>
       <p>Welcome to the Nerdie Blaq Clubhouse, the hub of innovation, creativity, and education in the decentralized finance (DeFi) space. Founded by the visionary mind of RootCee, Nerdie Blaq is a pioneering project that converges music, merchandise, art, and educational resources, all within the realm of blockchain technology. From virtual live events that bring together enthusiasts from around the globe to a vibrant NFT community where digital art comes to life, Nerdie Blaq offers a dynamic and engaging experience for all. Join us at the Nerdie Blaq Clubhouse and embark on a journey of discovery, creativity, and empowerment. Together, we'll unlock the potential of blockchain technology and pave the way for a brighter, decentralized future.</p>
 
-      <h2>$GWAN Token</h2>
-      <p>$GWAN is a community-driven token inspired by reggae culture, good vibes, and financial freedom. Built for those who move with the rhythm of the market, $GWAN is more than just a token—it’s a movement. Whether you're here for the meme magic, the DeFi potential, or just to vibe with the community, $GWAN is all about spreading positivity and riding the waves of opportunity.
+      <h2>$BLAQ Token</h2>
+<p>$BLAQ is the official token of the Nerdie Blaq Metaverse—built on Base, powered by community, and designed to grow stronger the more it's used. With NFT-driven liquidity, deflationary burns, and staking rewards, $BLAQ isn’t just a token—it’s the heartbeat of an entire creative universe.</p>
 
-With a strong community, engaging memes, and a vision for growth, $GWAN is here to bring the energy while making its mark in the crypto space. So, Wah $GWAN? Join the movement and let’s ride to the top together! 🚀🔥🎶.</p>
-      <p>Use $GWAN Tokens to:</p>
-      <ul>
-        <li>Download Exclusive Content.</li>
-        <li>Recieve Future Airdrops.</li>
-        <li>Take A Ride To The Moon.</li>
-      </ul>
+<p>Every trade burns 1%. Every staking claim burns 10%. And every NFT sale injects ETH and $BLAQ back into liquidity. This means less supply, more value, and long-term sustainability for our holders. Whether you're here to game, earn, stake, or just vibe—$BLAQ keeps the metaverse alive.</p>
+
+<p>Use $BLAQ Tokens to:</p>
+<ul>
+  <li>Unlock and upgrade in-game content and assets.</li>
+  <li>Stake NFTs or tokens to earn more $BLAQ (with deflationary burn).</li>
+  <li>Access exclusive Nerdie Blaq drops, live shows, and metaverse events.</li>
+</ul>
+
       <p>For trading and more details, visit DexScreener.</p>
-      <a href="https://dexscreener.com/solana/42bt6rxsvnekksuqzrj3cnphkm1yqh6zednixqkmshnj" target="_blank" rel="noopener noreferrer">
+      <a href="Add Dex Address Here" target="_blank" rel="noopener noreferrer">
         <button style={{ color: 'white', backgroundColor: 'red', padding: '10px 20px', border: 'none', borderRadius: '5px', cursor: 'pointer', marginBottom: '20px' }}>
-          DexScreener
+          DexScreener (coming soon)
         </button>
       </a>
-      <a href="https://pump.fun/coin/2rpsFctHpgfGE6ajkQnx6QPNrXEZ8JnSgrRxLB734z2y" target="_blank" rel="noopener noreferrer">
+      <a href="Add Buy Linl Here" target="_blank" rel="noopener noreferrer">
         <button style={{ color: 'white', backgroundColor: 'red', padding: '10px 20px', border: 'none', borderRadius: '5px', cursor: 'pointer', marginBottom: '20px' }}>
-          Buy Here
+          Buy Here (coming soon)
         </button>
       </a>
     </div>
@@ -195,29 +186,29 @@ With a strong community, engaging memes, and a vision for growth, $GWAN is here 
 
         <Carousel showThumbs={false} autoPlay={true} infiniteLoop={true} showArrows={false} showStatus={false} showIndicators={false}>
   <div>
-    <a href="https://nerdie-blaq.square.site/product/nerdie-degen-hoodie/9?cs=true&cst=custom">
-      <img src={lockin1} alt="Item 1" style={{ width: '20%', height: 'auto' }} />
-      <p>Lock In Hoodie</p>
+    <a href="https://nerdie-blaq-merch.square.site/product/spread-love-like-a-virus/4?cs=true&cst=popular">
+      <img src={superlove} alt="Item 1" style={{ width: '20%', height: 'auto' }} />
+      <p>Super Love Tee</p>
     </a>
-    <a href="https://nerdie-blaq.square.site/product/nerdie-degen-hoodie/9?cs=true&cst=custom">
+    <a href="https://nerdie-blaq-merch.square.site/product/spread-love-like-a-virus/4?cs=true&cst=popular">
+    <button type="button" className="circle-button">Shop Now</button>
+    </a>
+  </div>
+  <div>
+    <a href="https://nerdie-blaq-merch.square.site/product/spread-love-like-a-virus/4?cs=true&cst=popular">
+      <img src={superlove} alt="Item 2" style={{ width: '20%', height: 'auto' }} />
+      <p>Super Love Tee</p>
+    </a>
+    <a href="https://nerdie-blaq-merch.square.site/product/spread-love-like-a-virus/4?cs=true&cst=popular">
     <button type="button" className="circle-button">Shop Now</button>
     </a>
   </div>
   <div>
     <a href="https://nerdie-blaq.square.site/product/nerdie-degen-hoodie/9?cs=true&cst=custom">
-      <img src={lockin2} alt="Item 2" style={{ width: '20%', height: 'auto' }} />
-      <p>Lock In Hoodie</p>
+      <img src={superlove} alt="Item 3" style={{ width: '20%', height: 'auto' }} />
+      <p>Super Love Tee</p>
     </a>
-    <a href="https://nerdie-blaq.square.site/product/nerdie-degen-hoodie/9?cs=true&cst=custom">
-    <button type="button" className="circle-button">Shop Now</button>
-    </a>
-  </div>
-  <div>
-    <a href="https://nerdie-blaq.square.site/product/nerdie-degen-hoodie/9?cs=true&cst=custom">
-      <img src={lockin3} alt="Item 3" style={{ width: '20%', height: 'auto' }} />
-      <p>Lock In Hoddie</p>
-    </a>
-    <a href="https://nerdie-blaq.square.site/product/nerdie-degen-hoodie/9?cs=true&cst=custom">
+    <a href="https://nerdie-blaq-merch.square.site/product/spread-love-like-a-virus/4?cs=true&cst=popular">
     <button type="button" className="circle-button">Shop Now</button>
     </a>
   </div>
@@ -225,7 +216,7 @@ With a strong community, engaging memes, and a vision for growth, $GWAN is here 
 
 <div className="nerdie-syndicate-section" id="nerdie-syndicate-section">
   <h2>Nerdie Blaq Syndicate</h2>
-  <p>The Mob where innovation meets community in the world of blockchain and gaming. Our project features 130 unique ERC-6551 NFTs, each embodying a mafia-style character with its own story and secrets. Holders gain access to the Nerdie Blaq Clubhouse, exclusive virtual events, and even an alpha pass to Nerdie City, our 3D blockchain game. Join us for chess competitions, rap battles, coding courses, and more as we build a collaborative community driven by passion and learning.</p>
+  <p>The Mob where innovation meets community in the world of blockchain and gaming. Our project features 200 unique ERC-6551 NFTs, each embodying a mafia-style character with its own story and secrets. Holders gain access to the Nerdie Blaq Clubhouse, exclusive virtual events, and even an alpha pass to Nerdie City, our 3D blockchain game. Join us for chess competitions, rap battles, coding courses, and more as we build a collaborative community driven by passion and learning.</p>
 </div>
 
 <div className="image-container">

@@ -64,8 +64,7 @@ const MintingForm: React.FC<MintingFormProps> = ({ onMint }) => {
 
   return (
     <div className="centered-form">
-      <h1>Nerdie Blaq Syndicate NFT Collection 
-        (Coming Soon)
+      <h1>Nerdie Blaq Syndicate NFT Collection
       </h1>
       <img src={myImage} alt="My Image" className="my-image" /> {/* Added class name */}
       <form onSubmit={handleSubmit}>
@@ -78,7 +77,7 @@ const MintingForm: React.FC<MintingFormProps> = ({ onMint }) => {
           </select>
         </label>
         <p>Total price: {totalPrice} ETH</p>
-        <p>Total NFTs minted: {totalSupply} / {maxSupply}</p>
+        <p>Total NFTs minted: {totalSupply} / {200}</p>
         <p>Your NFTs: {myBalance}</p>
         <button type="submit" className="mint-button">Mint NFT</button> {/* Added class name */}
         <button type="button" className="link-button" onClick={() => window.location.href='https://syndicate-wallet-link.vercel.app/'}>Link 6551 NFT Wallet</button>
