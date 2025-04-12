@@ -4,7 +4,7 @@ import contractABI from './contractABI';
 import './MintingForm.css';
 import myImage from './images/myImage.png';
 
-const contractAddress = 'contract-address-here';
+const contractAddress = '0x4d410D24fAcd00EB9470d4261db855b57c9CDc0e';
 const pricePerNFT = ethers.utils.parseEther('0.01'); // Price per NFT in ETH
 
 interface MintingFormProps {
@@ -22,10 +22,14 @@ const MintingForm: React.FC<MintingFormProps> = ({ onMint }) => {
     const fetchContractData = async () => {
       if (typeof window.ethereum !== 'undefined') {
         const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const signer = provider.getSigner();
+        const userAddress = await signer.getAddress();
+
         const contract = new ethers.Contract(contractAddress, contractABI, provider);
         const totalSupply = await contract.totalSupply();
         const maxSupply = await contract.MAX_SUPPLY();
-        const myBalance = await contract.balanceOf(window.ethereum.selectedAddress);
+        const myBalance = await contract.balanceOf(userAddress);
+
         setTotalSupply(totalSupply.toNumber());
         setMaxSupply(maxSupply.toNumber());
         setMyBalance(myBalance.toNumber());
@@ -37,36 +41,38 @@ const MintingForm: React.FC<MintingFormProps> = ({ onMint }) => {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-  
+
     if (typeof window.ethereum === 'undefined') {
       alert('Please install MetaMask or another Ethereum wallet and refresh the page.');
       return;
     }
-  
+
     const provider = new ethers.providers.Web3Provider(window.ethereum);
     const signer = provider.getSigner();
-    const contract = new ethers.Contract(contractAddress, contractABI, signer);
-  
-    // Get the user's balance
-    const balance = await provider.getBalance(window.ethereum.selectedAddress);
+    const userAddress = await signer.getAddress();
+
+    const balance = await provider.getBalance(userAddress);
     const cost = ethers.utils.parseEther((0.01 * quantity).toString());
-  
-    // Check if the user has enough ETH
+
     if (balance.lt(cost)) {
       alert('You do not have enough ETH to mint this NFT.');
       return;
     }
-  
-    const tx = await onMint(quantity);
-    const receipt = await tx.wait();
-    console.log('Transaction receipt', receipt);
+
+    try {
+      const tx = await onMint(quantity);
+      const receipt = await tx.wait();
+      console.log('Transaction receipt', receipt);
+    } catch (error) {
+      console.error("Minting failed:", error);
+      alert("Minting failed. Check the console for details.");
+    }
   };
 
   return (
     <div className="centered-form">
-      <h1>Nerdie Blaq Syndicate NFT Collection
-      </h1>
-      <img src={myImage} alt="My Image" className="my-image" /> {/* Added class name */}
+      <h1>Nerdie Blaq Syndicate NFT Collection</h1>
+      <img src={myImage} alt="My Image" className="my-image" />
       <form onSubmit={handleSubmit}>
         <label>
           Quantity:
@@ -77,10 +83,16 @@ const MintingForm: React.FC<MintingFormProps> = ({ onMint }) => {
           </select>
         </label>
         <p>Total price: {totalPrice} ETH</p>
-        <p>Total NFTs minted: {totalSupply} / {200}</p>
+        <p>Total NFTs minted: {totalSupply} / {maxSupply}</p>
         <p>Your NFTs: {myBalance}</p>
-        <button type="submit" className="mint-button">Mint NFT</button> {/* Added class name */}
-        <button type="button" className="link-button" onClick={() => window.location.href='https://syndicate-wallet-link.vercel.app/'}>Link 6551 NFT Wallet</button>
+        <button type="submit" className="mint-button">Mint NFT</button>
+        <button
+          type="button"
+          className="link-button"
+          onClick={() => window.location.href = 'https://syndicate-wallet-link.vercel.app/'}
+        >
+          Link 6551 NFT Wallet
+        </button>
       </form>
     </div>
   );

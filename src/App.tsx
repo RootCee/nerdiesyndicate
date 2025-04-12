@@ -46,29 +46,27 @@ const Header: React.FC = () => {
   );
 };
 const handleMint = async (quantity: number): Promise<ethers.ContractTransaction> => {
-  // This assumes you have MetaMask or another web3 provider enabled
-  const provider = new ethers.providers.Web3Provider(window.ethereum);
-  const signer = provider.getSigner();
+  if (typeof window.ethereum === 'undefined') {
+    throw new Error("MetaMask not detected");
+  }
 
-  // Use your actual contract address
-  const contract = new ethers.Contract('place-address-here', abi, signer);
+  const provider = new ethers.providers.Web3Provider(window.ethereum);
+  await provider.send("eth_requestAccounts", []);
+  const signer = provider.getSigner();
+  const userAddress = await signer.getAddress();
+
+  const contract = new ethers.Contract('0x4d410D24fAcd00EB9470d4261db855b57c9CDc0e', abi, signer);
+  const pricePerNFT = ethers.utils.parseEther("0.01");
+  const valueToSend = pricePerNFT.mul(quantity);
 
   try {
-    // Define the amount of NFTs to mint and calculate the value of Ether to send
-    const pricePerNFT = ethers.utils.parseEther("0.01"); // Change this to the price per NFT in Ether
-    const valueToSend = pricePerNFT.mul(quantity);
-
-    // Call the mint function on your contract
-    const tx = await contract.mint(quantity, { value: valueToSend });
-
-    // Wait for the transaction to be mined
-    const receipt = await tx.wait();
-
-    // Return the transaction object
+    const tx = await contract.mint(userAddress, quantity, {
+      value: valueToSend,
+    });
     return tx;
   } catch (err) {
     console.error('Error minting NFT:', err);
-    throw err; // Re-throw the error so it can be caught and handled by the caller
+    throw err;
   }
 };
 
@@ -161,7 +159,7 @@ function App() {
       <h2>$BLAQ Token</h2>
 <p>$BLAQ is the official token of the Nerdie Blaq Metaverse—built on Base, powered by community, and designed to grow stronger the more it's used. With NFT-driven liquidity, deflationary burns, and staking rewards, $BLAQ isn’t just a token—it’s the heartbeat of an entire creative universe.</p>
 
-<p>Every trade burns 1%. Every staking claim burns 10%. And every NFT sale injects ETH and $BLAQ back into liquidity. This means less supply, more value, and long-term sustainability for our holders. Whether you're here to game, earn, stake, or just vibe—$BLAQ keeps the metaverse alive.</p>
+<p>Every trade burns 1%. Every staking claim burns 10%. And every Nerdie Blaq Business NFT sale injects ETH and $BLAQ back into liquidity. This means less supply, more value, and long-term sustainability for our holders. Whether you're here to game, earn, stake, or just vibe—$BLAQ keeps the metaverse alive.</p>
 
 <p>Use $BLAQ Tokens to:</p>
 <ul>
