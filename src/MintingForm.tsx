@@ -89,7 +89,7 @@ const MintingForm: React.FC<MintingFormProps> = ({ onMint }) => {
         <button
           type="button"
           className="link-button"
-          onClick={() => window.location.href = 'https://syndicate-wallet-link.vercel.app/'}
+          onClick={() => window.location.href = 'https://nerdiesyndicatedashboard.vercel.app/'}
         >
           Link 6551 NFT Wallet
         </button>

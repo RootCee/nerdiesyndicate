@@ -76,7 +76,7 @@ function Toolbar() {
       <img src={logo} alt="Logo" className="toolbar-logo" />
       <div className="toolbar-tabs">
         <a href="https://www.spatial.io/s/RootCee-Gates-61c67a40a6447c00018eb5e5?share=5226556397810733564" className="toolbar-tab">RootCee Gates</a>
-        <a href="https://syndicate-wallet-link.vercel.app/" className="toolbar-tab">Syndicate NFT Wallet</a>
+        <a href="https://nerdiesyndicatedashboard.vercel.app/" className="toolbar-tab">Syndicate NFT Wallet</a>
         <a href="https://mirror.xyz/rootcee.eth" className="toolbar-tab">Blog</a>
         <a href="https://nerdie-blaq-merch.square.site" className="toolbar-tab">Merch</a>
         <a href="add_site" className="toolbar-tab">Marketplace (Coming Soon)</a>
@@ -156,25 +156,25 @@ function App() {
       <h2>About Us</h2>
       <p>Welcome to the Nerdie Blaq Clubhouse, the hub of innovation, creativity, and education in the decentralized finance (DeFi) space. Founded by the visionary mind of RootCee, Nerdie Blaq is a pioneering project that converges music, merchandise, art, and educational resources, all within the realm of blockchain technology. From virtual live events that bring together enthusiasts from around the globe to a vibrant NFT community where digital art comes to life, Nerdie Blaq offers a dynamic and engaging experience for all. Join us at the Nerdie Blaq Clubhouse and embark on a journey of discovery, creativity, and empowerment. Together, we'll unlock the potential of blockchain technology and pave the way for a brighter, decentralized future.</p>
 
-      <h2>$BLAQ Token</h2>
-<p>$BLAQ is the official token of the Nerdie Blaq Metaverse—built on Base, powered by community, and designed to grow stronger the more it's used. With NFT-driven liquidity, deflationary burns, and staking rewards, $BLAQ isn’t just a token—it’s the heartbeat of an entire creative universe.</p>
+      <h2>$NERDIE Token</h2>
+<p>$NERDIE is the official token of the Nerdie Blaq Metaverse—built on Base, powered by community, and designed to grow stronger the more it's used. With NFT-driven liquidity, deflationary burns, and staking rewards, $NERDIE isn’t just a token—it’s the heartbeat of an entire creative universe.</p>
 
-<p>Every trade burns 1%. Every staking claim burns 10%. And every Nerdie Blaq Business NFT sale injects ETH and $BLAQ back into liquidity. This means less supply, more value, and long-term sustainability for our holders. Whether you're here to game, earn, stake, or just vibe—$BLAQ keeps the metaverse alive.</p>
+<p>Every trade burns 1%. Every staking claim burns 10%. And every Nerdie Blaq Business NFT sale injects ETH and $BLAQ back into liquidity. This means less supply, more value, and long-term sustainability for our holders. Whether you're here to game, earn, stake, or just vibe—$NERDIE keeps the metaverse alive.</p>
 
-<p>Use $BLAQ Tokens to:</p>
+<p>Use $NERDIE Tokens to:</p>
 <ul>
   <li>Unlock and upgrade in-game content and assets.</li>
-  <li>Stake NFTs or tokens to earn more $BLAQ (with deflationary burn).</li>
+  <li>Stake NFTs or tokens to earn more $NERDIE (with deflationary burn).</li>
   <li>Access exclusive Nerdie Blaq drops, live shows, and metaverse events.</li>
 </ul>
 
       <p>For trading and more details, visit DexScreener.</p>
-      <a href="Add Dex Address Here" target="_blank" rel="noopener noreferrer">
+      <a href="https://dexscreener.com/base/0xe398371e809316d747e323b859a25e3c7dba8306" target="_blank" rel="noopener noreferrer">
         <button style={{ color: 'white', backgroundColor: 'red', padding: '10px 20px', border: 'none', borderRadius: '5px', cursor: 'pointer', marginBottom: '20px' }}>
-          DexScreener (coming soon)
+          DexScreener
         </button>
       </a>
-      <a href="Add Buy Linl Here" target="_blank" rel="noopener noreferrer">
+      <a href="https://app.uniswap.org/explore/tokens/base/0x4b138bd7e18a3a725a4672814f84b00711c1939d" target="_blank" rel="noopener noreferrer">
         <button style={{ color: 'white', backgroundColor: 'red', padding: '10px 20px', border: 'none', borderRadius: '5px', cursor: 'pointer', marginBottom: '20px' }}>
           Buy Here (coming soon)
         </button>
