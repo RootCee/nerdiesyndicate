@@ -1,0 +1,330 @@
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { ethers } from 'ethers';
+import { useNFTs } from '../hooks/useNFTs';
+import { useTBA } from '../hooks/useTBA';
+import twitter from '../images/twitter.png';
+import discord from '../images/discord.png';
+import telegram from '../images/telegram.png';
+import instagram from '../images/instagram.png';
+
+// ─── Wallet connection (uses same window.ethereum as MintingForm) ───
+function useWallet() {
+  const [address, setAddress] = useState<string | null>(null);
+  const [listening, setListening] = useState(false);
+
+  useEffect(() => {
+    async function check() {
+      if (!window.ethereum) return;
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const accounts = await provider.listAccounts();
+      if (accounts[0]) setAddress(accounts[0]);
+    }
+    check();
+
+    if (window.ethereum && !listening) {
+      setListening(true);
+      window.ethereum.on('accountsChanged', (accounts: string[]) => {
+        setAddress(accounts[0] ?? null);
+      });
+    }
+  }, [listening]);
+
+  return address;
+}
+
+// ─── State: No wallet connected ───
+function NoWalletState() {
+  return (
+    <section className="pt-28 pb-20 px-4 min-h-[70vh] flex items-center">
+      <div className="max-w-2xl mx-auto text-center">
+        <div className="w-20 h-20 bg-zinc-800 border border-zinc-700 rounded-full flex items-center justify-center mx-auto mb-6">
+          <svg className="w-10 h-10 text-neutral-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3" />
+          </svg>
+        </div>
+        <h1 className="text-3xl md:text-5xl font-black text-white mb-4 tracking-tight">
+          Connect Your <span className="text-red-600">Wallet</span>
+        </h1>
+        <p className="text-neutral-400 text-lg leading-relaxed mb-8 max-w-lg mx-auto">
+          Connect your wallet using the button in the top-right corner to access the Nerdie Blaq Signals dashboard.
+        </p>
+        <p className="text-neutral-600 text-sm">
+          Supports MetaMask, Coinbase Wallet, WalletConnect, and more.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+// ─── State: Wallet connected but no NFT ───
+function NoNFTState() {
+  return (
+    <section className="pt-28 pb-20 px-4 min-h-[70vh] flex items-center">
+      <div className="max-w-2xl mx-auto text-center">
+        <div className="w-20 h-20 bg-red-900/30 border border-red-800/40 rounded-full flex items-center justify-center mx-auto mb-6">
+          <svg className="w-10 h-10 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+          </svg>
+        </div>
+        <h1 className="text-3xl md:text-5xl font-black text-white mb-4 tracking-tight">
+          Dashboard <span className="text-red-600">Locked</span>
+        </h1>
+        <p className="text-neutral-400 text-lg leading-relaxed mb-8 max-w-lg mx-auto">
+          You need to hold at least one Nerdie Syndicate NFT to access the dashboard.
+          Mint yours for 0.01 ETH on Base.
+        </p>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <Link
+            to="/mint"
+            className="px-8 py-3 bg-red-800 hover:bg-red-700 text-white font-semibold rounded-full transition text-lg"
+          >
+            Mint NFT
+          </Link>
+          <a
+            href="https://opensea.io/collection/nerdie-syndicate"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-8 py-3 border border-red-800 text-red-400 hover:bg-red-900/30 font-semibold rounded-full transition text-lg"
+          >
+            Buy on OpenSea
+          </a>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─── Loading state ───
+function LoadingState() {
+  return (
+    <section className="pt-28 pb-20 px-4 min-h-[70vh] flex items-center">
+      <div className="max-w-2xl mx-auto text-center">
+        <div className="w-16 h-16 border-4 border-red-800 border-t-transparent rounded-full animate-spin mx-auto mb-6" />
+        <h2 className="text-2xl font-bold text-white mb-2">Loading Dashboard</h2>
+        <p className="text-neutral-500">Verifying your NFT holdings...</p>
+      </div>
+    </section>
+  );
+}
+
+// ─── NFT Card ───
+function NFTCard({ tokenId, image, name, tbaAddress, ethBalance }: {
+  tokenId: number;
+  image: string;
+  name: string;
+  tbaAddress?: string;
+  ethBalance?: string;
+}) {
+  const [imgError, setImgError] = useState(false);
+
+  return (
+    <div className="bg-zinc-900 border border-red-900/15 rounded-2xl overflow-hidden">
+      <div className="aspect-square bg-zinc-800 relative">
+        {image && !imgError ? (
+          <img
+            src={image}
+            alt={name}
+            className="w-full h-full object-cover"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-neutral-600">
+            <svg className="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.41a2.25 2.25 0 013.182 0l2.909 2.91m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+            </svg>
+          </div>
+        )}
+        <span className="absolute top-3 left-3 px-2.5 py-1 bg-zinc-950/80 text-white text-xs font-bold rounded-full">
+          #{tokenId}
+        </span>
+      </div>
+      <div className="p-4">
+        <h3 className="text-white font-bold text-sm mb-2">{name}</h3>
+        {tbaAddress && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-neutral-500 text-xs">TBA</span>
+              <span className="text-neutral-400 text-xs font-mono">
+                {tbaAddress.slice(0, 6)}...{tbaAddress.slice(-4)}
+              </span>
+            </div>
+            {ethBalance && (
+              <div className="flex items-center justify-between">
+                <span className="text-neutral-500 text-xs">ETH Balance</span>
+                <span className="text-neutral-300 text-xs font-mono">
+                  {parseFloat(ethBalance).toFixed(4)} ETH
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Dashboard tabs (only My NFTs active for now) ───
+const TABS = [
+  { id: 'nfts', label: 'My NFTs', disabled: false },
+  { id: 'signals', label: 'Signals', disabled: true },
+  { id: 'businesses', label: 'Businesses', disabled: true },
+  { id: 'staking', label: 'Staking', disabled: true },
+] as const;
+
+type TabId = typeof TABS[number]['id'];
+
+// ─── Main Dashboard (NFT holder view) ───
+function DashboardContent({ address }: { address: string }) {
+  const [activeTab, setActiveTab] = useState<TabId>('nfts');
+  const { nfts, balance, loading: nftsLoading, error: nftsError, refetch } = useNFTs(address);
+  const tokenIds = nfts.map((n) => n.tokenId);
+  const { tbas, loading: tbaLoading } = useTBA(tokenIds);
+
+  const tbaMap = new Map(tbas.map((t) => [t.tokenId, t]));
+
+  return (
+    <>
+      {/* Header */}
+      <section className="pt-28 pb-8 px-4 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-red-950/20 via-zinc-950 to-zinc-950 pointer-events-none" />
+        <div className="relative z-10 max-w-5xl mx-auto">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">
+                Signal <span className="text-red-600">Dashboard</span>
+              </h1>
+              <p className="text-neutral-500 text-sm mt-1">
+                {address.slice(0, 6)}...{address.slice(-4)} &middot; {balance} NFT{balance !== 1 ? 's' : ''}
+              </p>
+            </div>
+            <button
+              onClick={refetch}
+              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-neutral-300 text-sm font-medium rounded-lg transition"
+            >
+              Refresh
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Tabs */}
+      <section className="px-4 border-b border-zinc-800">
+        <div className="max-w-5xl mx-auto flex gap-1 overflow-x-auto">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => !tab.disabled && setActiveTab(tab.id)}
+              disabled={tab.disabled}
+              className={`px-5 py-3 text-sm font-medium whitespace-nowrap transition border-b-2 -mb-px ${
+                activeTab === tab.id
+                  ? 'border-red-600 text-white'
+                  : tab.disabled
+                  ? 'border-transparent text-neutral-600 cursor-not-allowed'
+                  : 'border-transparent text-neutral-400 hover:text-white hover:border-neutral-600'
+              }`}
+            >
+              {tab.label}
+              {tab.disabled && (
+                <span className="ml-2 px-1.5 py-0.5 bg-zinc-800 text-neutral-600 text-[10px] rounded-full">
+                  Soon
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* Tab Content */}
+      <section className="py-10 px-4 min-h-[50vh]">
+        <div className="max-w-5xl mx-auto">
+          {activeTab === 'nfts' && (
+            <>
+              {nftsLoading ? (
+                <div className="text-center py-20">
+                  <div className="w-12 h-12 border-4 border-red-800 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                  <p className="text-neutral-500">Loading your NFTs...</p>
+                </div>
+              ) : nftsError ? (
+                <div className="text-center py-20">
+                  <p className="text-red-400 mb-4">{nftsError}</p>
+                  <button
+                    onClick={refetch}
+                    className="px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-sm rounded-lg transition"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              ) : nfts.length === 0 ? (
+                <div className="text-center py-20">
+                  <p className="text-neutral-500">No NFTs found in this wallet.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {nfts.map((nft) => {
+                    const tba = tbaMap.get(nft.tokenId);
+                    return (
+                      <NFTCard
+                        key={nft.tokenId}
+                        tokenId={nft.tokenId}
+                        image={nft.image}
+                        name={nft.name}
+                        tbaAddress={tba?.tbaAddress}
+                        ethBalance={tba?.ethBalance}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+              {tbaLoading && nfts.length > 0 && (
+                <p className="text-neutral-600 text-xs text-center mt-6">Loading token-bound account data...</p>
+              )}
+            </>
+          )}
+        </div>
+      </section>
+    </>
+  );
+}
+
+// ─── Dashboard Page (route: /dashboard) ───
+export default function Dashboard() {
+  const address = useWallet();
+  const { balance, loading } = useNFTs(address);
+
+  const showState = !address
+    ? 'no-wallet'
+    : loading
+    ? 'loading'
+    : balance === 0
+    ? 'no-nft'
+    : 'dashboard';
+
+  return (
+    <>
+      {showState === 'no-wallet' && <NoWalletState />}
+      {showState === 'loading' && <LoadingState />}
+      {showState === 'no-nft' && <NoNFTState />}
+      {showState === 'dashboard' && address && <DashboardContent address={address} />}
+
+      {/* Footer */}
+      <section className="py-16 px-4 text-center">
+        <div className="flex justify-center items-center gap-6 mb-8">
+          <a href="https://twitter.com/rootcee" target="_blank" rel="noopener noreferrer">
+            <img src={twitter} alt="Twitter" className="w-8 h-8 opacity-60 hover:opacity-100 transition" />
+          </a>
+          <a href="https://discord.com/invite/S874axwJyY" target="_blank" rel="noopener noreferrer">
+            <img src={discord} alt="Discord" className="w-8 h-8 opacity-60 hover:opacity-100 transition" />
+          </a>
+          <a href="https://t.me/+RPRDDLSZWSk3ZjZh" target="_blank" rel="noopener noreferrer">
+            <img src={telegram} alt="Telegram" className="w-8 h-8 opacity-60 hover:opacity-100 transition" />
+          </a>
+          <a href="https://instagram.com/rootcee_" target="_blank" rel="noopener noreferrer">
+            <img src={instagram} alt="Instagram" className="w-8 h-8 opacity-60 hover:opacity-100 transition" />
+          </a>
+        </div>
+        <p className="text-neutral-600 text-sm">&copy; 2025 Nerdie Blaq. All rights reserved.</p>
+      </section>
+    </>
+  );
+}
