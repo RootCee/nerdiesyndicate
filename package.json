@@ -9,6 +9,7 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
   },
   "dependencies": {
+    "@tanstack/react-query": "^4.36.1",
     "@thirdweb-dev/react": "^4.4.24",
     "buffer": "^6.0.3",
     "ethers": "^5.5.2",
