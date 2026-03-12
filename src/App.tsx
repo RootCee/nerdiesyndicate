@@ -1,24 +1,16 @@
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { WagmiProvider } from 'wagmi';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { RainbowKitProvider, ConnectButton, darkTheme } from '@rainbow-me/rainbowkit';
+import '@rainbow-me/rainbowkit/styles.css';
+import { config } from './lib/wagmi';
 import logo from './images/logo.png';
-import {
-  ThirdwebProvider,
-  ConnectWallet,
-  metamaskWallet,
-  coinbaseWallet,
-  walletConnect,
-  safeWallet,
-  embeddedWallet,
-  trustWallet,
-  zerionWallet,
-  bloctoWallet,
-  frameWallet,
-  rainbowWallet,
-  phantomWallet,
-} from "@thirdweb-dev/react";
 import Home from './pages/Home';
 import Mint from './pages/Mint';
 import Vip from './pages/Vip';
 import Dashboard from './pages/Dashboard';
+
+const queryClient = new QueryClient();
 
 function Navbar() {
   const location = useLocation();
@@ -50,76 +42,38 @@ function Navbar() {
 
 function App() {
   return (
-    <ThirdwebProvider
-      activeChain="base"
-      clientId={import.meta.env.VITE_THIRDWEB_CLIENT_ID}
-      supportedWallets={[
-        metamaskWallet(),
-        coinbaseWallet({ recommended: true }),
-        walletConnect(),
-        safeWallet({
-          personalWallets: [
-            metamaskWallet(),
-            coinbaseWallet({ recommended: true }),
-            walletConnect(),
-            embeddedWallet({
-              auth: {
-                options: ["email", "google", "apple", "facebook"],
-              },
-            }),
-            trustWallet(),
-            zerionWallet(),
-            bloctoWallet(),
-            frameWallet(),
-            rainbowWallet(),
-            phantomWallet(),
-          ],
-        }),
-        embeddedWallet({
-          auth: {
-            options: ["email", "google", "apple", "facebook"],
-          },
-        }),
-        trustWallet(),
-        zerionWallet(),
-        bloctoWallet(),
-        frameWallet(),
-        rainbowWallet(),
-        phantomWallet(),
-      ]}
-    >
-      <BrowserRouter>
-        <div className="scroll-smooth">
-          <Navbar />
+    <WagmiProvider config={config}>
+      <QueryClientProvider client={queryClient}>
+        <RainbowKitProvider
+          theme={darkTheme({
+            accentColor: '#991b1b',
+            accentColorForeground: 'white',
+            borderRadius: 'large',
+          })}
+        >
+          <BrowserRouter>
+            <div className="scroll-smooth">
+              <Navbar />
 
-          <div className="fixed top-3 right-4 z-50">
-            <ConnectWallet
-              theme={"dark"}
-              auth={{ loginOptional: true }}
-              switchToActiveChain={true}
-              modalSize={"wide"}
-              welcomeScreen={{
-                title: "Welcome To Nerdie Blaq Signals",
-                img: {
-                  src: "https://i1.sndcdn.com/artworks-BgT0E2U58re2u0jY-E3EOJw-t240x240.jpg",
-                  width: 150,
-                  height: 150,
-                },
-              }}
-              modalTitleIconUrl="https://i1.sndcdn.com/artworks-BgT0E2U58re2u0jY-E3EOJw-t240x240.jpg"
-              showThirdwebBranding={false}
-            />
-          </div>
+              <div className="fixed top-3 right-4 z-50">
+                <ConnectButton
+                  showBalance={false}
+                  chainStatus="icon"
+                  accountStatus="address"
+                />
+              </div>
 
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/mint" element={<Mint />} />
-            <Route path="/vip" element={<Vip />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-          </Routes>
-        </div>
-      </BrowserRouter>
-    </ThirdwebProvider>
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/mint" element={<Mint />} />
+                <Route path="/vip" element={<Vip />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+              </Routes>
+            </div>
+          </BrowserRouter>
+        </RainbowKitProvider>
+      </QueryClientProvider>
+    </WagmiProvider>
   );
 }
 

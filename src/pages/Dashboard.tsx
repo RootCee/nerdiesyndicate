@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { ethers } from 'ethers';
 import { useNFTs } from '../hooks/useNFTs';
 import { useTBA } from '../hooks/useTBA';
+import NFTCard from '../components/NFTCard';
+import NFTDetailModal from '../components/NFTDetailModal';
 import twitter from '../images/twitter.png';
 import discord from '../images/discord.png';
 import telegram from '../images/telegram.png';
@@ -108,62 +110,6 @@ function LoadingState() {
   );
 }
 
-// ─── NFT Card ───
-function NFTCard({ tokenId, image, name, tbaAddress, ethBalance }: {
-  tokenId: number;
-  image: string;
-  name: string;
-  tbaAddress?: string;
-  ethBalance?: string;
-}) {
-  const [imgError, setImgError] = useState(false);
-
-  return (
-    <div className="bg-zinc-900 border border-red-900/15 rounded-2xl overflow-hidden">
-      <div className="aspect-square bg-zinc-800 relative">
-        {image && !imgError ? (
-          <img
-            src={image}
-            alt={name}
-            className="w-full h-full object-cover"
-            onError={() => setImgError(true)}
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-neutral-600">
-            <svg className="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.41a2.25 2.25 0 013.182 0l2.909 2.91m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-            </svg>
-          </div>
-        )}
-        <span className="absolute top-3 left-3 px-2.5 py-1 bg-zinc-950/80 text-white text-xs font-bold rounded-full">
-          #{tokenId}
-        </span>
-      </div>
-      <div className="p-4">
-        <h3 className="text-white font-bold text-sm mb-2">{name}</h3>
-        {tbaAddress && (
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-neutral-500 text-xs">TBA</span>
-              <span className="text-neutral-400 text-xs font-mono">
-                {tbaAddress.slice(0, 6)}...{tbaAddress.slice(-4)}
-              </span>
-            </div>
-            {ethBalance && (
-              <div className="flex items-center justify-between">
-                <span className="text-neutral-500 text-xs">ETH Balance</span>
-                <span className="text-neutral-300 text-xs font-mono">
-                  {parseFloat(ethBalance).toFixed(4)} ETH
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ─── Dashboard tabs (only My NFTs active for now) ───
 const TABS = [
   { id: 'nfts', label: 'My NFTs', disabled: false },
@@ -177,11 +123,14 @@ type TabId = typeof TABS[number]['id'];
 // ─── Main Dashboard (NFT holder view) ───
 function DashboardContent({ address }: { address: string }) {
   const [activeTab, setActiveTab] = useState<TabId>('nfts');
+  const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null);
   const { nfts, balance, loading: nftsLoading, error: nftsError, refetch } = useNFTs(address);
   const tokenIds = nfts.map((n) => n.tokenId);
   const { tbas, loading: tbaLoading } = useTBA(tokenIds);
 
   const tbaMap = new Map(tbas.map((t) => [t.tokenId, t]));
+  const selectedNft = nfts.find((n) => n.tokenId === selectedTokenId);
+  const selectedTba = selectedTokenId != null ? tbaMap.get(selectedTokenId) : undefined;
 
   return (
     <>
@@ -271,6 +220,7 @@ function DashboardContent({ address }: { address: string }) {
                         name={nft.name}
                         tbaAddress={tba?.tbaAddress}
                         ethBalance={tba?.ethBalance}
+                        onClick={() => setSelectedTokenId(nft.tokenId)}
                       />
                     );
                   })}
@@ -283,6 +233,18 @@ function DashboardContent({ address }: { address: string }) {
           )}
         </div>
       </section>
+
+      {/* Detail Modal */}
+      {selectedNft && (
+        <NFTDetailModal
+          tokenId={selectedNft.tokenId}
+          image={selectedNft.image}
+          name={selectedNft.name}
+          tbaAddress={selectedTba?.tbaAddress}
+          ethBalance={selectedTba?.ethBalance}
+          onClose={() => setSelectedTokenId(null)}
+        />
+      )}
     </>
   );
 }
