@@ -5,6 +5,7 @@ import { useNFTs } from '../hooks/useNFTs';
 import { useTBA } from '../hooks/useTBA';
 import NFTCard from '../components/NFTCard';
 import NFTDetailModal from '../components/NFTDetailModal';
+import SignalsBoard from '../components/signals/SignalsBoard';
 import twitter from '../images/twitter.png';
 import discord from '../images/discord.png';
 import telegram from '../images/telegram.png';
@@ -110,10 +111,10 @@ function LoadingState() {
   );
 }
 
-// ─── Dashboard tabs (only My NFTs active for now) ───
+// ─── Dashboard tabs ───
 const TABS = [
   { id: 'nfts', label: 'My NFTs', disabled: false },
-  { id: 'signals', label: 'Signals', disabled: true },
+  { id: 'signals', label: 'Signals', disabled: false },
   { id: 'businesses', label: 'Businesses', disabled: true },
   { id: 'staking', label: 'Staking', disabled: true },
 ] as const;
@@ -122,7 +123,8 @@ type TabId = typeof TABS[number]['id'];
 
 // ─── Main Dashboard (NFT holder view) ───
 function DashboardContent({ address }: { address: string }) {
-  const [activeTab, setActiveTab] = useState<TabId>('nfts');
+  const [activeTab, setActiveTab] = useState<TabId>('signals');
+  const [signalsRefreshKey, setSignalsRefreshKey] = useState(0);
   const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null);
   const { nfts, balance, loading: nftsLoading, error: nftsError, refetch } = useNFTs(address);
   const tokenIds = nfts.map((n) => n.tokenId);
@@ -148,7 +150,10 @@ function DashboardContent({ address }: { address: string }) {
               </p>
             </div>
             <button
-              onClick={refetch}
+              onClick={() => {
+                refetch();
+                setSignalsRefreshKey((value) => value + 1);
+              }}
               className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-neutral-300 text-sm font-medium rounded-lg transition"
             >
               Refresh
@@ -231,6 +236,8 @@ function DashboardContent({ address }: { address: string }) {
               )}
             </>
           )}
+
+          {activeTab === 'signals' && <SignalsBoard refreshKey={signalsRefreshKey} />}
         </div>
       </section>
 

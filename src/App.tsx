@@ -9,6 +9,7 @@ import Home from './pages/Home';
 import Mint from './pages/Mint';
 import Vip from './pages/Vip';
 import Dashboard from './pages/Dashboard';
+import Academy from './pages/Academy';
 
 const queryClient = new QueryClient();
 
@@ -29,6 +30,7 @@ function Navbar() {
           ) : (
             <Link to="/" className="hover:text-white transition">Home</Link>
           )}
+          <Link to="/academy" className={`hover:text-white transition ${location.pathname === '/academy' ? 'text-white' : ''}`}>Academy</Link>
           <Link to="/vip" className={`hover:text-white transition ${location.pathname === '/vip' ? 'text-white' : ''}`}>VIP Access</Link>
           <Link to="/mint" className={`hover:text-white transition ${location.pathname === '/mint' ? 'text-white' : ''}`}>NFT Mint</Link>
           <Link to="/dashboard" className={`hover:text-white transition ${location.pathname === '/dashboard' ? 'text-white' : ''}`}>Dashboard</Link>
@@ -65,6 +67,7 @@ function App() {
 
               <Routes>
                 <Route path="/" element={<Home />} />
+                <Route path="/academy" element={<Academy />} />
                 <Route path="/mint" element={<Mint />} />
                 <Route path="/vip" element={<Vip />} />
                 <Route path="/dashboard" element={<Dashboard />} />
