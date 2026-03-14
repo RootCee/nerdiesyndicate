@@ -24,16 +24,18 @@ const DEFAULT_BOT_STATS: BotPerformanceStats = {
   signalsLogged: '--',
   botStatus: 'OFFLINE',
   pnl: '--',
-  winRateSub: 'latest bot_performance row',
+  winRateSub: 'live summary from signal_outcomes',
   botStatusSub: 'no recent data',
-  pnlSub: 'latest bot_performance row',
+  pnlSub: 'live summary from signal_outcomes',
 };
 
 const BOT_ACTIVE_WINDOW_MS = 15 * 60 * 1000;
 const BOT_STANDBY_WINDOW_MS = 6 * 60 * 60 * 1000;
 
 function formatCount(value: number) {
-  return new Intl.NumberFormat('en-US').format(value);
+  return new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: 0,
+  }).format(value);
 }
 
 function getString(row: StatsRow | undefined, keys: string[]) {
@@ -105,7 +107,9 @@ function formatPercentMetric(value: number | string | null) {
     return typeof value === 'string' && value.trim() ? value.trim() : '--';
   }
 
-  return `${parsed}%`;
+  return `${new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: 1,
+  }).format(parsed)}%`;
 }
 
 function formatPnlMetric(value: number | string | null) {
@@ -117,7 +121,18 @@ function formatPnlMetric(value: number | string | null) {
   }
 
   const sign = parsed > 0 ? '+' : '';
-  return `${sign}${parsed}%`;
+  return `${sign}${new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: 2,
+  }).format(parsed)}%`;
+}
+
+function getLatestActivity(rows: StatsRow[]) {
+  return rows.reduce<number | null>((latest, row) => {
+    const timestamp = getTimestampValue(row);
+    if (timestamp === null) return latest;
+    if (latest === null || timestamp > latest) return timestamp;
+    return latest;
+  }, null);
 }
 
 function HeroSection() {
@@ -171,26 +186,30 @@ function BotProofSection() {
       }
 
       try {
-        const performanceRows = await fetchSupabaseRows<StatsRow>('bot_performance', {
-          select: '*',
+        const outcomeRows = await fetchSupabaseRows<StatsRow>('signal_outcomes', {
+          select: 'status,pnl,created_at,updated_at,timestamp',
           order: 'created_at.desc',
-          limit: '1',
         });
 
         if (cancelled) return;
 
-        const latestPerformance = performanceRows[0];
-        const latestActivity = getTimestampValue(latestPerformance);
+        const signals = outcomeRows.length;
+        const wins = outcomeRows.filter((row) => getString(row, ['status']) === 'WIN').length;
+        const losses = outcomeRows.filter((row) => getString(row, ['status']) === 'LOSS').length;
+        const decidedTrades = wins + losses;
+        const winRate = decidedTrades > 0 ? (wins / decidedTrades) * 100 : null;
+        const pnl = outcomeRows.reduce((total, row) => total + (getNumber(row, ['pnl']) ?? 0), 0);
+        const latestActivity = getLatestActivity(outcomeRows);
         const botStatus = getBotStatus(latestActivity);
 
         setStats({
-          winRate: formatPercentMetric(getNumber(latestPerformance, ['win_rate']) ?? getString(latestPerformance, ['win_rate'])),
-          signalsLogged: formatMetric(getNumber(latestPerformance, ['signals']) ?? getString(latestPerformance, ['signals'])),
+          winRate: formatPercentMetric(winRate),
+          signalsLogged: formatMetric(signals),
           botStatus,
-          pnl: formatPnlMetric(getNumber(latestPerformance, ['pnl']) ?? getString(latestPerformance, ['pnl'])),
-          winRateSub: latestPerformance ? 'latest bot_performance row' : 'no bot performance data',
+          pnl: formatPnlMetric(pnl),
+          winRateSub: outcomeRows.length ? 'live summary from signal_outcomes' : 'no signal outcomes data',
           botStatusSub: getBotStatusSub(botStatus),
-          pnlSub: latestPerformance ? 'latest bot_performance row' : 'no bot performance data',
+          pnlSub: outcomeRows.length ? 'live summary from signal_outcomes' : 'no signal outcomes data',
         });
       } catch {
         if (!cancelled) setStats(DEFAULT_BOT_STATS);
@@ -207,7 +226,7 @@ function BotProofSection() {
   const statCards = [
     { label: 'Win Rate', value: stats.winRate, sub: stats.winRateSub },
     { label: 'Bot Status', value: stats.botStatus, sub: stats.botStatusSub },
-    { label: 'Signals Logged', value: stats.signalsLogged, sub: 'bot_performance.signals' },
+    { label: 'Signals Logged', value: stats.signalsLogged, sub: 'signal_outcomes.count' },
     { label: 'P&L', value: stats.pnl, sub: stats.pnlSub },
   ];
 
