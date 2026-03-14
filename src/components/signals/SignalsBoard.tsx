@@ -16,6 +16,7 @@ type SignalLogEntry = {
 const REFRESH_INTERVAL_MS = 5000;
 const HIGHLIGHT_DURATION_MS = 2400;
 const SIGNAL_LOG_LIMIT = 24;
+const FOCUS_HISTORY_LIMIT = 5;
 
 const STATUS_STYLES: Record<SignalStatus, string> = {
   LONG: 'text-emerald-300',
@@ -157,6 +158,25 @@ function getRiskState(card: SignalCardData) {
   return 'Balanced';
 }
 
+function getHistoryStatusLabel(entry: SignalLogEntry, index: number) {
+  if (index === 0) return 'Latest';
+  if (entry.status === 'WATCH') return 'Monitoring';
+  if (entry.status === 'NEUTRAL') return 'Holding';
+  return 'Archived';
+}
+
+function getRecentBias(entries: SignalLogEntry[]) {
+  const score = entries.reduce((total, entry) => {
+    if (entry.status === 'LONG') return total + 1;
+    if (entry.status === 'SHORT') return total - 1;
+    return total;
+  }, 0);
+
+  if (score >= 2) return 'Bullish pressure';
+  if (score <= -2) return 'Bearish pressure';
+  return 'Mixed activity';
+}
+
 function buildSignalLogEntry(row: RawRow, index: number): SignalLogEntry | null {
   const asset = normalizeAsset(getString(row, ['asset', 'symbol', 'ticker', 'coin', 'base_asset']));
   const status = normalizeSignalStatus(getString(row, ['signal', 'latest_signal', 'direction', 'status', 'signal_type']));
@@ -233,8 +253,36 @@ function FocusFeedRow({ entry }: { entry: SignalLogEntry }) {
   );
 }
 
+function FocusHistoryRow({ entry, index }: { entry: SignalLogEntry; index: number }) {
+  return (
+    <div className="grid grid-cols-[74px_92px_minmax(0,1fr)] gap-3 border-b border-cyan-400/10 py-3 last:border-b-0">
+      <div>
+        <p className="font-mono text-sm text-cyan-200/75">{formatClockTime(entry.timestamp)}</p>
+        <p className="mt-1 text-[10px] uppercase tracking-[0.22em] text-slate-500">{getHistoryStatusLabel(entry, index)}</p>
+      </div>
+      <div className="flex items-start">
+        <span className={`inline-flex w-fit rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-[0.24em] ${STATUS_BADGE_STYLES[entry.status]}`}>
+          {entry.status}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-[minmax(0,1fr)_120px]">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Confidence</p>
+          <p className="mt-1 text-sm font-semibold text-slate-100">{formatConfidence(entry.confidence)}</p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Entry Type</p>
+          <p className="mt-1 text-sm text-slate-300">{entry.status}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AssetFocusPanel({ card, entries }: { card: SignalCardData; entries: SignalLogEntry[] }) {
   const status = card.latestSignal ?? 'NEUTRAL';
+  const recentEntries = entries.slice(0, FOCUS_HISTORY_LIMIT);
+  const recentBias = getRecentBias(recentEntries);
 
   return (
     <div className="border-t border-cyan-400/10 bg-[linear-gradient(180deg,rgba(8,15,30,0.9),rgba(2,6,23,0.98))] px-5 py-5">
@@ -286,6 +334,26 @@ function AssetFocusPanel({ card, entries }: { card: SignalCardData; entries: Sig
               <div className="px-4 py-6 text-sm text-slate-500">No recent signal feed entries for {card.asset}.</div>
             )}
           </div>
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-cyan-400/10 bg-slate-950/70">
+        <div className="flex flex-col gap-3 border-b border-cyan-400/10 px-4 py-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.28em] text-cyan-200/55">Signal History</p>
+            <p className="mt-1 text-sm text-slate-400">Recent intelligence for {card.asset}, pulled from the current console feed.</p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.24em] text-slate-400">
+            <span className="rounded-full border border-cyan-400/10 bg-cyan-400/5 px-3 py-1">Recent Bias {recentBias}</span>
+            <span className="rounded-full border border-cyan-400/10 bg-cyan-400/5 px-3 py-1">Entries {recentEntries.length}</span>
+          </div>
+        </div>
+        <div className="px-4">
+          {recentEntries.length > 0 ? (
+            recentEntries.map((entry, index) => <FocusHistoryRow key={`${entry.id}-history`} entry={entry} index={index} />)
+          ) : (
+            <div className="py-6 text-sm text-slate-500">No recent history entries available for {card.asset}.</div>
+          )}
         </div>
       </div>
     </div>
