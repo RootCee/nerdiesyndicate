@@ -1,9 +1,124 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { fetchSupabaseRows, isSupabaseConfigured } from '../lib/supabase';
 import mainlogo from '../images/mainlogo.png';
 import twitter from '../images/twitter.png';
 import discord from '../images/discord.png';
 import telegram from '../images/telegram.png';
 import instagram from '../images/instagram.png';
+
+type StatsRow = Record<string, unknown>;
+
+type BotPerformanceStats = {
+  winRate: string;
+  signalsLogged: string;
+  botStatus: 'ACTIVE' | 'STANDBY' | 'OFFLINE';
+  pnl: string;
+  winRateSub: string;
+  botStatusSub: string;
+  pnlSub: string;
+};
+
+const DEFAULT_BOT_STATS: BotPerformanceStats = {
+  winRate: '--',
+  signalsLogged: '--',
+  botStatus: 'OFFLINE',
+  pnl: '--',
+  winRateSub: 'latest bot_performance row',
+  botStatusSub: 'no recent data',
+  pnlSub: 'latest bot_performance row',
+};
+
+const BOT_ACTIVE_WINDOW_MS = 15 * 60 * 1000;
+const BOT_STANDBY_WINDOW_MS = 6 * 60 * 60 * 1000;
+
+function formatCount(value: number) {
+  return new Intl.NumberFormat('en-US').format(value);
+}
+
+function getString(row: StatsRow | undefined, keys: string[]) {
+  if (!row) return null;
+
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+
+  return null;
+}
+
+function getNumber(row: StatsRow | undefined, keys: string[]) {
+  if (!row) return null;
+
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+
+  return null;
+}
+
+function getTimestampValue(row: StatsRow | undefined) {
+  const value = getString(row, ['created_at', 'updated_at', 'timestamp']);
+  if (!value) return null;
+
+  const time = Date.parse(value);
+  return Number.isNaN(time) ? null : time;
+}
+
+function getBotStatus(latestActivity: number | undefined | null): BotPerformanceStats['botStatus'] {
+  if (!latestActivity) return 'OFFLINE';
+
+  const age = Date.now() - latestActivity;
+  if (age <= BOT_ACTIVE_WINDOW_MS) return 'ACTIVE';
+  if (age <= BOT_STANDBY_WINDOW_MS) return 'STANDBY';
+  return 'OFFLINE';
+}
+
+function getBotStatusSub(status: BotPerformanceStats['botStatus']) {
+  if (status === 'ACTIVE') return 'latest bot_performance update is fresh';
+  if (status === 'STANDBY') return 'bot data is present but not recent';
+  return 'data stale or unavailable';
+}
+
+function formatMetric(value: number | string | null) {
+  if (value === null) return '--';
+  if (typeof value === 'number') return formatCount(value);
+
+  const trimmed = value.trim();
+  if (!trimmed) return '--';
+
+  const parsed = Number(trimmed);
+  if (Number.isFinite(parsed)) return formatCount(parsed);
+  return trimmed;
+}
+
+function formatPercentMetric(value: number | string | null) {
+  if (value === null) return '--';
+
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed)) {
+    return typeof value === 'string' && value.trim() ? value.trim() : '--';
+  }
+
+  return `${parsed}%`;
+}
+
+function formatPnlMetric(value: number | string | null) {
+  if (value === null) return '--';
+
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed)) {
+    return typeof value === 'string' && value.trim() ? value.trim() : '--';
+  }
+
+  const sign = parsed > 0 ? '+' : '';
+  return `${sign}${parsed}%`;
+}
 
 function HeroSection() {
   return (
@@ -44,11 +159,56 @@ function HeroSection() {
 }
 
 function BotProofSection() {
-  const stats = [
-    { label: "Win Rate", value: "78%", sub: "verified trades" },
-    { label: "Bot Status", value: "ACTIVE", sub: "running 24/7" },
-    { label: "Signals Sent", value: "1,240+", sub: "and counting" },
-    { label: "Weekly ROI", value: "+12.4%", sub: "last 7 days" },
+  const [stats, setStats] = useState<BotPerformanceStats>(DEFAULT_BOT_STATS);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadStats() {
+      if (!isSupabaseConfigured()) {
+        setStats(DEFAULT_BOT_STATS);
+        return;
+      }
+
+      try {
+        const performanceRows = await fetchSupabaseRows<StatsRow>('bot_performance', {
+          select: '*',
+          order: 'created_at.desc',
+          limit: '1',
+        });
+
+        if (cancelled) return;
+
+        const latestPerformance = performanceRows[0];
+        const latestActivity = getTimestampValue(latestPerformance);
+        const botStatus = getBotStatus(latestActivity);
+
+        setStats({
+          winRate: formatPercentMetric(getNumber(latestPerformance, ['win_rate']) ?? getString(latestPerformance, ['win_rate'])),
+          signalsLogged: formatMetric(getNumber(latestPerformance, ['signals']) ?? getString(latestPerformance, ['signals'])),
+          botStatus,
+          pnl: formatPnlMetric(getNumber(latestPerformance, ['pnl']) ?? getString(latestPerformance, ['pnl'])),
+          winRateSub: latestPerformance ? 'latest bot_performance row' : 'no bot performance data',
+          botStatusSub: getBotStatusSub(botStatus),
+          pnlSub: latestPerformance ? 'latest bot_performance row' : 'no bot performance data',
+        });
+      } catch {
+        if (!cancelled) setStats(DEFAULT_BOT_STATS);
+      }
+    }
+
+    void loadStats();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const statCards = [
+    { label: 'Win Rate', value: stats.winRate, sub: stats.winRateSub },
+    { label: 'Bot Status', value: stats.botStatus, sub: stats.botStatusSub },
+    { label: 'Signals Logged', value: stats.signalsLogged, sub: 'bot_performance.signals' },
+    { label: 'P&L', value: stats.pnl, sub: stats.pnlSub },
   ];
 
   return (
@@ -61,7 +221,7 @@ function BotProofSection() {
           The Nerdie Blaq signal engine runs 24/7, analyzing BTC markets and generating trade calls in real time.
         </p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-          {stats.map((stat) => (
+          {statCards.map((stat) => (
             <div
               key={stat.label}
               className="bg-zinc-900 border border-red-900/20 rounded-2xl p-6 md:p-8 text-center hover:border-red-800/50 transition"
@@ -70,7 +230,15 @@ function BotProofSection() {
               <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1">{stat.label}</p>
               <p className="text-xs text-neutral-600">{stat.sub}</p>
               {stat.label === "Bot Status" && (
-                <span className="inline-block mt-2 w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" />
+                <span
+                  className={`inline-block mt-2 h-2.5 w-2.5 rounded-full ${
+                    stats.botStatus === 'ACTIVE'
+                      ? 'bg-green-500 animate-pulse'
+                      : stats.botStatus === 'STANDBY'
+                      ? 'bg-amber-400'
+                      : 'bg-red-500/80'
+                  }`}
+                />
               )}
             </div>
           ))}
