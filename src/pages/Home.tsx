@@ -65,11 +65,14 @@ function getNumber(row: StatsRow | undefined, keys: string[]) {
 }
 
 function getTimestampValue(row: StatsRow | undefined) {
-  const value = getString(row, ['created_at', 'updated_at', 'timestamp']);
-  if (!value) return null;
+  const createdAt = getString(row, ['created_at']);
+  const closedAt = getString(row, ['closed_at']);
+  const createdTime = createdAt ? Date.parse(createdAt) : Number.NaN;
+  const closedTime = closedAt ? Date.parse(closedAt) : Number.NaN;
+  const timestamps = [createdTime, closedTime].filter((value) => !Number.isNaN(value));
 
-  const time = Date.parse(value);
-  return Number.isNaN(time) ? null : time;
+  if (!timestamps.length) return null;
+  return Math.max(...timestamps);
 }
 
 function getBotStatus(latestActivity: number | undefined | null): BotPerformanceStats['botStatus'] {
@@ -187,7 +190,7 @@ function BotProofSection() {
 
       try {
         const outcomeRows = await fetchSupabaseRows<StatsRow>('signal_outcomes', {
-          select: 'status,pnl,created_at,updated_at,timestamp',
+          select: 'status,pnl,created_at,closed_at',
           order: 'created_at.desc',
         });
 
