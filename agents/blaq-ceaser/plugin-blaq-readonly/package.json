@@ -1,0 +1,21 @@
+{
+  "name": "@nerdieblaq/plugin-blaq-readonly",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "peerDependencies": {
+    "@elizaos/core": "*"
+  },
+  "dependencies": {
+    "@nerdieblaq/shared-readonly": "file:../../../packages/shared-readonly"
+  }
+}
