@@ -1,5 +1,5 @@
-import { formatWebsiteProviderOutput } from './formatters';
-import { fetchOfficialSiteSnapshot } from './websiteReader';
+import { formatWebsiteProviderOutput } from './formatters.js';
+import { fetchOfficialSiteSnapshot } from './websiteReader.js';
 
 const WEBSITE_DEBUG_PREFIX = '[blaq-website-debug]';
 

@@ -1,6 +1,6 @@
 import { getGuardrailState } from '@nerdieblaq/shared-readonly';
-import { formatGuardrailsProviderOutput } from './formatters';
-import { buildUnavailableProviderPayload } from './providerUtils';
+import { formatGuardrailsProviderOutput } from './formatters.js';
+import { buildUnavailableProviderPayload } from './providerUtils.js';
 
 export const guardrailsProvider = {
   name: 'BLAQ_GUARDRAILS_CONTEXT',

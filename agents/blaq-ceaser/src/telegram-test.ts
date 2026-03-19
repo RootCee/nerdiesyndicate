@@ -1,6 +1,6 @@
-import { createBlaqCeaserAppShell } from './runtime-shell';
-import { selectFallbackReply } from './fallbackReply';
-import { buildRouteInstruction, routeMessage, type ConversationRoute } from './routeMessage';
+import { createBlaqCeaserAppShell } from './runtime-shell.js';
+import { selectFallbackReply } from './fallbackReply.js';
+import { buildRouteInstruction, routeMessage, type ConversationRoute } from './routeMessage.js';
 
 const TELEGRAM_TEST_AGENT_ID = '00000000-0000-4000-8000-000000000004';
 const EXECUTION_BLOCKERS = ['wallet', 'trade', 'execute', 'confirm'];

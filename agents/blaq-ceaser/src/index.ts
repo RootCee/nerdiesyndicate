@@ -1,8 +1,8 @@
-import { createBlaqCeaserAppShell } from './runtime-shell';
-import character from './character';
+import { createBlaqCeaserAppShell } from './runtime-shell.js';
+import character from './character.js';
 
 export { character };
-export { createBlaqCeaserAppShell } from './runtime-shell';
+export { createBlaqCeaserAppShell } from './runtime-shell.js';
 
 function printShellSummary() {
   const shell = createBlaqCeaserAppShell();

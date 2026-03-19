@@ -7,8 +7,8 @@ import type {
   PriceBoardResult,
   SignalCardData,
 } from '@nerdieblaq/shared-readonly';
-import type { WebsiteSnapshot } from './websiteReader';
-import { formatFreshness, isStale } from './providerUtils';
+import type { WebsiteSnapshot } from './websiteReader.js';
+import { formatFreshness, isStale } from './providerUtils.js';
 import { TARGET_ASSETS, type TargetAsset } from '@nerdieblaq/shared-readonly';
 
 function formatPercent(value: number | null) {

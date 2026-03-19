@@ -1,5 +1,5 @@
-import { fetchSupabaseRows } from './supabase';
-import type { PerformanceSummary } from './types';
+import { fetchSupabaseRows } from './supabase.js';
+import type { PerformanceSummary } from './types.js';
 
 type RawRow = Record<string, unknown>;
 

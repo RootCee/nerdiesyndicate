@@ -1,6 +1,6 @@
 import { getAssetPrice, getAssetSignal, getLatestPriceBoard, getLatestSignalSnapshot, TARGET_ASSETS, type TargetAsset } from '@nerdieblaq/shared-readonly';
-import { formatPriceProviderOutput } from './formatters';
-import { buildUnavailableProviderPayload } from './providerUtils';
+import { formatPriceProviderOutput } from './formatters.js';
+import { buildUnavailableProviderPayload } from './providerUtils.js';
 
 const PRICE_DEBUG_PREFIX = '[blaq-price-debug]';
 

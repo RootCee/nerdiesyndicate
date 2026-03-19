@@ -1,4 +1,4 @@
-import { createBlaqCeaserAppShell } from './runtime-shell';
+import { createBlaqCeaserAppShell } from './runtime-shell.js';
 
 const LOCAL_ENTITY_ID = '00000000-0000-4000-8000-000000000001';
 const LOCAL_ROOM_ID = '00000000-0000-4000-8000-000000000002';

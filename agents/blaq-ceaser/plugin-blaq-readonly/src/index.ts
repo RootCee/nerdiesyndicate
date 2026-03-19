@@ -1,12 +1,12 @@
 import type { Plugin } from '@elizaos/core';
-import { suggestOpsCommandAction, useOpsChatAction } from './actions/suggestOpsCommand';
-import { executionIntentPolicy } from './evaluators/executionIntentPolicy';
-import { guardrailsProvider } from './providers/guardrailsProvider';
-import { knowledgeProvider } from './providers/knowledgeProvider';
-import { priceProvider } from './providers/priceProvider';
-import { signalsProvider } from './providers/signalsProvider';
-import { statusProvider } from './providers/statusProvider';
-import { websiteProvider } from './providers/websiteProvider';
+import { suggestOpsCommandAction, useOpsChatAction } from './actions/suggestOpsCommand.js';
+import { executionIntentPolicy } from './evaluators/executionIntentPolicy.js';
+import { guardrailsProvider } from './providers/guardrailsProvider.js';
+import { knowledgeProvider } from './providers/knowledgeProvider.js';
+import { priceProvider } from './providers/priceProvider.js';
+import { signalsProvider } from './providers/signalsProvider.js';
+import { statusProvider } from './providers/statusProvider.js';
+import { websiteProvider } from './providers/websiteProvider.js';
 
 export const blaqReadonlyPlugin: Plugin = {
   name: 'blaq-readonly',

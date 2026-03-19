@@ -1,4 +1,4 @@
-import { runLocalPrompt } from './local-dev';
+import { runLocalPrompt } from './local-dev.js';
 
 type E2ECase = {
   prompt: string;

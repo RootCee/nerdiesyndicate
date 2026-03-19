@@ -1,4 +1,4 @@
-import { findKnowledgeMatches } from './knowledgeReader';
+import { findKnowledgeMatches } from './knowledgeReader.js';
 
 function buildKnowledgeUnavailablePayload() {
   const text =

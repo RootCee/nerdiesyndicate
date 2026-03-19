@@ -1,4 +1,4 @@
-import { isExecutionIntent } from '../plugin-blaq-readonly/src/executionIntent';
+import { isExecutionIntent } from '../plugin-blaq-readonly/src/executionIntent.js';
 
 export type ConversationRoute =
   | 'social'

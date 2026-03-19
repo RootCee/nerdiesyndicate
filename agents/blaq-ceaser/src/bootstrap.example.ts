@@ -11,7 +11,7 @@
  * until the actual Eliza runtime packages are installed.
  */
 
-import { createBlaqCeaserAppShell } from './runtime-shell';
+import { createBlaqCeaserAppShell } from './runtime-shell.js';
 
 export interface FutureElizaRuntimeConfig {
   modelProvider: string;

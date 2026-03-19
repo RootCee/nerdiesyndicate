@@ -1,7 +1,7 @@
 import type { Character } from '@elizaos/core';
 import blaqReadonlyPlugin from '@nerdieblaq/plugin-blaq-readonly';
-import character from './character';
-import { formatKnowledgePack, nerdieBlaqKnowledgePack } from './knowledge-pack';
+import character from './character.js';
+import { formatKnowledgePack, nerdieBlaqKnowledgePack } from './knowledge-pack.js';
 
 export interface BlaqCeaserShellConfig {
   modelProvider: string | null;

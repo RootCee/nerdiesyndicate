@@ -1,4 +1,4 @@
-import { isExecutionIntent } from '../executionIntent';
+import { isExecutionIntent } from '../executionIntent.js';
 
 const COMMAND_MAP: Array<{ pattern: RegExp; command: string }> = [
   { pattern: /\b(buy|long)\b/i, command: '/buy_review <asset>' },

@@ -1,4 +1,4 @@
-import { fetchSupabaseRows } from './supabase';
+import { fetchSupabaseRows } from './supabase.js';
 import {
   type AssetPriceSnapshot,
   TARGET_ASSETS,
@@ -9,7 +9,7 @@ import {
   type SignalStatus,
   type SignalsSummary,
   type TargetAsset,
-} from './types';
+} from './types.js';
 
 type RawRow = Record<string, unknown>;
 

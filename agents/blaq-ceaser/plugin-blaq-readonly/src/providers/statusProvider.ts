@@ -1,6 +1,6 @@
 import { getBotStatus, getGuardrailState, getLatestSignals, getPerformanceSummary } from '@nerdieblaq/shared-readonly';
-import { formatStatusProviderOutput } from './formatters';
-import { buildUnavailableProviderPayload } from './providerUtils';
+import { formatStatusProviderOutput } from './formatters.js';
+import { buildUnavailableProviderPayload } from './providerUtils.js';
 
 export const statusProvider = {
   name: 'BLAQ_STATUS_CONTEXT',

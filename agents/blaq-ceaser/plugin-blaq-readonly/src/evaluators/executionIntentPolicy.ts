@@ -1,4 +1,4 @@
-import { EXECUTION_INTENT_PATTERN } from '../executionIntent';
+import { EXECUTION_INTENT_PATTERN } from '../executionIntent.js';
 
 const EXECUTION_REFUSAL =
   'I only explain. Ops bot executes. Use Ops chat.';

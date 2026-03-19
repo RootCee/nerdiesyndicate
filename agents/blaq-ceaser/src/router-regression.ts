@@ -1,5 +1,5 @@
-import { selectFallbackReply } from './fallbackReply';
-import { buildRouteInstruction, routeMessage } from './routeMessage';
+import { selectFallbackReply } from './fallbackReply.js';
+import { buildRouteInstruction, routeMessage } from './routeMessage.js';
 
 type RouteCase = {
   prompt: string;

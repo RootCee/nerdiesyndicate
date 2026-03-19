@@ -1,6 +1,6 @@
 import { getLatestSignalSnapshot } from '@nerdieblaq/shared-readonly';
-import { formatSignalsProviderOutput } from './formatters';
-import { buildUnavailableProviderPayload } from './providerUtils';
+import { formatSignalsProviderOutput } from './formatters.js';
+import { buildUnavailableProviderPayload } from './providerUtils.js';
 
 export const signalsProvider = {
   name: 'BLAQ_SIGNAL_CONTEXT',
