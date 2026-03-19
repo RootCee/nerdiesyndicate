@@ -17,6 +17,7 @@
     "dev:blaq-ceaser:local:env": "npm run -w @nerdieblaq/blaq-ceaser dev:local:env",
     "dev:blaq-ceaser:telegram:test": "npm run -w @nerdieblaq/blaq-ceaser dev:telegram:test",
     "dev:blaq-ceaser:telegram:test:env": "npm run -w @nerdieblaq/blaq-ceaser dev:telegram:test:env",
+    "start:blaq-ceaser:telegram:test": "npm run -w @nerdieblaq/blaq-ceaser start:telegram:test",
     "test:blaq-ceaser:router": "npm run -w @nerdieblaq/blaq-ceaser test:router",
     "test:blaq-ceaser:e2e:local": "npm run -w @nerdieblaq/blaq-ceaser test:e2e:local"
   },

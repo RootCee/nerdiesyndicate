@@ -13,6 +13,8 @@
   "scripts": {
     "build": "tsc -b",
     "start": "node --import tsx ./src/index.ts",
+    "start:telegram:test": "node ./dist/telegram-test.js",
+    "start:local": "node ./dist/local-dev.js",
     "dev:local": "node --import tsx ./src/local-dev.ts",
     "dev:local:env": "node --env-file=.env.local --import tsx ./src/local-dev.ts",
     "dev:telegram:test": "node --import tsx ./src/telegram-test.ts",
