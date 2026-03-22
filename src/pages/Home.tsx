@@ -217,7 +217,9 @@ function BotProofSection() {
         if (cancelled) return;
 
         const latestPerformance = performanceRows[0];
-        const signals = outcomeRows.length;
+        const signals =
+          getNumber(latestPerformance, ['signals', 'trade_count', 'tradeCount']) ??
+          outcomeRows.length;
         const wins = outcomeRows.filter((row) => normalizeOutcomeStatus(getString(row, ['status'])) === 'WIN').length;
         const losses = outcomeRows.filter((row) => normalizeOutcomeStatus(getString(row, ['status'])) === 'LOSS').length;
         const decidedTrades = wins + losses;
@@ -230,6 +232,7 @@ function BotProofSection() {
         const winRate =
           getNumber(latestPerformance, ['win_rate', 'winRate']) ?? fallbackWinRate;
         const pnl =
+          getNumber(latestPerformance, ['pnl']) ??
           getNumber(latestPerformance, ['realized_pnl', 'realizedPnl', 'pnl_realized']) ??
           getNumber(latestPerformance, ['unrealized_pnl', 'unrealizedPnl', 'pnl_unrealized']) ??
           fallbackPnl;
