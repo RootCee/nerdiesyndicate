@@ -65,11 +65,14 @@ function getNumber(row: StatsRow | undefined, keys: string[]) {
 }
 
 function getTimestampValue(row: StatsRow | undefined) {
-  const createdAt = getString(row, ['created_at']);
-  const closedAt = getString(row, ['closed_at']);
-  const createdTime = createdAt ? Date.parse(createdAt) : Number.NaN;
-  const closedTime = closedAt ? Date.parse(closedAt) : Number.NaN;
-  const timestamps = [createdTime, closedTime].filter((value) => !Number.isNaN(value));
+  const timestamps = [
+    getString(row, ['created_at']),
+    getString(row, ['closed_at']),
+    getString(row, ['updated_at']),
+    getString(row, ['timestamp']),
+  ]
+    .map((value) => (value ? Date.parse(value) : Number.NaN))
+    .filter((value) => !Number.isNaN(value));
 
   if (!timestamps.length) return null;
   return Math.max(...timestamps);
@@ -88,6 +91,16 @@ function getBotStatusSub(status: BotPerformanceStats['botStatus']) {
   if (status === 'ACTIVE') return 'latest bot_performance update is fresh';
   if (status === 'STANDBY') return 'bot data is present but not recent';
   return 'data stale or unavailable';
+}
+
+function normalizeOutcomeStatus(value: string | null) {
+  if (!value) return null;
+
+  const upper = value.trim().toUpperCase();
+  if (upper.includes('WIN') || upper.includes('TP') || upper.includes('TAKE_PROFIT')) return 'WIN';
+  if (upper.includes('LOSS') || upper.includes('LOSE') || upper.includes('SL') || upper.includes('STOP')) return 'LOSS';
+
+  return null;
 }
 
 function formatMetric(value: number | string | null) {
@@ -189,30 +202,47 @@ function BotProofSection() {
       }
 
       try {
-        const outcomeRows = await fetchAllSupabaseRows<StatsRow>('signal_outcomes', {
-          select: 'status,pnl,created_at,closed_at',
-          order: 'created_at.desc',
-        });
+        const [performanceRows, outcomeRows] = await Promise.all([
+          fetchSupabaseRows<StatsRow>('bot_performance', {
+            select: '*',
+            order: 'created_at.desc',
+            limit: '1',
+          }).catch(() => []),
+          fetchAllSupabaseRows<StatsRow>('signal_outcomes', {
+            select: '*',
+            order: 'created_at.desc',
+          }).catch(() => []),
+        ]);
 
         if (cancelled) return;
 
+        const latestPerformance = performanceRows[0];
         const signals = outcomeRows.length;
-        const wins = outcomeRows.filter((row) => getString(row, ['status']) === 'WIN').length;
-        const losses = outcomeRows.filter((row) => getString(row, ['status']) === 'LOSS').length;
+        const wins = outcomeRows.filter((row) => normalizeOutcomeStatus(getString(row, ['status'])) === 'WIN').length;
+        const losses = outcomeRows.filter((row) => normalizeOutcomeStatus(getString(row, ['status'])) === 'LOSS').length;
         const decidedTrades = wins + losses;
-        const winRate = decidedTrades > 0 ? (wins / decidedTrades) * 100 : null;
-        const pnl = outcomeRows.reduce((total, row) => total + (getNumber(row, ['pnl']) ?? 0), 0);
-        const latestActivity = getLatestActivity(outcomeRows);
+        const fallbackWinRate = decidedTrades > 0 ? (wins / decidedTrades) * 100 : null;
+        const fallbackPnl = outcomeRows.reduce((total, row) => total + (getNumber(row, ['pnl']) ?? 0), 0);
+        const latestActivity = getLatestActivity(
+          latestPerformance ? [latestPerformance, ...outcomeRows] : outcomeRows
+        );
         const botStatus = getBotStatus(latestActivity);
+        const winRate =
+          getNumber(latestPerformance, ['win_rate', 'winRate']) ?? fallbackWinRate;
+        const pnl =
+          getNumber(latestPerformance, ['realized_pnl', 'realizedPnl', 'pnl_realized']) ??
+          getNumber(latestPerformance, ['unrealized_pnl', 'unrealizedPnl', 'pnl_unrealized']) ??
+          fallbackPnl;
+        const performanceLabel = latestPerformance ? 'live summary from bot_performance' : 'live summary from signal_outcomes';
 
         setStats({
           winRate: formatPercentMetric(winRate),
           signalsLogged: formatMetric(signals),
           botStatus,
           pnl: formatPnlMetric(pnl),
-          winRateSub: outcomeRows.length ? 'live summary from signal_outcomes' : 'no signal outcomes data',
+          winRateSub: latestPerformance || outcomeRows.length ? performanceLabel : 'no performance data',
           botStatusSub: getBotStatusSub(botStatus),
-          pnlSub: outcomeRows.length ? 'live summary from signal_outcomes' : 'no signal outcomes data',
+          pnlSub: latestPerformance || outcomeRows.length ? performanceLabel : 'no performance data',
         });
       } catch {
         if (!cancelled) setStats(DEFAULT_BOT_STATS);
