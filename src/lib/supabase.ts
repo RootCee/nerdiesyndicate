@@ -33,3 +33,30 @@ export async function fetchSupabaseRows<T>(
 
   return response.json() as Promise<T[]>;
 }
+
+export async function fetchAllSupabaseRows<T>(
+  table: string,
+  query: Record<string, string> = {},
+  pageSize = 1000
+): Promise<T[]> {
+  const allRows: T[] = [];
+  let offset = 0;
+
+  while (true) {
+    const rows = await fetchSupabaseRows<T>(table, {
+      ...query,
+      limit: String(pageSize),
+      offset: String(offset),
+    });
+
+    allRows.push(...rows);
+
+    if (rows.length < pageSize) {
+      break;
+    }
+
+    offset += pageSize;
+  }
+
+  return allRows;
+}

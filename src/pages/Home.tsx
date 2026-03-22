@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchSupabaseRows, isSupabaseConfigured } from '../lib/supabase';
+import { fetchAllSupabaseRows, fetchSupabaseRows, isSupabaseConfigured } from '../lib/supabase';
 import mainlogo from '../images/mainlogo.png';
 import twitter from '../images/twitter.png';
 import discord from '../images/discord.png';
@@ -189,7 +189,7 @@ function BotProofSection() {
       }
 
       try {
-        const outcomeRows = await fetchSupabaseRows<StatsRow>('signal_outcomes', {
+        const outcomeRows = await fetchAllSupabaseRows<StatsRow>('signal_outcomes', {
           select: 'status,pnl,created_at,closed_at',
           order: 'created_at.desc',
         });
