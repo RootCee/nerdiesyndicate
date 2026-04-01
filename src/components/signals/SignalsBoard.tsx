@@ -1,85 +1,26 @@
-import { useEffect, useRef, useState } from 'react';
-import { fetchSignalsBoardData } from '../../lib/signals';
-import { fetchSupabaseRows, isSupabaseConfigured } from '../../lib/supabase';
-import { TARGET_ASSETS, type SignalCardData, type SignalStatus, type SignalsBoardData, type TargetAsset } from '../../types/signals';
+import { useEffect, useMemo, useState } from 'react';
+import { fetchSignalsActivityData } from '../../lib/signals';
+import { isSupabaseConfigured } from '../../lib/supabase';
+import type { SignalDirection, SignalOutcomeStatus, SignalRecord, SignalsActivityData } from '../../types/signals';
+import SignalDetailModal from './SignalDetailModal';
 
-type RawRow = Record<string, unknown>;
+const REFRESH_INTERVAL_MS = 10000;
 
-type SignalLogEntry = {
-  id: string;
-  asset: TargetAsset;
-  status: SignalStatus;
-  confidence: number | null;
-  timestamp: string | null;
+const STATUS_BADGE_STYLES: Record<SignalOutcomeStatus, string> = {
+  OPEN: 'border-cyan-500/40 bg-cyan-500/10 text-cyan-200',
+  WIN: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200',
+  LOSS: 'border-rose-500/40 bg-rose-500/10 text-rose-200',
+  EXPIRED: 'border-amber-500/40 bg-amber-500/10 text-amber-200',
 };
 
-const REFRESH_INTERVAL_MS = 5000;
-const HIGHLIGHT_DURATION_MS = 2400;
-const SIGNAL_LOG_LIMIT = 24;
-const FOCUS_HISTORY_LIMIT = 5;
-
-const STATUS_STYLES: Record<SignalStatus, string> = {
-  LONG: 'text-emerald-300',
-  SHORT: 'text-rose-300',
-  WATCH: 'text-amber-300',
-  NEUTRAL: 'text-slate-300',
+const SIDE_BADGE_STYLES: Record<SignalDirection, string> = {
+  LONG: 'border-emerald-500/35 bg-emerald-500/10 text-emerald-200',
+  SHORT: 'border-rose-500/35 bg-rose-500/10 text-rose-200',
+  UNKNOWN: 'border-zinc-700 bg-zinc-800/80 text-zinc-300',
 };
-
-const STATUS_BADGE_STYLES: Record<SignalStatus, string> = {
-  LONG: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300 shadow-[0_0_16px_rgba(16,185,129,0.2)]',
-  SHORT: 'border-rose-500/40 bg-rose-500/10 text-rose-300 shadow-[0_0_16px_rgba(244,63,94,0.18)]',
-  WATCH: 'border-amber-500/40 bg-amber-500/10 text-amber-300 shadow-[0_0_16px_rgba(245,158,11,0.16)]',
-  NEUTRAL: 'border-slate-500/30 bg-slate-500/10 text-slate-300',
-};
-
-function getString(row: RawRow | undefined, keys: string[]): string | null {
-  if (!row) return null;
-
-  for (const key of keys) {
-    const value = row[key];
-    if (typeof value === 'string' && value.trim()) return value.trim();
-  }
-
-  return null;
-}
-
-function getNumber(row: RawRow | undefined, keys: string[]): number | null {
-  if (!row) return null;
-
-  for (const key of keys) {
-    const value = row[key];
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
-    if (typeof value === 'string' && value.trim()) {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed)) return parsed;
-    }
-  }
-
-  return null;
-}
-
-function normalizeAsset(value: string | null): TargetAsset | null {
-  if (!value) return null;
-
-  const upper = value.toUpperCase();
-  return TARGET_ASSETS.includes(upper as TargetAsset) ? (upper as TargetAsset) : null;
-}
-
-function normalizeSignalStatus(value: string | null): SignalStatus | null {
-  if (!value) return null;
-
-  const upper = value.toUpperCase();
-  if (upper.includes('LONG') || upper.includes('BUY')) return 'LONG';
-  if (upper.includes('SHORT') || upper.includes('SELL')) return 'SHORT';
-  if (upper.includes('WATCH') || upper.includes('WAIT')) return 'WATCH';
-  if (upper.includes('NEUTRAL') || upper.includes('HOLD')) return 'NEUTRAL';
-
-  return null;
-}
 
 function formatTime(value: string | null) {
   if (!value) return '--';
-
   const timestamp = Date.parse(value);
   if (Number.isNaN(timestamp)) return '--';
 
@@ -88,19 +29,6 @@ function formatTime(value: string | null) {
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-  }).format(new Date(timestamp));
-}
-
-function formatClockTime(value: string | null) {
-  if (!value) return '--:--';
-
-  const timestamp = Date.parse(value);
-  if (Number.isNaN(timestamp)) return '--:--';
-
-  return new Intl.DateTimeFormat('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
   }).format(new Date(timestamp));
 }
 
@@ -121,345 +49,124 @@ function formatPrice(value: number | null) {
   }).format(value);
 }
 
-function formatConfidence(value: number | null) {
-  if (value === null) return '--';
-  return `${formatNumber(value)}%`;
-}
-
-function formatPercent(value: number | null, digits = 2) {
+function formatPercent(value: number | null) {
   if (value === null) return '--';
   const sign = value > 0 ? '+' : '';
-  return `${sign}${formatNumber(value, digits)}%`;
-}
-
-function formatTrend(value: string | null) {
-  if (!value) return '--';
-  return value;
-}
-
-function getSetupStrength(card: SignalCardData) {
-  if (card.confidence === null) return 'Pending';
-  if (card.confidence >= 80) return 'High';
-  if (card.confidence >= 60) return 'Moderate';
-  return 'Low';
-}
-
-function getBias(card: SignalCardData) {
-  if (card.latestSignal === 'LONG') return 'Bullish';
-  if (card.latestSignal === 'SHORT') return 'Bearish';
-  if (card.latestSignal === 'WATCH') return 'Watch';
-  return 'Neutral';
-}
-
-function getRiskState(card: SignalCardData) {
-  if (card.rsi === null) return 'Normal';
-  if (card.rsi >= 70) return 'Overbought';
-  if (card.rsi <= 30) return 'Oversold';
-  return 'Balanced';
-}
-
-function getHistoryStatusLabel(entry: SignalLogEntry, index: number) {
-  if (index === 0) return 'Latest';
-  if (entry.status === 'WATCH') return 'Monitoring';
-  if (entry.status === 'NEUTRAL') return 'Holding';
-  return 'Archived';
-}
-
-function getRecentBias(entries: SignalLogEntry[]) {
-  const score = entries.reduce((total, entry) => {
-    if (entry.status === 'LONG') return total + 1;
-    if (entry.status === 'SHORT') return total - 1;
-    return total;
-  }, 0);
-
-  if (score >= 2) return 'Bullish pressure';
-  if (score <= -2) return 'Bearish pressure';
-  return 'Mixed activity';
-}
-
-function buildSignalLogEntry(row: RawRow, index: number): SignalLogEntry | null {
-  const asset = normalizeAsset(getString(row, ['asset', 'symbol', 'ticker', 'coin', 'base_asset']));
-  const status = normalizeSignalStatus(getString(row, ['signal', 'latest_signal', 'direction', 'status', 'signal_type']));
-
-  if (!asset || !status) return null;
-
-  const timestamp = getString(row, ['updated_at', 'created_at', 'timestamp']);
-  const id =
-    getString(row, ['id']) ??
-    `${asset}-${status}-${timestamp ?? 'unknown'}-${index}`;
-
-  return {
-    id,
-    asset,
-    status,
-    confidence: getNumber(row, ['confidence', 'confidence_score', 'score', 'probability']),
-    timestamp,
-  };
-}
-
-function StatusChip({ label, value, online = false }: { label: string; value: string; online?: boolean }) {
-  return (
-    <div className="flex min-w-[150px] items-center gap-3 border-r border-cyan-400/10 px-4 py-3 last:border-r-0 max-lg:border-r-0 max-lg:border-b max-lg:border-cyan-400/10">
-      <div
-        className={`h-2.5 w-2.5 rounded-full ${
-          online ? 'bg-emerald-400 shadow-[0_0_12px_rgba(74,222,128,0.9)]' : 'bg-cyan-300 shadow-[0_0_12px_rgba(103,232,249,0.8)]'
-        }`}
-      />
-      <div>
-        <p className="text-[10px] uppercase tracking-[0.32em] text-cyan-200/45">{label}</p>
-        <p className={`mt-1 text-sm font-semibold ${online ? 'text-emerald-300' : 'text-slate-100'}`}>{value}</p>
-      </div>
-    </div>
-  );
-}
-
-function SignalFeedRow({ entry }: { entry: SignalLogEntry }) {
-  return (
-    <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-3 border-b border-cyan-400/10 px-4 py-3 font-mono text-sm last:border-b-0 md:grid-cols-[72px_74px_96px_minmax(0,1fr)] md:items-center">
-      <span className="text-cyan-200/70">[{formatClockTime(entry.timestamp)}]</span>
-      <span className="font-['Orbitron'] text-base tracking-[0.18em] text-cyan-300">{entry.asset}</span>
-      <span className={`inline-flex w-fit rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-[0.24em] ${STATUS_BADGE_STYLES[entry.status]}`}>
-        {entry.status}
-      </span>
-      <div className="flex items-center justify-between gap-3 text-slate-300">
-        <span className="text-[10px] uppercase tracking-[0.24em] text-slate-500">Confidence</span>
-        <span className="text-sm font-semibold text-slate-100">{formatConfidence(entry.confidence)}</span>
-      </div>
-    </div>
-  );
-}
-
-function FocusStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-cyan-400/10 bg-slate-950/75 px-4 py-3 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.03)]">
-      <p className="text-[10px] uppercase tracking-[0.26em] text-cyan-200/45">{label}</p>
-      <p className="mt-2 text-sm font-semibold text-slate-100">{value}</p>
-    </div>
-  );
-}
-
-function FocusFeedRow({ entry }: { entry: SignalLogEntry }) {
-  return (
-    <div className="grid grid-cols-[72px_92px_minmax(0,1fr)] items-center gap-3 border-b border-cyan-400/10 px-4 py-3 font-mono text-sm last:border-b-0">
-      <span className="text-cyan-200/70">[{formatClockTime(entry.timestamp)}]</span>
-      <span className={`inline-flex w-fit rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-[0.24em] ${STATUS_BADGE_STYLES[entry.status]}`}>
-        {entry.status}
-      </span>
-      <div className="flex items-center justify-between gap-4">
-        <span className="text-[10px] uppercase tracking-[0.24em] text-slate-500">Confidence</span>
-        <span className="text-sm font-semibold text-slate-100">{formatConfidence(entry.confidence)}</span>
-      </div>
-    </div>
-  );
-}
-
-function FocusHistoryRow({ entry, index }: { entry: SignalLogEntry; index: number }) {
-  return (
-    <div className="grid grid-cols-[74px_92px_minmax(0,1fr)] gap-3 border-b border-cyan-400/10 py-3 last:border-b-0">
-      <div>
-        <p className="font-mono text-sm text-cyan-200/75">{formatClockTime(entry.timestamp)}</p>
-        <p className="mt-1 text-[10px] uppercase tracking-[0.22em] text-slate-500">{getHistoryStatusLabel(entry, index)}</p>
-      </div>
-      <div className="flex items-start">
-        <span className={`inline-flex w-fit rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-[0.24em] ${STATUS_BADGE_STYLES[entry.status]}`}>
-          {entry.status}
-        </span>
-      </div>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-[minmax(0,1fr)_120px]">
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Confidence</p>
-          <p className="mt-1 text-sm font-semibold text-slate-100">{formatConfidence(entry.confidence)}</p>
-        </div>
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Entry Type</p>
-          <p className="mt-1 text-sm text-slate-300">{entry.status}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AssetFocusPanel({ card, entries }: { card: SignalCardData; entries: SignalLogEntry[] }) {
-  const status = card.latestSignal ?? 'NEUTRAL';
-  const recentEntries = entries.slice(0, FOCUS_HISTORY_LIMIT);
-  const recentBias = getRecentBias(recentEntries);
-
-  return (
-    <div className="border-t border-cyan-400/10 bg-[linear-gradient(180deg,rgba(8,15,30,0.9),rgba(2,6,23,0.98))] px-5 py-5">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.3em] text-cyan-200/55">Asset Focus Mode</p>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <h3 className="font-['Orbitron'] text-2xl font-black tracking-[0.22em] text-white">{card.asset}</h3>
-            <span className={`rounded-full border px-3 py-1 text-[11px] font-semibold tracking-[0.28em] ${STATUS_BADGE_STYLES[status]}`}>
-              {status}
-            </span>
-          </div>
-          <p className="mt-2 max-w-2xl text-sm text-slate-400">Deeper intelligence readout for the selected asset, kept live inside the console.</p>
-        </div>
-        <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.24em] text-slate-400">
-          <span className="rounded-full border border-cyan-400/10 bg-cyan-400/5 px-3 py-1">Setup Strength {getSetupStrength(card)}</span>
-          <span className="rounded-full border border-cyan-400/10 bg-cyan-400/5 px-3 py-1">Bias {getBias(card)}</span>
-          <span className="rounded-full border border-cyan-400/10 bg-cyan-400/5 px-3 py-1">Risk State {getRiskState(card)}</span>
-        </div>
-      </div>
-
-      <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-5">
-        <FocusStat label="Trend" value={formatTrend(card.trend)} />
-        <FocusStat label="Price" value={formatPrice(card.price)} />
-        <FocusStat label="24H Change" value={formatPercent(card.change24h)} />
-        <FocusStat label="Confidence" value={formatConfidence(card.confidence)} />
-        <FocusStat label="RSI" value={formatNumber(card.rsi)} />
-        <FocusStat label="Support" value={formatPrice(card.support)} />
-        <FocusStat label="Resistance" value={formatPrice(card.resistance)} />
-        <FocusStat label="Funding" value={card.funding === null ? '--' : formatPercent(card.funding, 4)} />
-        <FocusStat label="Updated" value={formatTime(card.updatedAt)} />
-      </div>
-
-      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-        <div className="rounded-2xl border border-cyan-400/10 bg-slate-950/70 p-4">
-          <p className="text-[10px] uppercase tracking-[0.28em] text-cyan-200/55">Operator Note</p>
-          <p className="mt-3 text-sm leading-6 text-slate-300">{card.note ?? 'No note available for this asset yet.'}</p>
-        </div>
-
-        <div className="rounded-2xl border border-cyan-400/10 bg-slate-950/70">
-          <div className="border-b border-cyan-400/10 px-4 py-3">
-            <p className="text-[10px] uppercase tracking-[0.28em] text-cyan-200/55">Filtered Signal Log</p>
-            <p className="mt-1 text-sm text-slate-400">Recent entries for {card.asset} only.</p>
-          </div>
-          <div className="max-h-64 overflow-y-auto">
-            {entries.length > 0 ? (
-              entries.map((entry) => <FocusFeedRow key={entry.id} entry={entry} />)
-            ) : (
-              <div className="px-4 py-6 text-sm text-slate-500">No recent signal feed entries for {card.asset}.</div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-4 rounded-2xl border border-cyan-400/10 bg-slate-950/70">
-        <div className="flex flex-col gap-3 border-b border-cyan-400/10 px-4 py-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.28em] text-cyan-200/55">Signal History</p>
-            <p className="mt-1 text-sm text-slate-400">Recent intelligence for {card.asset}, pulled from the current console feed.</p>
-          </div>
-          <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.24em] text-slate-400">
-            <span className="rounded-full border border-cyan-400/10 bg-cyan-400/5 px-3 py-1">Recent Bias {recentBias}</span>
-            <span className="rounded-full border border-cyan-400/10 bg-cyan-400/5 px-3 py-1">Entries {recentEntries.length}</span>
-          </div>
-        </div>
-        <div className="px-4">
-          {recentEntries.length > 0 ? (
-            recentEntries.map((entry, index) => <FocusHistoryRow key={`${entry.id}-history`} entry={entry} index={index} />)
-          ) : (
-            <div className="py-6 text-sm text-slate-500">No recent history entries available for {card.asset}.</div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MarketRow({
-  card,
-  highlighted,
-  selected,
-  onSelect,
-}: {
-  card: SignalCardData;
-  highlighted: boolean;
-  selected: boolean;
-  onSelect: (asset: TargetAsset) => void;
-}) {
-  const status = card.latestSignal ?? 'NEUTRAL';
-  const trendText = formatTrend(card.trend);
-
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(card.asset)}
-      className="block w-full text-left"
-      aria-pressed={selected}
-    >
-    <div
-      className={[
-        'grid min-h-[96px] grid-cols-2 gap-x-4 gap-y-4 border-b border-cyan-400/10 px-4 py-4 transition duration-300 md:grid-cols-[88px_132px_minmax(140px,1fr)_120px_88px_120px_120px_108px]',
-        highlighted
-          ? 'border-cyan-300/40 bg-cyan-400/10 shadow-[inset_0_0_0_1px_rgba(103,232,249,0.28),0_0_24px_rgba(34,211,238,0.14)] animate-pulse'
-          : selected
-          ? 'bg-cyan-400/8 shadow-[inset_0_0_0_1px_rgba(103,232,249,0.2),0_0_18px_rgba(34,211,238,0.08)]'
-          : 'bg-transparent hover:bg-cyan-400/5',
-      ].join(' ')}
-    >
-      <div className="flex items-center">
-        <span className="font-['Orbitron'] text-lg font-bold tracking-[0.22em] text-slate-50">{card.asset}</span>
-      </div>
-      <div className="flex items-center">
-        <span className={`rounded-full border px-3 py-1 text-[11px] font-semibold tracking-[0.28em] ${STATUS_BADGE_STYLES[status]}`}>
-          {status}
-        </span>
-      </div>
-      <div className="min-w-0 pr-3">
-        <p className="text-[10px] uppercase tracking-[0.24em] text-cyan-200/45">Trend</p>
-        <p className="pt-1 text-sm leading-5 text-slate-200 break-words">{trendText}</p>
-      </div>
-      <div className="md:pl-1">
-        <p className="text-[10px] uppercase tracking-[0.24em] text-cyan-200/45">Price</p>
-        <p className="pt-1 text-sm font-semibold text-slate-100">{formatPrice(card.price)}</p>
-      </div>
-      <div>
-        <p className="text-[10px] uppercase tracking-[0.24em] text-cyan-200/45">RSI</p>
-        <p className="pt-1 text-sm text-slate-200">{formatNumber(card.rsi)}</p>
-      </div>
-      <div>
-        <p className="text-[10px] uppercase tracking-[0.24em] text-cyan-200/45">Support</p>
-        <p className="pt-1 text-sm text-slate-200">{formatPrice(card.support)}</p>
-      </div>
-      <div>
-        <p className="text-[10px] uppercase tracking-[0.24em] text-cyan-200/45">Resistance</p>
-        <p className="pt-1 text-sm text-slate-200">{formatPrice(card.resistance)}</p>
-      </div>
-      <div>
-        <p className="text-[10px] uppercase tracking-[0.24em] text-cyan-200/45">Updated</p>
-        <p className="pt-1 text-sm font-mono text-slate-300">{formatClockTime(card.updatedAt)}</p>
-      </div>
-    </div>
-    </button>
-  );
+  return `${sign}${new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: 2,
+  }).format(value)}%`;
 }
 
 function EmptyState({ title, text }: { title: string; text: string }) {
   return (
-    <div className="rounded-[28px] border border-cyan-400/15 bg-[linear-gradient(180deg,rgba(2,6,23,0.96),rgba(3,7,18,0.98))] p-8 shadow-[0_0_36px_rgba(34,211,238,0.08)]">
-      <div className="rounded-[22px] border border-cyan-400/10 bg-slate-950/90 p-10 text-center">
-        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full border border-cyan-400/20 bg-cyan-400/5 text-cyan-300">
-          <span className="font-['Orbitron'] text-lg font-bold">NB</span>
+    <div className="rounded-[28px] border border-red-900/20 bg-zinc-900/90 p-8 shadow-[0_0_36px_rgba(127,29,29,0.12)]">
+      <div className="rounded-[22px] border border-zinc-800 bg-zinc-950/90 p-10 text-center">
+        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full border border-red-900/30 bg-red-950/30 text-red-300">
+          <span className="font-brand text-lg">NB</span>
         </div>
         <h3 className="text-xl font-bold text-white">{title}</h3>
-        <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-slate-400">{text}</p>
+        <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-neutral-400">{text}</p>
       </div>
     </div>
   );
 }
 
+function SummaryCard({ label, value, sub }: { label: string; value: string; sub: string }) {
+  return (
+    <div className="rounded-2xl border border-red-900/20 bg-zinc-900/90 p-4 shadow-[0_0_0_1px_rgba(127,29,29,0.08)]">
+      <p className="text-[10px] uppercase tracking-[0.26em] text-neutral-500">{label}</p>
+      <p className="mt-3 text-2xl font-bold text-white">{value}</p>
+      <p className="mt-1 text-xs text-neutral-500">{sub}</p>
+    </div>
+  );
+}
+
+function FilterSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-[10px] uppercase tracking-[0.24em] text-neutral-500">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none transition focus:border-red-800"
+      >
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function SignalRow({ signal, onOpen }: { signal: SignalRecord; onOpen: (signal: SignalRecord) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(signal)}
+      className="w-full rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4 text-left transition hover:border-red-900/40 hover:bg-zinc-900"
+    >
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-lg font-bold text-white">{signal.pair}</h3>
+            <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${SIDE_BADGE_STYLES[signal.side]}`}>
+              {signal.side}
+            </span>
+            <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${STATUS_BADGE_STYLES[signal.status]}`}>
+              {signal.status}
+            </span>
+          </div>
+          <p className="mt-2 text-sm text-neutral-400">
+            {signal.reason || signal.strategy || 'No strategy note available.'}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 text-sm lg:min-w-[360px] lg:grid-cols-4">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">Entry</p>
+            <p className="mt-1 text-white">{formatPrice(signal.entryPrice)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">TP / SL</p>
+            <p className="mt-1 text-white">
+              {formatPrice(signal.takeProfit)} / {formatPrice(signal.stopLoss)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">Confidence</p>
+            <p className="mt-1 text-white">{signal.confidence === null ? '--' : `${formatNumber(signal.confidence)}%`}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">Created</p>
+            <p className="mt-1 text-white">{formatTime(signal.createdAt)}</p>
+          </div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
 export default function SignalsBoard({ refreshKey }: { refreshKey: number }) {
-  const [data, setData] = useState<SignalsBoardData | null>(null);
-  const [signalLog, setSignalLog] = useState<SignalLogEntry[]>([]);
+  const [data, setData] = useState<SignalsActivityData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [lastRefreshAt, setLastRefreshAt] = useState<string | null>(null);
-  const [highlightedAssets, setHighlightedAssets] = useState<Record<string, boolean>>({});
-  const [selectedAsset, setSelectedAsset] = useState<TargetAsset | null>(null);
-  const seenSignalTimestampsRef = useRef<Partial<Record<TargetAsset, string>>>({});
-  const highlightTimeoutsRef = useRef<Partial<Record<TargetAsset, number>>>({});
-
-  useEffect(() => {
-    return () => {
-      Object.values(highlightTimeoutsRef.current).forEach((timeoutId) => {
-        if (timeoutId) window.clearTimeout(timeoutId);
-      });
-    };
-  }, []);
+  const [selectedSignal, setSelectedSignal] = useState<SignalRecord | null>(null);
+  const [statusFilter, setStatusFilter] = useState('All Statuses');
+  const [pairFilter, setPairFilter] = useState('All Pairs');
+  const [sideFilter, setSideFilter] = useState('All Sides');
+  const [timeframeFilter, setTimeframeFilter] = useState('All Timeframes');
 
   useEffect(() => {
     let cancelled = false;
@@ -467,7 +174,6 @@ export default function SignalsBoard({ refreshKey }: { refreshKey: number }) {
     async function load(showSpinner: boolean) {
       if (!isSupabaseConfigured()) {
         setData(null);
-        setSignalLog([]);
         setError('Supabase environment variables are not configured.');
         setLoading(false);
         return;
@@ -477,67 +183,19 @@ export default function SignalsBoard({ refreshKey }: { refreshKey: number }) {
       setError(null);
 
       try {
-        const [nextData, signalRows] = await Promise.all([
-          fetchSignalsBoardData(),
-          fetchSupabaseRows<RawRow>('bot_signals', {
-            select: '*',
-            order: 'created_at.desc',
-            limit: String(SIGNAL_LOG_LIMIT),
-          }),
-        ]);
-
+        const nextData = await fetchSignalsActivityData();
         if (cancelled) return;
-
-        const nextLog = signalRows
-          .map((row, index) => buildSignalLogEntry(row, index))
-          .filter((entry): entry is SignalLogEntry => Boolean(entry));
-
-        const nextHighlights: TargetAsset[] = [];
-        for (const card of nextData.cards) {
-          if (!card.signalUpdatedAt) continue;
-
-          const previousTimestamp = seenSignalTimestampsRef.current[card.asset];
-          if (previousTimestamp && previousTimestamp !== card.signalUpdatedAt) {
-            nextHighlights.push(card.asset);
-          }
-
-          seenSignalTimestampsRef.current[card.asset] = card.signalUpdatedAt;
-        }
-
         setData(nextData);
-        setSignalLog(nextLog);
-        setLastRefreshAt(new Date().toISOString());
-
-        if (nextHighlights.length > 0) {
-          setHighlightedAssets((current) => {
-            const updated = { ...current };
-            nextHighlights.forEach((asset) => {
-              updated[asset] = true;
-
-              const existingTimeout = highlightTimeoutsRef.current[asset];
-              if (existingTimeout) window.clearTimeout(existingTimeout);
-
-              highlightTimeoutsRef.current[asset] = window.setTimeout(() => {
-                setHighlightedAssets((active) => {
-                  const next = { ...active };
-                  delete next[asset];
-                  return next;
-                });
-              }, HIGHLIGHT_DURATION_MS);
-            });
-            return updated;
-          });
-        }
       } catch (err: unknown) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load signals board.');
+          setError(err instanceof Error ? err.message : 'Failed to load signals.');
         }
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
 
-    load(true);
+    void load(true);
     const intervalId = window.setInterval(() => {
       void load(false);
     }, REFRESH_INTERVAL_MS);
@@ -548,11 +206,23 @@ export default function SignalsBoard({ refreshKey }: { refreshKey: number }) {
     };
   }, [refreshKey]);
 
+  const filteredSignals = useMemo(() => {
+    if (!data) return [];
+
+    return data.signals.filter((signal) => {
+      if (statusFilter !== 'All Statuses' && signal.status !== statusFilter) return false;
+      if (pairFilter !== 'All Pairs' && signal.pair !== pairFilter) return false;
+      if (sideFilter !== 'All Sides' && signal.side !== sideFilter) return false;
+      if (timeframeFilter !== 'All Timeframes' && (signal.timeframe ?? '--') !== timeframeFilter) return false;
+      return true;
+    });
+  }, [data, pairFilter, sideFilter, statusFilter, timeframeFilter]);
+
   if (loading) {
     return (
       <div className="py-20 text-center">
-        <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-cyan-500/40 border-t-transparent" />
-        <p className="text-slate-400">Booting live trading console...</p>
+        <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-red-800/60 border-t-transparent" />
+        <p className="text-neutral-400">Loading signal activity...</p>
       </div>
     );
   }
@@ -561,127 +231,100 @@ export default function SignalsBoard({ refreshKey }: { refreshKey: number }) {
     return <EmptyState title="Signals feed offline" text={error} />;
   }
 
-  if (!data || !data.hasAnyData) {
+  if (!data || data.signals.length === 0) {
     return (
       <EmptyState
-        title="No live signals yet"
-        text="Market updates and bot signals will appear here as soon as Supabase has data for the tracked assets."
+        title="No signal activity yet"
+        text="Signals will appear here once bot_signals or signal_outcomes has recent rows to display."
       />
     );
   }
 
-  const displayRefreshTime = lastRefreshAt ?? data.summary.lastUpdateTime;
-  const signalCount = signalLog.length;
-  const defaultAsset =
-    data.cards.find((card) => card.asset === data.summary.strongestAsset)?.asset ??
-    data.cards[0]?.asset ??
-    null;
-  const activeAsset = selectedAsset ?? defaultAsset;
-  const focusedCard = data.cards.find((card) => card.asset === activeAsset) ?? data.cards[0];
-  const focusedEntries = signalLog.filter((entry) => entry.asset === focusedCard.asset);
-
   return (
-    <div className="rounded-[30px] border border-cyan-400/15 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.12),transparent_24%),linear-gradient(180deg,rgba(3,7,18,0.98),rgba(2,6,23,1))] p-3 shadow-[0_0_48px_rgba(34,211,238,0.08)]">
-      <div className="relative overflow-hidden rounded-[24px] border border-cyan-400/10 bg-slate-950/95 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.05)]">
-        <div className="pointer-events-none absolute inset-0 opacity-30 [background-image:linear-gradient(rgba(34,211,238,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,0.08)_1px,transparent_1px)] [background-size:44px_44px]" />
-        <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:linear-gradient(to_bottom,rgba(255,255,255,0.14)_1px,transparent_1px)] [background-size:100%_4px]" />
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.12),transparent_28%),radial-gradient(circle_at_80%_0%,rgba(59,130,246,0.08),transparent_22%)]" />
-
-        <div className="relative border-b border-cyan-400/10 px-5 py-5 md:px-7">
-          <p className="text-[11px] uppercase tracking-[0.36em] text-cyan-200/55">Signals Console</p>
-          <div className="mt-2 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <h2 className="font-['Orbitron'] text-3xl font-black tracking-[0.22em] text-white md:text-4xl">SIGNALS CONSOLE</h2>
-              <p className="mt-2 text-sm text-slate-400">Nerdie Syndicate Market Intelligence</p>
-            </div>
-            <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-300 shadow-[0_0_18px_rgba(74,222,128,0.18)]">
-              Live Polling / 5s
-            </div>
-          </div>
-        </div>
-
-        <div className="relative border-b border-cyan-400/10 lg:flex lg:flex-wrap">
-          <StatusChip label="System" value="ONLINE" online />
-          <StatusChip label="Supabase" value="CONNECTED" online />
-          <StatusChip label="Last Update" value={formatTime(displayRefreshTime)} />
-          <StatusChip label="Signals" value={String(signalCount)} />
-        </div>
-
-        <div className="relative grid min-h-[780px] grid-cols-1 lg:grid-cols-[380px_minmax(0,1fr)]">
-          <div className="border-b border-cyan-400/10 lg:border-b-0 lg:border-r">
-            <div className="border-b border-cyan-400/10 px-5 py-4">
-              <p className="text-[10px] uppercase tracking-[0.3em] text-cyan-200/55">Signal Feed Log</p>
-              <p className="mt-2 text-sm text-slate-400">Latest syndicate calls, refreshed in place as new setups arrive.</p>
-            </div>
-            <div className="border-b border-cyan-400/10 px-4 py-2 text-[10px] uppercase tracking-[0.24em] text-cyan-200/45">
-              <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-3 md:grid-cols-[72px_74px_96px_minmax(0,1fr)]">
-                <span>Time</span>
-                <span>Asset</span>
-                <span className="hidden md:block">Signal</span>
-                <span>Confidence</span>
-              </div>
-            </div>
-            <div className="max-h-[680px] overflow-y-auto">
-              {signalLog.length > 0 ? (
-                signalLog.map((entry) => <SignalFeedRow key={entry.id} entry={entry} />)
-              ) : (
-                <div className="px-5 py-8 text-sm text-slate-500">No recent signal entries available.</div>
-              )}
-            </div>
-          </div>
-
+    <>
+      <div className="space-y-6 rounded-[28px] border border-red-900/20 bg-zinc-900/90 p-4 shadow-[0_0_40px_rgba(127,29,29,0.12)] md:p-6">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <div className="border-b border-cyan-400/10 px-5 py-4">
-              <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.3em] text-cyan-200/55">Market Status Panel</p>
-                  <p className="mt-2 text-sm text-slate-400">Live market levels for the core watchlist, paired with the latest signal state.</p>
-                </div>
-                <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.24em] text-slate-500">
-                  <span className="rounded-full border border-cyan-400/10 px-3 py-1">Market Bias {data.summary.marketBias}</span>
-                  <span className="rounded-full border border-cyan-400/10 px-3 py-1">Strongest {data.summary.strongestAsset}</span>
-                  <span className="rounded-full border border-cyan-400/10 px-3 py-1">Weakest {data.summary.weakestAsset}</span>
-                  <span className="rounded-full border border-cyan-400/10 px-3 py-1">Active {data.summary.activeSignals}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="border-b border-cyan-400/10 bg-cyan-400/5 px-5 py-3">
-              <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-400">
-                <span><span className="text-slate-100">LONG / SHORT / NEUTRAL:</span> Directional stance</span>
-                <span><span className="text-slate-100">Confidence:</span> Setup strength from the latest signal</span>
-                <span><span className="text-slate-100">RSI:</span> Relative Strength Index</span>
-                <span><span className="text-slate-100">Support / Resistance:</span> Key reaction levels</span>
-              </div>
-            </div>
-
-            <div className="hidden border-b border-cyan-400/10 px-4 py-3 text-[10px] uppercase tracking-[0.28em] text-cyan-200/45 md:grid md:grid-cols-[88px_132px_minmax(140px,1fr)_120px_88px_120px_120px_108px]">
-              <span>Asset</span>
-              <span>Signal</span>
-              <span>Trend</span>
-              <span>Price</span>
-              <span>RSI</span>
-              <span>Support</span>
-              <span>Resistance</span>
-              <span>Updated</span>
-            </div>
-
-            <div className="max-h-[680px] overflow-y-auto">
-              {data.cards.map((card) => (
-                <MarketRow
-                  key={card.asset}
-                  card={card}
-                  highlighted={Boolean(highlightedAssets[card.asset])}
-                  selected={card.asset === focusedCard.asset}
-                  onSelect={setSelectedAsset}
-                />
-              ))}
-            </div>
-
-            <AssetFocusPanel card={focusedCard} entries={focusedEntries} />
+            <p className="text-[11px] uppercase tracking-[0.34em] text-red-400/70">Signals Desk</p>
+            <h2 className="mt-2 text-3xl font-bold text-white">Signal Activity</h2>
+            <p className="mt-2 text-sm text-neutral-400">
+              Live and historical signal activity with outcome tracking, filters, and detailed trade context.
+            </p>
           </div>
+          <div className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-emerald-300">
+            Live Refresh / 10s
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          <SummaryCard
+            label="Total Signals"
+            value={String(data.summary.totalSignals)}
+            sub="signal_outcomes + bot_signals"
+          />
+          <SummaryCard
+            label="Open Signals"
+            value={String(data.summary.openSignals)}
+            sub="currently active setups"
+          />
+          <SummaryCard
+            label="Win Rate"
+            value={data.summary.winRate === null ? '--' : `${formatNumber(data.summary.winRate, 1)}%`}
+            sub="wins / (wins + losses)"
+          />
+          <SummaryCard
+            label="Total PnL"
+            value={formatPercent(data.summary.totalPnl)}
+            sub="sum of available pnl fields"
+          />
+        </div>
+
+        <div className="grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-950/90 p-4 md:grid-cols-2 xl:grid-cols-4">
+          <FilterSelect
+            label="Status"
+            value={statusFilter}
+            options={['All Statuses', 'OPEN', 'WIN', 'LOSS', 'EXPIRED']}
+            onChange={setStatusFilter}
+          />
+          <FilterSelect
+            label="Pair"
+            value={pairFilter}
+            options={['All Pairs', ...data.pairs]}
+            onChange={setPairFilter}
+          />
+          <FilterSelect
+            label="Side"
+            value={sideFilter}
+            options={['All Sides', 'LONG', 'SHORT', 'UNKNOWN']}
+            onChange={setSideFilter}
+          />
+          <FilterSelect
+            label="Timeframe"
+            value={timeframeFilter}
+            options={['All Timeframes', ...data.timeframes.map((value) => value || '--')]}
+            onChange={setTimeframeFilter}
+          />
+        </div>
+
+        <div className="flex items-center justify-between text-xs text-neutral-500">
+          <span>{filteredSignals.length} signals shown</span>
+          <span>Tap a row for full trade detail</span>
+        </div>
+
+        <div className="space-y-3">
+          {filteredSignals.length > 0 ? (
+            filteredSignals.map((signal) => (
+              <SignalRow key={`${signal.source}-${signal.id}`} signal={signal} onOpen={setSelectedSignal} />
+            ))
+          ) : (
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 px-4 py-10 text-center text-sm text-neutral-500">
+              No signals match the current filter combination.
+            </div>
+          )}
         </div>
       </div>
-    </div>
+
+      <SignalDetailModal signal={selectedSignal} onClose={() => setSelectedSignal(null)} />
+    </>
   );
 }

@@ -1,5 +1,16 @@
 import { fetchSupabaseRows } from './supabase';
-import { TARGET_ASSETS, type SignalCardData, type SignalStatus, type SignalsBoardData, type SignalsSummary, type TargetAsset } from '../types/signals';
+import {
+  TARGET_ASSETS,
+  type SignalCardData,
+  type SignalDirection,
+  type SignalOutcomeStatus,
+  type SignalRecord,
+  type SignalStatus,
+  type SignalsActivityData,
+  type SignalsBoardData,
+  type SignalsSummary,
+  type TargetAsset,
+} from '../types/signals';
 
 type RawRow = Record<string, unknown>;
 
@@ -58,6 +69,127 @@ function normalizeSignalStatus(value: string | null): SignalStatus | null {
   if (upper.includes('NEUTRAL') || upper.includes('HOLD')) return 'NEUTRAL';
 
   return null;
+}
+
+function normalizeOutcomeStatus(value: string | null): SignalOutcomeStatus | null {
+  if (!value) return null;
+
+  const upper = value.trim().toUpperCase();
+  if (upper.includes('WIN') || upper.includes('TP') || upper.includes('TAKE_PROFIT')) return 'WIN';
+  if (upper.includes('LOSS') || upper.includes('LOSE') || upper.includes('SL') || upper.includes('STOP')) return 'LOSS';
+  if (upper.includes('EXPIRED') || upper.includes('CANCEL') || upper.includes('TIMEOUT')) return 'EXPIRED';
+  if (upper.includes('OPEN') || upper.includes('ACTIVE') || upper.includes('PENDING')) return 'OPEN';
+
+  return null;
+}
+
+function normalizeDirection(value: string | null): SignalDirection {
+  const normalized = normalizeSignalStatus(value);
+  if (normalized === 'LONG' || normalized === 'SHORT') return normalized;
+  return 'UNKNOWN';
+}
+
+function formatPair(row: RawRow | undefined): string | null {
+  const directPair = getString(row, ['pair', 'symbol', 'ticker', 'market', 'instrument']);
+  if (directPair) return directPair.toUpperCase();
+
+  const base = getString(row, ['asset', 'base_asset', 'coin']);
+  const quote = getString(row, ['quote_asset', 'quote']);
+  if (base && quote) return `${base.toUpperCase()}/${quote.toUpperCase()}`;
+  if (base) return `${base.toUpperCase()}/USD`;
+
+  return null;
+}
+
+function getTimestamp(row: RawRow | undefined): string | null {
+  return getDateString(row, ['created_at', 'timestamp', 'updated_at']);
+}
+
+function getClosedTimestamp(row: RawRow | undefined): string | null {
+  return getDateString(row, ['closed_at', 'resolved_at', 'updated_at']);
+}
+
+function buildSignalRecord(row: RawRow, index: number, source: SignalRecord['source']): SignalRecord {
+  const pair = formatPair(row) ?? `SIGNAL-${index + 1}`;
+  const createdAt = getTimestamp(row);
+  const rawStatus = getString(row, ['status', 'outcome', 'result']);
+  const rawSide = getString(row, ['side', 'signal', 'direction', 'latest_signal', 'signal_type']);
+  const closedAt = getClosedTimestamp(row);
+
+  return {
+    id:
+      getString(row, ['id', 'signal_id', 'uuid']) ??
+      `${source}-${pair}-${createdAt ?? 'unknown'}-${index}`,
+    pair,
+    asset: getString(row, ['asset', 'base_asset', 'coin', 'symbol'])?.toUpperCase() ?? null,
+    side: normalizeDirection(rawSide),
+    status: normalizeOutcomeStatus(rawStatus) ?? (source === 'bot_signals' ? 'OPEN' : 'EXPIRED'),
+    entryPrice: getNumber(row, ['entry_price', 'entry', 'price', 'entryPrice']),
+    stopLoss: getNumber(row, ['stop_loss', 'stop', 'sl', 'stopLoss']),
+    takeProfit: getNumber(row, ['take_profit', 'tp', 'target', 'takeProfit']),
+    confidence: getNumber(row, ['confidence', 'confidence_score', 'score', 'probability']),
+    timeframe: getString(row, ['timeframe', 'interval', 'tf']),
+    createdAt,
+    closedAt: normalizeOutcomeStatus(rawStatus) === 'OPEN' ? null : closedAt,
+    strategy: getString(row, ['strategy', 'setup', 'model', 'playbook']),
+    reason: getString(row, ['reason', 'note', 'message', 'summary']),
+    pnl: getNumber(row, ['pnl', 'realized_pnl', 'return_pct', 'roi']),
+    source,
+  };
+}
+
+function mergeSignalRecords(outcomeRows: RawRow[], botSignalRows: RawRow[]) {
+  const merged = new Map<string, SignalRecord>();
+
+  outcomeRows.forEach((row, index) => {
+    const record = buildSignalRecord(row, index, 'signal_outcomes');
+    const key = record.id !== `signal_outcomes-${record.pair}-${record.createdAt ?? 'unknown'}-${index}`
+      ? record.id
+      : `${record.pair}-${record.createdAt ?? 'unknown'}-${record.side}`;
+    merged.set(key, record);
+  });
+
+  botSignalRows.forEach((row, index) => {
+    const record = buildSignalRecord(row, index, 'bot_signals');
+    const fallbackKey = `${record.pair}-${record.createdAt ?? 'unknown'}-${record.side}`;
+    const key = merged.has(record.id) ? record.id : fallbackKey;
+
+    if (merged.has(key)) {
+      const existing = merged.get(key)!;
+      if (existing.status === 'OPEN') {
+        merged.set(key, {
+          ...existing,
+          ...record,
+          status: existing.status,
+          closedAt: existing.closedAt,
+          source: existing.source,
+        });
+      }
+      return;
+    }
+
+    merged.set(key, record);
+  });
+
+  return [...merged.values()].sort((a, b) => {
+    const aTime = a.createdAt ? Date.parse(a.createdAt) : 0;
+    const bTime = b.createdAt ? Date.parse(b.createdAt) : 0;
+    return bTime - aTime;
+  });
+}
+
+function buildActivitySummary(signals: SignalRecord[]) {
+  const wins = signals.filter((signal) => signal.status === 'WIN').length;
+  const losses = signals.filter((signal) => signal.status === 'LOSS').length;
+  const decided = wins + losses;
+  const pnlValues = signals.map((signal) => signal.pnl).filter((value): value is number => value !== null);
+
+  return {
+    totalSignals: signals.length,
+    openSignals: signals.filter((signal) => signal.status === 'OPEN').length,
+    winRate: decided > 0 ? (wins / decided) * 100 : null,
+    totalPnl: pnlValues.length > 0 ? pnlValues.reduce((sum, value) => sum + value, 0) : null,
+  };
 }
 
 function pickLatestByAsset(rows: RawRow[]): Partial<Record<TargetAsset, RawRow>> {
@@ -184,5 +316,31 @@ export async function fetchSignalsBoardData(): Promise<SignalsBoardData> {
     cards,
     summary: buildSummary(cards),
     hasAnyData: cards.some((card) => card.updatedAt || card.price !== null || card.latestSignal || card.trend),
+  };
+}
+
+export async function fetchSignalsActivityData(): Promise<SignalsActivityData> {
+  const [outcomeRows, botSignalRows] = await Promise.all([
+    fetchSupabaseRows<RawRow>('signal_outcomes', {
+      select: '*',
+      order: 'created_at.desc',
+      limit: '250',
+    }),
+    fetchSupabaseRows<RawRow>('bot_signals', {
+      select: '*',
+      order: 'created_at.desc',
+      limit: '250',
+    }),
+  ]);
+
+  const signals = mergeSignalRecords(outcomeRows, botSignalRows);
+  const pairs = [...new Set(signals.map((signal) => signal.pair).filter(Boolean))].sort();
+  const timeframes = [...new Set(signals.map((signal) => signal.timeframe).filter((value): value is string => Boolean(value)))].sort();
+
+  return {
+    signals,
+    summary: buildActivitySummary(signals),
+    pairs,
+    timeframes,
   };
 }
