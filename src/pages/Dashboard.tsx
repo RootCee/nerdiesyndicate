@@ -136,6 +136,34 @@ function DashboardContent({ address }: { address: string | null }) {
   const selectedNft = nfts.find((n) => n.tokenId === selectedTokenId);
   const selectedTba = selectedTokenId != null ? tbaMap.get(selectedTokenId) : undefined;
 
+  if (!address) {
+    return <NoWalletState />;
+  }
+
+  if (nftsLoading) {
+    return <LoadingState />;
+  }
+
+  if (nftsError) {
+    return (
+      <section className="pt-28 pb-20 px-4 min-h-[70vh] flex items-center">
+        <div className="max-w-2xl mx-auto text-center">
+          <p className="text-red-400 mb-4">{nftsError}</p>
+          <button
+            onClick={refetch}
+            className="px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-sm rounded-lg transition"
+          >
+            Try Again
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  if (balance === 0) {
+    return <NoNFTState />;
+  }
+
   return (
     <>
       {/* Header */}
@@ -199,26 +227,7 @@ function DashboardContent({ address }: { address: string | null }) {
         <div className="max-w-5xl mx-auto">
           {activeTab === 'nfts' && (
             <>
-              {!address ? (
-                <NoWalletState />
-              ) : nftsLoading ? (
-                <div className="text-center py-20">
-                  <div className="w-12 h-12 border-4 border-red-800 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                  <p className="text-neutral-500">Loading your NFTs...</p>
-                </div>
-              ) : balance === 0 ? (
-                <NoNFTState />
-              ) : nftsError ? (
-                <div className="text-center py-20">
-                  <p className="text-red-400 mb-4">{nftsError}</p>
-                  <button
-                    onClick={refetch}
-                    className="px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-sm rounded-lg transition"
-                  >
-                    Try Again
-                  </button>
-                </div>
-              ) : nfts.length === 0 ? (
+              {nfts.length === 0 ? (
                 <div className="text-center py-20">
                   <p className="text-neutral-500">No NFTs found in this wallet.</p>
                 </div>
@@ -249,8 +258,7 @@ function DashboardContent({ address }: { address: string | null }) {
             </>
           )}
 
-          {activeTab === 'signals' &&
-            (address ? <SignalsBoard refreshKey={signalsRefreshKey} /> : <NoWalletState />)}
+          {activeTab === 'signals' && <SignalsBoard refreshKey={signalsRefreshKey} />}
 
           {activeTab === 'businesses' && <BusinessCollectionTab walletAddress={address} />}
 
