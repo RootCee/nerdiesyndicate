@@ -4,8 +4,10 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        display: ['"Orbitron"', 'sans-serif'],
-        body: ['"Outfit"', 'sans-serif'],
+        brand: ['var(--font-brand)', 'Georgia', 'serif'],
+        display: ['var(--font-brand)', 'Georgia', 'serif'],
+        body: ['var(--font-ui)', 'sans-serif'],
+        ui: ['var(--font-ui)', 'sans-serif'],
       },
     },
   },

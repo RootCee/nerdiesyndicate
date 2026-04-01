@@ -48,7 +48,7 @@ function NoWalletState() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3" />
           </svg>
         </div>
-        <h1 className="text-3xl md:text-5xl font-black text-white mb-4 tracking-tight">
+        <h1 className="text-3xl md:text-5xl font-black text-white mb-4 tracking-tight font-body">
           Connect Your <span className="text-red-600">Wallet</span>
         </h1>
         <p className="text-neutral-400 text-lg leading-relaxed mb-8 max-w-lg mx-auto">
@@ -72,7 +72,7 @@ function NoNFTState() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
           </svg>
         </div>
-        <h1 className="text-3xl md:text-5xl font-black text-white mb-4 tracking-tight">
+        <h1 className="text-3xl md:text-5xl font-black text-white mb-4 tracking-tight font-body">
           Dashboard <span className="text-red-600">Locked</span>
         </h1>
         <p className="text-neutral-400 text-lg leading-relaxed mb-8 max-w-lg mx-auto">
@@ -106,7 +106,7 @@ function LoadingState() {
     <section className="pt-28 pb-20 px-4 min-h-[70vh] flex items-center">
       <div className="max-w-2xl mx-auto text-center">
         <div className="w-16 h-16 border-4 border-red-800 border-t-transparent rounded-full animate-spin mx-auto mb-6" />
-        <h2 className="text-2xl font-bold text-white mb-2">Loading Dashboard</h2>
+        <h2 className="text-2xl font-bold text-white mb-2 font-body">Loading Dashboard</h2>
         <p className="text-neutral-500">Verifying your NFT holdings...</p>
       </div>
     </section>
@@ -144,7 +144,7 @@ function DashboardContent({ address }: { address: string | null }) {
         <div className="relative z-10 max-w-5xl mx-auto">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">
+              <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight font-body">
                 Signal <span className="text-red-600">Dashboard</span>
               </h1>
               <p className="text-neutral-500 text-sm mt-1">

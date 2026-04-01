@@ -74,7 +74,7 @@ function Navbar() {
         <div className="flex items-center justify-between gap-3">
         <Link to="/" className="flex items-center gap-2">
           <img src={logo} alt="Logo" className="w-10 h-10" />
-          <span className="text-lg font-bold text-white hidden sm:inline font-display">Nerdie Blaq</span>
+          <span className="hidden text-xl text-white sm:inline font-brand">Nerdie Blaq</span>
         </Link>
         <div className="hidden md:flex items-center gap-6 text-sm text-neutral-400 font-medium">
           {navLinks.map((link) =>
@@ -103,11 +103,14 @@ function Navbar() {
             )
           )}
         </div>
-        <div className="flex items-center gap-2 md:w-auto">
+        <div className="w-10 md:w-auto" />
+        </div>
+
+        <div className="mt-3 flex justify-center md:hidden">
           <button
             type="button"
             onClick={() => setMobileMenuOpen((value) => !value)}
-            className="md:hidden inline-flex items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900/80 p-2 text-neutral-300 transition hover:text-white hover:border-zinc-700"
+            className="inline-flex min-w-[140px] items-center justify-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/90 px-4 py-2 text-sm font-medium text-neutral-200 transition hover:border-zinc-700 hover:text-white"
             aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
             aria-expanded={mobileMenuOpen}
           >
@@ -118,9 +121,8 @@ function Navbar() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
               )}
             </svg>
+            <span>{mobileMenuOpen ? 'Close Menu' : 'Open Menu'}</span>
           </button>
-          <div className="w-10 md:w-auto" />
-        </div>
         </div>
 
         {mobileMenuOpen && (
