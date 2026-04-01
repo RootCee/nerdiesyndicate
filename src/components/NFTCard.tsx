@@ -1,29 +1,106 @@
 import { useState } from 'react';
-import {
-  getStatsForToken,
-  getClass,
-  getRarity,
-  getPowerRating,
-  STAT_KEYS,
-  STAT_LABELS,
-  getStatColor,
-} from '../lib/nftStats';
+import type { NFTAttribute } from '../hooks/useNFTs';
 
 interface NFTCardProps {
   tokenId: number;
   image: string;
   name: string;
+  attributes: NFTAttribute[];
   tbaAddress?: string;
   ethBalance?: string;
+  nerdieBalance?: string;
+  nerdieSymbol?: string;
   onClick: () => void;
 }
 
-export default function NFTCard({ tokenId, image, name, tbaAddress, ethBalance, onClick }: NFTCardProps) {
+function pickTrait(
+  attributes: NFTAttribute[],
+  keys: string[]
+): NFTAttribute | undefined {
+  return attributes.find((attribute) =>
+    keys.some((key) => attribute.trait_type.toLowerCase() === key.toLowerCase())
+  );
+}
+
+function getTraitBadgeClass(traitType: string) {
+  switch (traitType.toLowerCase()) {
+    case 'rarity':
+      return 'bg-red-950/70 text-red-300 border border-red-800/40';
+    case 'faction':
+      return 'bg-amber-950/60 text-amber-300 border border-amber-800/40';
+    case 'role in nerdie city':
+      return 'bg-sky-950/60 text-sky-300 border border-sky-800/40';
+    default:
+      return 'bg-zinc-800 text-neutral-300 border border-zinc-700';
+  }
+}
+
+function getRarityTone(value: string | number | undefined) {
+  const rarity = String(value ?? '').toLowerCase();
+
+  if (rarity.includes('legendary')) {
+    return {
+      badge: 'bg-yellow-950/75 text-yellow-300 border border-yellow-700/40',
+      text: 'text-yellow-300',
+    };
+  }
+
+  if (rarity.includes('epic')) {
+    return {
+      badge: 'bg-fuchsia-950/75 text-fuchsia-300 border border-fuchsia-700/40',
+      text: 'text-fuchsia-300',
+    };
+  }
+
+  if (rarity.includes('rare')) {
+    return {
+      badge: 'bg-sky-950/75 text-sky-300 border border-sky-700/40',
+      text: 'text-sky-300',
+    };
+  }
+
+  if (rarity.includes('uncommon')) {
+    return {
+      badge: 'bg-emerald-950/75 text-emerald-300 border border-emerald-700/40',
+      text: 'text-emerald-300',
+    };
+  }
+
+  return {
+    badge: 'bg-zinc-950/80 text-neutral-200 border border-zinc-700/60',
+    text: 'text-neutral-200',
+  };
+}
+
+function formatCompactBalance(value: string | undefined, digits: number) {
+  if (!value) return null;
+  const parsed = Number.parseFloat(value);
+  if (Number.isNaN(parsed)) return value;
+  return parsed.toFixed(digits);
+}
+
+export default function NFTCard({
+  tokenId,
+  image,
+  name,
+  attributes,
+  tbaAddress,
+  ethBalance,
+  nerdieBalance,
+  nerdieSymbol,
+  onClick,
+}: NFTCardProps) {
   const [imgError, setImgError] = useState(false);
-  const stats = getStatsForToken(tokenId);
-  const nftClass = getClass(stats);
-  const rarity = getRarity(stats);
-  const power = getPowerRating(stats);
+  const rarity = pickTrait(attributes, ['Rarity']);
+  const faction = pickTrait(attributes, ['Faction']);
+  const role = pickTrait(attributes, ['Role in Nerdie City']);
+  const location = pickTrait(attributes, ['Location']);
+  const previewTraits: NFTAttribute[] = [rarity, faction, role, location].filter(
+    (trait): trait is NFTAttribute => Boolean(trait)
+  ).slice(0, 3);
+  const rarityTone = getRarityTone(rarity?.value);
+  const compactEthBalance = formatCompactBalance(ethBalance, 4);
+  const compactNerdieBalance = formatCompactBalance(nerdieBalance, 2);
 
   return (
     <button
@@ -54,57 +131,94 @@ export default function NFTCard({ tokenId, image, name, tbaAddress, ethBalance, 
           #{tokenId}
         </span>
 
-        {/* Power rating badge */}
-        <span className="absolute top-3 right-3 px-2 py-1 bg-zinc-950/80 text-xs font-bold rounded-full text-red-400">
-          {power} PWR
+        <span
+          className={`absolute left-3 top-12 px-2.5 py-1 text-[10px] font-bold rounded-full ${
+            tbaAddress
+              ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/40'
+              : 'bg-zinc-950/80 text-neutral-400 border border-zinc-700/50'
+          }`}
+        >
+          {tbaAddress ? 'TBA Active' : 'TBA Pending'}
         </span>
 
-        {/* Class + Rarity banner */}
+        {tbaAddress && (
+          <div className="absolute top-3 right-3 flex flex-col items-end gap-1.5">
+            {compactEthBalance && (
+              <span className="px-2.5 py-1 bg-zinc-950/85 text-emerald-300 text-[10px] font-bold rounded-full border border-emerald-900/30">
+                {compactEthBalance} ETH
+              </span>
+            )}
+            {compactNerdieBalance && compactNerdieBalance !== '0.00' && (
+              <span className="px-2.5 py-1 bg-zinc-950/85 text-amber-300 text-[10px] font-bold rounded-full border border-amber-900/30">
+                {compactNerdieBalance} {nerdieSymbol || 'NERDIE'}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Trait banner */}
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-zinc-950/95 via-zinc-950/60 to-transparent pt-8 pb-2 px-3">
           <div className="flex items-center justify-between">
-            <span className={`text-xs font-bold ${nftClass.color}`}>{nftClass.name}</span>
-            <span className={`text-[10px] font-semibold ${rarity.color}`}>{rarity.label}</span>
+            <span className={`text-xs font-bold ${rarityTone.text}`}>
+              {rarity ? rarity.value : 'Nerdie Blaq'}
+            </span>
+            <span className="text-[10px] font-semibold text-neutral-400">
+              {faction ? faction.value : 'Metadata NFT'}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Info + Stats */}
+      {/* Info + Traits */}
       <div className="p-3.5">
         <h3 className="text-white font-bold text-sm mb-2.5 truncate">{name}</h3>
 
-        {/* Compact stat bars */}
-        <div className="space-y-1.5 mb-3">
-          {STAT_KEYS.map((key) => (
-            <div key={key} className="flex items-center gap-2">
-              <span className="text-neutral-500 text-[10px] font-mono w-7 shrink-0">{STAT_LABELS[key]}</span>
-              <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full ${getStatColor(stats[key])} transition-all`}
-                  style={{ width: `${stats[key]}%` }}
-                />
+        <div className="flex flex-wrap gap-2 mb-3 min-h-[74px] content-start">
+          {previewTraits.length > 0 ? (
+            previewTraits.map((trait) => (
+              <div
+                key={trait.trait_type}
+                className={`rounded-full px-2.5 py-1.5 max-w-full ${getTraitBadgeClass(trait.trait_type)}`}
+              >
+                <span className="block text-[9px] uppercase tracking-[0.18em] opacity-75">
+                  {trait.trait_type}
+                </span>
+                <span className="block text-[11px] font-medium truncate max-w-[140px]">
+                  {String(trait.value)}
+                </span>
               </div>
-              <span className="text-neutral-500 text-[10px] font-mono w-5 text-right">{stats[key]}</span>
-            </div>
-          ))}
+            ))
+          ) : (
+            <p className="text-neutral-500 text-xs">No metadata traits available.</p>
+          )}
         </div>
 
         {/* TBA info */}
         {tbaAddress && (
-          <div className="pt-2.5 border-t border-zinc-800 space-y-1">
+          <div className="pt-2.5 border-t border-zinc-800 space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-neutral-600 text-[10px]">TBA</span>
+              <span className="text-neutral-600 text-[10px]">Token-Bound Account</span>
               <span className="text-neutral-500 text-[10px] font-mono">
                 {tbaAddress.slice(0, 6)}...{tbaAddress.slice(-4)}
               </span>
             </div>
-            {ethBalance && (
-              <div className="flex items-center justify-between">
-                <span className="text-neutral-600 text-[10px]">ETH</span>
-                <span className="text-neutral-400 text-[10px] font-mono">
-                  {parseFloat(ethBalance).toFixed(4)}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-lg bg-zinc-950/70 p-2">
+                <span className="block text-neutral-600 text-[10px]">ETH</span>
+                <span className="block text-neutral-300 text-[11px] font-mono mt-0.5">
+                  {compactEthBalance || '0.0000'}
                 </span>
               </div>
-            )}
+              <div className="rounded-lg bg-zinc-950/70 p-2">
+                <span className="block text-neutral-600 text-[10px]">{nerdieSymbol || 'NERDIE'}</span>
+                <span className="block text-neutral-300 text-[11px] font-mono mt-0.5">
+                  {compactNerdieBalance || '0.00'}
+                </span>
+              </div>
+            </div>
+            <p className="text-[10px] text-neutral-600">
+              Open the NFT to copy the full TBA address and view detailed balances.
+            </p>
           </div>
         )}
       </div>

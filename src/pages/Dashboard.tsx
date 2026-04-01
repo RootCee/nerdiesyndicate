@@ -5,6 +5,8 @@ import { useNFTs } from '../hooks/useNFTs';
 import { useTBA } from '../hooks/useTBA';
 import NFTCard from '../components/NFTCard';
 import NFTDetailModal from '../components/NFTDetailModal';
+import BusinessCollectionTab from '../components/BusinessCollectionTab';
+import BusinessStakingTab from '../components/BusinessStakingTab';
 import SignalsBoard from '../components/signals/SignalsBoard';
 import twitter from '../images/twitter.png';
 import discord from '../images/discord.png';
@@ -115,14 +117,14 @@ function LoadingState() {
 const TABS = [
   { id: 'nfts', label: 'My NFTs', disabled: false },
   { id: 'signals', label: 'Signals', disabled: false },
-  { id: 'businesses', label: 'Businesses', disabled: true },
-  { id: 'staking', label: 'Staking', disabled: true },
+  { id: 'businesses', label: 'Businesses', disabled: false },
+  { id: 'staking', label: 'Staking', disabled: false },
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
 
 // ─── Main Dashboard (NFT holder view) ───
-function DashboardContent({ address }: { address: string }) {
+function DashboardContent({ address }: { address: string | null }) {
   const [activeTab, setActiveTab] = useState<TabId>('signals');
   const [signalsRefreshKey, setSignalsRefreshKey] = useState(0);
   const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null);
@@ -146,7 +148,10 @@ function DashboardContent({ address }: { address: string }) {
                 Signal <span className="text-red-600">Dashboard</span>
               </h1>
               <p className="text-neutral-500 text-sm mt-1">
-                {address.slice(0, 6)}...{address.slice(-4)} &middot; {balance} NFT{balance !== 1 ? 's' : ''}
+                {address
+                  ? `${address.slice(0, 6)}...${address.slice(-4)}`
+                  : 'Wallet not connected'}{' '}
+                &middot; {balance} NFT{balance !== 1 ? 's' : ''}
               </p>
             </div>
             <button
@@ -194,11 +199,15 @@ function DashboardContent({ address }: { address: string }) {
         <div className="max-w-5xl mx-auto">
           {activeTab === 'nfts' && (
             <>
-              {nftsLoading ? (
+              {!address ? (
+                <NoWalletState />
+              ) : nftsLoading ? (
                 <div className="text-center py-20">
                   <div className="w-12 h-12 border-4 border-red-800 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
                   <p className="text-neutral-500">Loading your NFTs...</p>
                 </div>
+              ) : balance === 0 ? (
+                <NoNFTState />
               ) : nftsError ? (
                 <div className="text-center py-20">
                   <p className="text-red-400 mb-4">{nftsError}</p>
@@ -223,8 +232,11 @@ function DashboardContent({ address }: { address: string }) {
                         tokenId={nft.tokenId}
                         image={nft.image}
                         name={nft.name}
+                        attributes={nft.attributes}
                         tbaAddress={tba?.tbaAddress}
                         ethBalance={tba?.ethBalance}
+                        nerdieBalance={tba?.nerdieBalance}
+                        nerdieSymbol={tba?.nerdieSymbol}
                         onClick={() => setSelectedTokenId(nft.tokenId)}
                       />
                     );
@@ -237,7 +249,12 @@ function DashboardContent({ address }: { address: string }) {
             </>
           )}
 
-          {activeTab === 'signals' && <SignalsBoard refreshKey={signalsRefreshKey} />}
+          {activeTab === 'signals' &&
+            (address ? <SignalsBoard refreshKey={signalsRefreshKey} /> : <NoWalletState />)}
+
+          {activeTab === 'businesses' && <BusinessCollectionTab walletAddress={address} />}
+
+          {activeTab === 'staking' && <BusinessStakingTab walletAddress={address} />}
         </div>
       </section>
 
@@ -247,8 +264,12 @@ function DashboardContent({ address }: { address: string }) {
           tokenId={selectedNft.tokenId}
           image={selectedNft.image}
           name={selectedNft.name}
+          description={selectedNft.description}
+          attributes={selectedNft.attributes}
           tbaAddress={selectedTba?.tbaAddress}
           ethBalance={selectedTba?.ethBalance}
+          nerdieBalance={selectedTba?.nerdieBalance}
+          nerdieSymbol={selectedTba?.nerdieSymbol}
           onClose={() => setSelectedTokenId(null)}
         />
       )}
@@ -259,22 +280,10 @@ function DashboardContent({ address }: { address: string }) {
 // ─── Dashboard Page (route: /dashboard) ───
 export default function Dashboard() {
   const address = useWallet();
-  const { balance, loading } = useNFTs(address);
-
-  const showState = !address
-    ? 'no-wallet'
-    : loading
-    ? 'loading'
-    : balance === 0
-    ? 'no-nft'
-    : 'dashboard';
 
   return (
     <>
-      {showState === 'no-wallet' && <NoWalletState />}
-      {showState === 'loading' && <LoadingState />}
-      {showState === 'no-nft' && <NoNFTState />}
-      {showState === 'dashboard' && address && <DashboardContent address={address} />}
+      <DashboardContent address={address} />
 
       {/* Footer */}
       <section className="py-16 px-4 text-center">

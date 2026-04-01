@@ -8,6 +8,13 @@ export interface NFTItem {
   tokenURI: string;
   image: string;
   name: string;
+  description: string;
+  attributes: NFTAttribute[];
+}
+
+export interface NFTAttribute {
+  trait_type: string;
+  value: string | number;
 }
 
 interface UseNFTsReturn {
@@ -27,17 +34,45 @@ function resolveIPFS(uri: string): string {
   return uri;
 }
 
-async function fetchMetadata(tokenURI: string): Promise<{ image: string; name: string }> {
+async function fetchMetadata(tokenURI: string): Promise<{
+  image: string;
+  name: string;
+  description: string;
+  attributes: NFTAttribute[];
+}> {
   try {
     const url = resolveIPFS(tokenURI);
     const res = await fetch(url);
     const json = await res.json();
+    const attributes: NFTAttribute[] = Array.isArray(json.attributes)
+      ? json.attributes
+          .filter(
+            (attribute: unknown): attribute is { trait_type?: unknown; value?: unknown } =>
+              typeof attribute === 'object' && attribute !== null
+          )
+          .map((attribute: { trait_type?: unknown; value?: unknown }) => ({
+            trait_type:
+              typeof attribute.trait_type === 'string' ? attribute.trait_type : 'Trait',
+            value:
+              typeof attribute.value === 'string' || typeof attribute.value === 'number'
+                ? attribute.value
+                : String(attribute.value ?? ''),
+          }))
+      : [];
+
     return {
       image: resolveIPFS(json.image || ''),
       name: json.name || `Nerdie Syndicate NFT`,
+      description: typeof json.description === 'string' ? json.description : '',
+      attributes,
     };
   } catch {
-    return { image: '', name: 'Nerdie Syndicate NFT' };
+    return {
+      image: '',
+      name: 'Nerdie Syndicate NFT',
+      description: '',
+      attributes: [],
+    };
   }
 }
 
@@ -117,6 +152,8 @@ export function useNFTs(walletAddress: string | null): UseNFTsReturn {
               tokenURI,
               image: meta.image,
               name: meta.name,
+              description: meta.description,
+              attributes: meta.attributes,
             };
           })
         );

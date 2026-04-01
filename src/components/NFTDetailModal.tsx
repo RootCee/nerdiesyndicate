@@ -1,38 +1,17 @@
 import { useState, useEffect } from 'react';
-import {
-  getStatsForToken,
-  getClass,
-  getRarity,
-  getPowerRating,
-  STAT_KEYS,
-  STAT_LABELS,
-  getStatColor,
-  type NFTStats,
-} from '../lib/nftStats';
+import type { NFTAttribute } from '../hooks/useNFTs';
 
 interface NFTDetailModalProps {
   tokenId: number;
   image: string;
   name: string;
+  description?: string;
+  attributes: NFTAttribute[];
   tbaAddress?: string;
   ethBalance?: string;
+  nerdieBalance?: string;
+  nerdieSymbol?: string;
   onClose: () => void;
-}
-
-function StatBar({ label, value, maxValue = 99 }: { label: string; value: number; maxValue?: number }) {
-  const pct = Math.min((value / maxValue) * 100, 100);
-  return (
-    <div className="flex items-center gap-3">
-      <span className="text-neutral-400 text-xs font-mono w-8 shrink-0">{label}</span>
-      <div className="flex-1 h-2 bg-zinc-800 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full ${getStatColor(value)} transition-all duration-500`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className="text-white text-xs font-mono w-6 text-right font-bold">{value}</span>
-    </div>
-  );
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -70,12 +49,68 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-export default function NFTDetailModal({ tokenId, image, name, tbaAddress, ethBalance, onClose }: NFTDetailModalProps) {
+function pickTrait(
+  attributes: NFTAttribute[],
+  traitName: string
+): NFTAttribute | undefined {
+  return attributes.find(
+    (attribute) => attribute.trait_type.toLowerCase() === traitName.toLowerCase()
+  );
+}
+
+function getRarityTone(value: string | number | undefined) {
+  const rarity = String(value ?? '').toLowerCase();
+
+  if (rarity.includes('legendary')) {
+    return {
+      badge: 'bg-yellow-950/75 text-yellow-300 border border-yellow-700/40',
+      text: 'text-yellow-300',
+    };
+  }
+
+  if (rarity.includes('epic')) {
+    return {
+      badge: 'bg-fuchsia-950/75 text-fuchsia-300 border border-fuchsia-700/40',
+      text: 'text-fuchsia-300',
+    };
+  }
+
+  if (rarity.includes('rare')) {
+    return {
+      badge: 'bg-sky-950/75 text-sky-300 border border-sky-700/40',
+      text: 'text-sky-300',
+    };
+  }
+
+  if (rarity.includes('uncommon')) {
+    return {
+      badge: 'bg-emerald-950/75 text-emerald-300 border border-emerald-700/40',
+      text: 'text-emerald-300',
+    };
+  }
+
+  return {
+    badge: 'bg-zinc-950/80 text-neutral-200 border border-zinc-700/60',
+    text: 'text-neutral-200',
+  };
+}
+
+export default function NFTDetailModal({
+  tokenId,
+  image,
+  name,
+  description,
+  attributes,
+  tbaAddress,
+  ethBalance,
+  nerdieBalance,
+  nerdieSymbol,
+  onClose,
+}: NFTDetailModalProps) {
   const [imgError, setImgError] = useState(false);
-  const stats = getStatsForToken(tokenId);
-  const nftClass = getClass(stats);
-  const rarity = getRarity(stats);
-  const power = getPowerRating(stats);
+  const rarity = pickTrait(attributes, 'Rarity');
+  const faction = pickTrait(attributes, 'Faction');
+  const rarityTone = getRarityTone(rarity?.value);
 
   // Close on Escape
   useEffect(() => {
@@ -138,15 +173,19 @@ export default function NFTDetailModal({ tokenId, image, name, tbaAddress, ethBa
               <span className="px-2.5 py-1 bg-zinc-950/80 text-white text-xs font-bold rounded-full">
                 #{tokenId}
               </span>
-              <span className={`px-2.5 py-1 ${nftClass.bgColor} ${nftClass.color} text-xs font-bold rounded-full`}>
-                {nftClass.name}
-              </span>
+              {faction && (
+                <span className="px-2.5 py-1 bg-red-950/70 text-red-300 text-xs font-bold rounded-full">
+                  {String(faction.value)}
+                </span>
+              )}
             </div>
-            <div className="absolute bottom-3 left-3">
-              <span className={`px-2.5 py-1 bg-zinc-950/80 text-xs font-bold rounded-full ${rarity.color}`}>
-                {rarity.label}
-              </span>
-            </div>
+            {rarity && (
+              <div className="absolute bottom-3 left-3">
+                <span className={`px-2.5 py-1 text-xs font-bold rounded-full ${rarityTone.badge}`}>
+                  {String(rarity.value)}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Right: Details */}
@@ -155,20 +194,57 @@ export default function NFTDetailModal({ tokenId, image, name, tbaAddress, ethBa
             <div className="mb-5">
               <h2 className="text-xl font-black text-white mb-1">{name}</h2>
               <div className="flex items-center gap-3">
-                <span className={`text-sm font-bold ${nftClass.color}`}>{nftClass.name}</span>
-                <span className="text-neutral-600">|</span>
-                <span className="text-sm text-red-400 font-bold">{power} PWR</span>
+                <span className={`text-sm font-bold ${rarityTone.text}`}>
+                  {rarity ? String(rarity.value) : 'Nerdie Blaq'}
+                </span>
+                {faction && (
+                  <>
+                    <span className="text-neutral-600">|</span>
+                    <span className="text-sm text-neutral-400 font-medium">{String(faction.value)}</span>
+                  </>
+                )}
               </div>
+              {description && <p className="text-neutral-400 text-sm mt-3 leading-relaxed">{description}</p>}
             </div>
 
-            {/* Stats */}
+            {/* Traits */}
             <div className="mb-5">
-              <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">Character Stats</h3>
-              <div className="space-y-2.5">
-                {STAT_KEYS.map((key) => (
-                  <StatBar key={key} label={STAT_LABELS[key]} value={stats[key]} />
-                ))}
-              </div>
+              <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">Metadata Traits</h3>
+              {attributes.length > 0 ? (
+                <div className="grid grid-cols-1 gap-2.5">
+                  {attributes.map((attribute) => (
+                    <div
+                      key={`${attribute.trait_type}-${String(attribute.value)}`}
+                      className={`flex items-start justify-between gap-4 rounded-xl p-3 ${
+                        attribute.trait_type.toLowerCase() === 'rarity'
+                          ? rarityTone.badge
+                          : 'border border-zinc-800 bg-zinc-800/40'
+                      }`}
+                    >
+                      <span
+                        className={`text-xs ${
+                          attribute.trait_type.toLowerCase() === 'rarity'
+                            ? 'text-current/80'
+                            : 'text-neutral-500'
+                        }`}
+                      >
+                        {attribute.trait_type}
+                      </span>
+                      <span
+                        className={`text-sm text-right max-w-[60%] ${
+                          attribute.trait_type.toLowerCase() === 'rarity'
+                            ? 'text-current font-semibold'
+                            : 'text-white'
+                        }`}
+                      >
+                        {String(attribute.value)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-neutral-600 text-sm">No metadata traits available for this NFT.</p>
+              )}
             </div>
 
             {/* TBA Section */}
@@ -188,10 +264,11 @@ export default function NFTDetailModal({ tokenId, image, name, tbaAddress, ethBa
                       {ethBalance ? parseFloat(ethBalance).toFixed(4) : '0.0000'} ETH
                     </span>
                   </div>
-                  {/* Placeholder: future token balances */}
-                  <div className="flex items-center justify-between opacity-50">
+                  <div className="flex items-center justify-between">
                     <span className="text-neutral-500 text-xs">$NERDIE Balance</span>
-                    <span className="text-neutral-500 text-xs font-mono">Coming soon</span>
+                    <span className="text-white text-sm font-mono font-bold">
+                      {nerdieBalance ? parseFloat(nerdieBalance).toFixed(2) : '0.00'} {nerdieSymbol || 'NERDIE'}
+                    </span>
                   </div>
                 </div>
               ) : (

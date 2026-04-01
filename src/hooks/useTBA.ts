@@ -7,6 +7,8 @@ export interface TBAInfo {
   tokenId: number;
   tbaAddress: string;
   ethBalance: string;
+  nerdieBalance: string;
+  nerdieSymbol: string;
 }
 
 interface UseTBAReturn {
@@ -54,11 +56,23 @@ export function useTBA(tokenIds: number[]): UseTBAReturn {
 
             // Check ETH balance of the TBA
             const balance = await provider.getBalance(tbaAddress);
+            const nerdieContract = new ethers.Contract(
+              CONTRACTS.NERDIE_TOKEN,
+              ABIS.ERC20,
+              provider
+            );
+            const [nerdieBalanceRaw, nerdieDecimals, nerdieSymbol] = await Promise.all([
+              nerdieContract.balanceOf(tbaAddress).catch(() => ethers.constants.Zero),
+              nerdieContract.decimals().catch(() => 18),
+              nerdieContract.symbol().catch(() => 'NERDIE'),
+            ]);
 
             return {
               tokenId,
               tbaAddress,
               ethBalance: ethers.utils.formatEther(balance),
+              nerdieBalance: ethers.utils.formatUnits(nerdieBalanceRaw, nerdieDecimals),
+              nerdieSymbol,
             };
           })
         );

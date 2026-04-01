@@ -12,6 +12,9 @@ export const CONTRACTS = {
   TBA_IMPLEMENTATION: import.meta.env.VITE_TBA_IMPLEMENTATION as string,
   BUSINESS_NFT: import.meta.env.VITE_BUSINESS_NFT as string,
   STAKING: import.meta.env.VITE_STAKING_CONTRACT as string,
+  NERDIE_TOKEN:
+    (import.meta.env.VITE_NERDIE_TOKEN as string | undefined) ||
+    '0x4b138bd7e18a3a725a4672814f84b00711c1939d',
 } as const;
 
 // Base chain ID
