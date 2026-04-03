@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import Seo from '../components/Seo';
 import { fetchAllSupabaseRows, fetchSupabaseRows, isSupabaseConfigured } from '../lib/supabase';
 import mainlogo from '../images/mainlogo.png';
 import twitter from '../images/twitter.png';
@@ -158,25 +159,29 @@ function HeroSection() {
       <div className="relative z-10 max-w-4xl mx-auto">
         <img src={mainlogo} alt="Nerdie Blaq" className="w-48 md:w-64 mx-auto mb-8" />
         <h1 className="text-5xl md:text-7xl font-black text-white mb-6 tracking-tight leading-[1.1]">
-          AI-Powered Crypto<br />
-          <span className="text-red-700">Signals</span>, Delivered.
+          Music-Powered Web3
+          <br />
+          <span className="text-red-700">Ecosystem</span> on Base.
         </h1>
         <p className="text-lg md:text-xl text-neutral-400 max-w-2xl mx-auto mb-4 leading-relaxed">
-          Nerdie Blaq Signals combines AI-driven BTC market analysis with a real-time trading bot
-          to deliver live crypto signals straight to your Telegram.
+          Nerdie Blaq Clubhouse is a music-powered Web3 ecosystem built on Base. It combines NFTs,
+          trading tools, creative content, and community into a unified platform for builders,
+          artists, and supporters.
+        </p>
+        <p className="text-sm text-neutral-500 mb-4 max-w-2xl mx-auto">
+          Discover the public Clubhouse, music releases, merch, education, and ecosystem access
+          points from one premium hub.
         </p>
         <p className="text-sm text-neutral-500 mb-10">
-          Free signals for everyone. VIP for $NERDIE holders. Dashboard for NFT holders.
+          Free market access for everyone. Premium access for $NERDIE holders. Dashboard tools for NFT holders.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <a
-            href="https://t.me/+RPRDDLSZWSk3ZjZh"
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            to="/clubhouse"
             className="px-8 py-3.5 bg-red-800 hover:bg-red-700 text-white font-semibold rounded-full transition text-lg"
           >
-            Get Free Signals
-          </a>
+            Enter Clubhouse
+          </Link>
           <Link
             to="/vip"
             className="px-8 py-3.5 border border-red-800 text-red-400 hover:bg-red-900/30 font-semibold rounded-full transition text-lg"
@@ -273,7 +278,7 @@ function BotProofSection() {
           Live Bot Performance
         </h2>
         <p className="text-neutral-500 text-center mb-12 max-w-xl mx-auto">
-          The Nerdie Blaq signal engine runs 24/7, analyzing BTC markets and generating trade calls in real time.
+          The Nerdie Blaq Clubhouse trading engine runs 24/7, analyzing BTC markets and generating trade calls in real time.
         </p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
           {statCards.map((stat) => (
@@ -311,15 +316,15 @@ function EcosystemSection() {
           The Nerdie Blaq Ecosystem
         </h2>
         <p className="text-neutral-500 mb-12 max-w-2xl mx-auto">
-          Signals are just the beginning. Nerdie Blaq is a full Web3 ecosystem: trading signals,
+          Clubhouse access is just the beginning. Nerdie Blaq is a full Web3 ecosystem: trading intelligence,
           a deflationary token, NFT-gated tools, staking, gaming, and community.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { title: "Signals", desc: "AI-powered crypto signals delivered live to Telegram", icon: "S" },
+            { title: "Clubhouse", desc: "A public gateway into tools, signals, community, and ecosystem access", icon: "C" },
             { title: "$NERDIE", desc: "Deflationary utility token on Base powering the ecosystem", icon: "N" },
             { title: "Syndicate NFT", desc: "200 ERC-6551 NFTs that unlock the dashboard and alpha access", icon: "F" },
-            { title: "Nerdie City", desc: "3D blockchain game, staking, competitions, and community events", icon: "C" },
+            { title: "Nerdie City", desc: "The future metaverse layer where music, ownership, learning, and community converge", icon: "C" },
           ].map((item) => (
             <div key={item.title} className="bg-zinc-900 border border-red-900/15 rounded-2xl p-6 text-left">
               <div className="w-10 h-10 bg-red-900/30 border border-red-800/30 rounded-lg flex items-center justify-center text-red-500 font-bold text-sm mb-4 font-display">
@@ -330,6 +335,14 @@ function EcosystemSection() {
             </div>
           ))}
         </div>
+        <div className="mt-8">
+          <Link
+            to="/ecosystem"
+            className="inline-flex items-center justify-center rounded-full border border-zinc-700 bg-zinc-950/80 px-6 py-3 text-sm font-semibold text-neutral-100 transition hover:border-zinc-500 hover:text-white"
+          >
+            Read the Full Ecosystem Overview
+          </Link>
+        </div>
       </div>
     </section>
   );
@@ -338,22 +351,22 @@ function EcosystemSection() {
 function AccessTiersSection() {
   const tiers = [
     {
-      name: "Free Signals",
+      name: "Clubhouse Access",
       price: "Free",
-      description: "Start trading with real signals",
+      description: "Start exploring the ecosystem",
       features: [
         "Daily BTC market updates",
         "Up to 3 signals per day",
         "Community Telegram access",
         "Basic market analysis",
       ],
-      cta: "Join Free Telegram",
-      ctaHref: "https://t.me/+RPRDDLSZWSk3ZjZh",
-      ctaType: "external" as const,
+      cta: "Enter Clubhouse",
+      ctaHref: "/clubhouse",
+      ctaType: "route" as const,
       highlight: false,
     },
     {
-      name: "VIP Signals",
+      name: "VIP Clubhouse",
       price: "Hold 10K $NERDIE",
       description: "Every signal, no limits",
       features: [
@@ -393,7 +406,7 @@ function AccessTiersSection() {
           Choose Your Access
         </h2>
         <p className="text-neutral-500 text-center mb-12 max-w-xl mx-auto">
-          Three tiers designed for different levels of commitment.
+          Three access paths designed for different levels of commitment.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {tiers.map((tier) => (
@@ -512,7 +525,7 @@ function NftPreviewSection() {
                 Nerdie Syndicate NFT
               </h2>
               <p className="text-neutral-400 leading-relaxed mb-6">
-                200 unique ERC-6551 NFTs on Base. Each one unlocks the advanced signal dashboard,
+                200 unique ERC-6551 NFTs on Base. Each one unlocks the advanced Clubhouse dashboard,
                 exclusive holder events, the Nerdie City alpha pass, and your own token-bound wallet.
               </p>
               <div className="flex flex-col sm:flex-row gap-3">
@@ -557,11 +570,10 @@ function FinalCtaSection() {
     <section className="py-20 px-4 text-center">
       <div className="max-w-3xl mx-auto">
         <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-          Start Getting Signals Now
+          Step Into The Clubhouse
         </h2>
         <p className="text-neutral-500 mb-10 max-w-xl mx-auto">
-          Free to join. VIP for serious traders. Dashboard for NFT holders.
-          Pick your level and start trading smarter with Nerdie Blaq.
+          Start with the public Clubhouse, level up through VIP access, and unlock deeper tools with a Nerdie Syndicate NFT.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
           <a
@@ -600,6 +612,16 @@ function FinalCtaSection() {
             <img src={instagram} alt="Instagram" className="w-8 h-8 opacity-60 hover:opacity-100 transition" />
           </a>
         </div>
+        <div className="mb-8">
+          <a
+            href="https://farcaster.xyz/rootcee"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center rounded-full border border-red-800/40 bg-red-900/20 px-5 py-2.5 text-sm font-semibold text-red-300 transition hover:bg-red-900/30 hover:text-white"
+          >
+            Follow on Farcaster
+          </a>
+        </div>
         <p className="text-neutral-600 text-sm">&copy; 2025 Nerdie Blaq. All rights reserved.</p>
       </div>
     </section>
@@ -607,8 +629,40 @@ function FinalCtaSection() {
 }
 
 export default function Home() {
+  const homepageDescription =
+    'Nerdie Blaq Clubhouse is a music-powered Web3 ecosystem built on Base. It combines NFTs, trading tools, creative content, and community into a unified platform for builders, artists, and supporters.';
+
+  const homepageJsonLd = [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'Organization',
+      name: 'Nerdie Blaq',
+      url: 'https://nerdieblaq.xyz/',
+      logo: 'https://nerdieblaq.xyz/og-default.svg',
+      sameAs: [
+        'https://twitter.com/rootcee',
+        'https://instagram.com/rootcee_',
+        'https://farcaster.xyz/rootcee',
+        'https://mirror.xyz/rootcee.eth',
+      ],
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'WebSite',
+      name: 'Nerdie Blaq',
+      url: 'https://nerdieblaq.xyz/',
+      description: homepageDescription,
+    },
+  ];
+
   return (
     <>
+      <Seo
+        title="Nerdie Blaq | Music-Powered Web3 Ecosystem on Base"
+        description={homepageDescription}
+        path="/"
+        jsonLd={homepageJsonLd}
+      />
       <HeroSection />
       <BotProofSection />
       <EcosystemSection />

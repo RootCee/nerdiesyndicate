@@ -1,4 +1,5 @@
 import MerchProductCard from '../components/MerchProductCard';
+import Seo from '../components/Seo';
 
 const ALIVE_SHOES_LINK = 'https://www.aliveshoes.com/nerdie-blaq-pearl2';
 const SQUARE_STORE_LINK = 'https://nerdie-blaq-merch.square.site';
@@ -89,6 +90,31 @@ function SectionHeader({
 export default function Merch() {
   return (
     <>
+      <Seo
+        title="Nerdie Blaq Merch | Footwear, Apparel and Collectibles"
+        description="Shop Nerdie Blaq merch including featured footwear, apparel drops, and collectible lifestyle pieces connected to the broader ecosystem."
+        path="/merch"
+        image={featuredShoeImage}
+        jsonLd={[
+          {
+            '@context': 'https://schema.org',
+            '@type': 'Product',
+            name: 'Nerdie Blaq Pearl 2',
+            description: 'Featured Nerdie Blaq footwear drop available through AliveShoes.',
+            image: featuredShoeImage,
+            brand: {
+              '@type': 'Brand',
+              name: 'Nerdie Blaq',
+            },
+            offers: {
+              '@type': 'Offer',
+              url: ALIVE_SHOES_LINK,
+              priceCurrency: 'USD',
+              availability: 'https://schema.org/InStock',
+            },
+          },
+        ]}
+      />
       <section className="relative overflow-hidden px-4 pb-16 pt-28">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-red-950/30 via-zinc-950 to-zinc-950" />
         <div className="relative z-10 mx-auto max-w-6xl">

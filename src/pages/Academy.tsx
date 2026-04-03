@@ -1,4 +1,5 @@
 import LearningCard from '../components/LearningCard';
+import Seo from '../components/Seo';
 
 const coursePlaylistUrl = 'https://youtube.com/playlist?list=PLAX8YWrl6eTQsXS3R_onp5efHoLGWjxoC&si=Vgd0nalewfGigNki';
 const courseEmbedUrl = 'https://www.youtube.com/embed/videoseries?list=PLAX8YWrl6eTQsXS3R_onp5efHoLGWjxoC';
@@ -100,6 +101,35 @@ function ResourceGrid({
 export default function Academy() {
   return (
     <>
+      <Seo
+        title="Nerdie Blaq Academy | Web3, Coding and Builder Education"
+        description="Learn through Nerdie Blaq Academy with curated coding, programming, and computer science resources for builders entering the digital economy."
+        path="/academy"
+        jsonLd={[
+          {
+            '@context': 'https://schema.org',
+            '@type': 'ItemList',
+            name: 'Nerdie Blaq Academy Learning Paths',
+            itemListElement: [
+              {
+                '@type': 'ListItem',
+                position: 1,
+                name: 'Beginner Path',
+              },
+              {
+                '@type': 'ListItem',
+                position: 2,
+                name: 'Programming',
+              },
+              {
+                '@type': 'ListItem',
+                position: 3,
+                name: 'Computer Science',
+              },
+            ],
+          },
+        ]}
+      />
       <section className="relative overflow-hidden px-4 pb-16 pt-28">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-red-950/30 via-zinc-950 to-zinc-950" />
         <div className="relative z-10 mx-auto max-w-5xl text-center">

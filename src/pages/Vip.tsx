@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import Seo from '../components/Seo';
 import twitter from '../images/twitter.png';
 import discord from '../images/discord.png';
 import telegram from '../images/telegram.png';
@@ -7,19 +8,25 @@ import instagram from '../images/instagram.png';
 export default function Vip() {
   return (
     <>
+      <Seo
+        title="Nerdie Blaq Clubhouse | Tools, Signals, NFTs and Community"
+        description="Enter Nerdie Blaq Clubhouse to access Web3-native tools, trading intelligence, digital assets, and community experiences built on Base."
+        path="/clubhouse"
+        canonicalPath="/clubhouse"
+      />
+
       {/* Hero */}
       <section className="pt-28 pb-16 px-4 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-red-950/30 via-zinc-950 to-zinc-950 pointer-events-none" />
         <div className="relative z-10 max-w-3xl mx-auto text-center">
           <span className="inline-block px-4 py-1.5 bg-red-900/30 border border-red-800/40 rounded-full text-red-400 text-xs font-semibold uppercase tracking-widest mb-6">
-            VIP Access
+            Nerdie Blaq Clubhouse
           </span>
           <h1 className="text-4xl md:text-6xl font-black text-white mb-6 tracking-tight">
-            Unlock <span className="text-red-600">VIP Signals</span>
+            Welcome To The <span className="text-red-600">Clubhouse</span>
           </h1>
           <p className="text-lg text-neutral-400 max-w-2xl mx-auto leading-relaxed mb-10">
-            Hold 10,000 $NERDIE in your connected wallet to unlock VIP Telegram access.
-            Every signal. Faster alerts. Full outcome tracking. No monthly fees.
+            Nerdie Blaq Clubhouse is a Web3-powered creative ecosystem on Base that combines music, trading intelligence, NFTs, and community into one platform. Members gain access to tools, signals, digital assets, and exclusive experiences designed to build value both on-chain and in real life.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <a
@@ -45,7 +52,7 @@ export default function Vip() {
       {/* How It Works */}
       <section className="py-20 px-4">
         <div className="max-w-5xl mx-auto">
-          <h2 className="text-2xl md:text-3xl font-bold text-white text-center mb-12">How VIP Access Works</h2>
+          <h2 className="text-2xl md:text-3xl font-bold text-white text-center mb-12">How Clubhouse Access Works</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               {
@@ -60,8 +67,8 @@ export default function Vip() {
               },
               {
                 step: "3",
-                title: "Access VIP",
-                desc: "Once verified, you're granted access to the VIP Telegram channel with all premium signals.",
+                title: "Access Clubhouse",
+                desc: "Once verified, you're granted access to the premium Clubhouse Telegram experience with deeper market access.",
               },
             ].map((item) => (
               <div key={item.step} className="bg-zinc-900 border border-red-900/20 rounded-2xl p-8 text-center">
@@ -79,11 +86,11 @@ export default function Vip() {
       {/* Free vs VIP Comparison */}
       <section className="py-20 px-4">
         <div className="max-w-4xl mx-auto">
-          <h2 className="text-2xl md:text-3xl font-bold text-white text-center mb-12">Free vs VIP</h2>
+          <h2 className="text-2xl md:text-3xl font-bold text-white text-center mb-12">Public vs Premium Clubhouse</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {/* Free */}
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8">
-              <h3 className="text-xl font-bold text-white mb-2">Free Signals</h3>
+              <h3 className="text-xl font-bold text-white mb-2">Public Clubhouse</h3>
               <p className="text-neutral-500 text-sm mb-6">Open to everyone</p>
               <ul className="space-y-3">
                 {[
@@ -116,7 +123,7 @@ export default function Vip() {
               <span className="absolute -top-3 left-6 px-3 py-1 bg-red-800 text-white text-xs font-bold uppercase tracking-wider rounded-full">
                 Recommended
               </span>
-              <h3 className="text-xl font-bold text-white mb-2">VIP Signals</h3>
+              <h3 className="text-xl font-bold text-white mb-2">Premium Clubhouse</h3>
               <p className="text-neutral-500 text-sm mb-6">For committed holders</p>
               <ul className="space-y-3">
                 {[
@@ -159,7 +166,7 @@ export default function Vip() {
                 <h3 className="text-xl font-bold text-white mb-3">Why 10,000 $NERDIE?</h3>
                 <p className="text-neutral-400 leading-relaxed mb-4">
                   $NERDIE is the heartbeat of the Nerdie Blaq ecosystem. By holding 10,000 tokens,
-                  you're not just accessing VIP signals — you're investing in a deflationary asset with
+                  you're not just accessing the premium Clubhouse experience — you're investing in a deflationary asset with
                   real utility across signals, staking, gaming, and the metaverse.
                 </p>
                 <ul className="space-y-2 text-sm text-neutral-400">
@@ -179,7 +186,7 @@ export default function Vip() {
           <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8">
             <h3 className="text-lg font-bold text-white mb-3">Subscription Option Coming Soon</h3>
             <p className="text-neutral-500 text-sm leading-relaxed max-w-xl mx-auto">
-              In the future, we'll offer a monthly subscription option for VIP access.
+              In the future, we'll offer a monthly subscription option for premium Clubhouse access.
               But right now, holding $NERDIE is the only way in — and the most rewarding.
               Early holders benefit from the lowest entry cost and a deflationary token that grows with the ecosystem.
             </p>
@@ -191,10 +198,10 @@ export default function Vip() {
       <section className="py-20 px-4 text-center">
         <div className="max-w-3xl mx-auto">
           <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-            Ready for VIP?
+            Ready For The Clubhouse?
           </h2>
           <p className="text-neutral-500 mb-10 max-w-xl mx-auto">
-            Buy $NERDIE, connect your wallet, and unlock every signal we publish.
+            Buy $NERDIE, connect your wallet, and unlock the full premium Clubhouse experience.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
             <a
@@ -215,7 +222,7 @@ export default function Vip() {
             </a>
           </div>
           <p className="text-neutral-600 text-sm mb-10">
-            Also hold a <Link to="/mint" className="text-red-400 hover:text-red-300 underline">Nerdie Syndicate NFT</Link> to unlock the full signal dashboard.
+            Also hold a <Link to="/mint" className="text-red-400 hover:text-red-300 underline">Nerdie Syndicate NFT</Link> to unlock the full Clubhouse dashboard.
           </p>
 
           <div className="flex justify-center items-center gap-6 mb-8">
@@ -230,6 +237,16 @@ export default function Vip() {
             </a>
             <a href="https://instagram.com/rootcee_" target="_blank" rel="noopener noreferrer">
               <img src={instagram} alt="Instagram" className="w-8 h-8 opacity-60 hover:opacity-100 transition" />
+            </a>
+          </div>
+          <div className="mb-8">
+            <a
+              href="https://farcaster.xyz/rootcee"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center rounded-full border border-red-800/40 bg-red-900/20 px-5 py-2.5 text-sm font-semibold text-red-300 transition hover:bg-red-900/30 hover:text-white"
+            >
+              Follow on Farcaster
             </a>
           </div>
           <p className="text-neutral-600 text-sm">&copy; 2025 Nerdie Blaq. All rights reserved.</p>

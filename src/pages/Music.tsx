@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import Seo from '../components/Seo';
 
 const LISTEN_EVERYWHERE_LINK =
   'https://distrokid.com/hyperfollow/buddieroots/blaq?ref=release';
@@ -182,6 +183,25 @@ export default function Music() {
 
   return (
     <>
+      <Seo
+        title="BLAQ by Buddie Roots | Nerdie Blaq Music"
+        description="Stream and support BLAQ by Buddie Roots, the flagship Nerdie Blaq music release connecting sound, culture, and the wider Web3 ecosystem."
+        path="/music"
+        image={albumCoverImage}
+        jsonLd={[
+          {
+            '@context': 'https://schema.org',
+            '@type': 'MusicAlbum',
+            name: 'BLAQ',
+            byArtist: {
+              '@type': 'MusicGroup',
+              name: 'Buddie Roots',
+            },
+            url: 'https://nerdieblaq.xyz/music',
+            image: albumCoverImage,
+          },
+        ]}
+      />
       <audio ref={audioRef} preload="none" />
 
       <section className="relative overflow-hidden px-4 pb-16 pt-28">

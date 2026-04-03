@@ -222,20 +222,20 @@ export default function SignalsBoard({ refreshKey }: { refreshKey: number }) {
     return (
       <div className="py-20 text-center">
         <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-red-800/60 border-t-transparent" />
-        <p className="text-neutral-400">Loading signal activity...</p>
+        <p className="text-neutral-400">Loading Clubhouse activity...</p>
       </div>
     );
   }
 
   if (error) {
-    return <EmptyState title="Signals feed offline" text={error} />;
+    return <EmptyState title="Clubhouse feed offline" text={error} />;
   }
 
   if (!data || data.signals.length === 0) {
     return (
       <EmptyState
-        title="No signal activity yet"
-        text="Signals will appear here once bot_signals or signal_outcomes has recent rows to display."
+        title="No Clubhouse activity yet"
+        text="Trading activity will appear here once bot_signals or signal_outcomes has recent rows to display."
       />
     );
   }
@@ -245,8 +245,8 @@ export default function SignalsBoard({ refreshKey }: { refreshKey: number }) {
       <div className="space-y-6 rounded-[28px] border border-red-900/20 bg-zinc-900/90 p-4 shadow-[0_0_40px_rgba(127,29,29,0.12)] md:p-6">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.34em] text-red-400/70">Signals Desk</p>
-            <h2 className="mt-2 text-3xl font-bold text-white">Signal Activity</h2>
+            <p className="text-[11px] uppercase tracking-[0.34em] text-red-400/70">Clubhouse Desk</p>
+            <h2 className="mt-2 text-3xl font-bold text-white">Clubhouse Activity</h2>
             <p className="mt-2 text-sm text-neutral-400">
               Live and historical signal activity with outcome tracking, filters, and detailed trade context.
             </p>

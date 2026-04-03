@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ethers } from 'ethers';
+import Seo from '../components/Seo';
 import { useNFTs } from '../hooks/useNFTs';
 import { useTBA } from '../hooks/useTBA';
 import NFTCard from '../components/NFTCard';
@@ -52,7 +53,7 @@ function NoWalletState() {
           Connect Your <span className="text-red-600">Wallet</span>
         </h1>
         <p className="text-neutral-400 text-lg leading-relaxed mb-8 max-w-lg mx-auto">
-          Connect your wallet using the button in the top-right corner to access the Nerdie Blaq Signals dashboard.
+          Connect your wallet using the button in the top-right corner to access the Nerdie Blaq Clubhouse dashboard.
         </p>
         <p className="text-neutral-600 text-sm">
           Supports MetaMask, Coinbase Wallet, WalletConnect, and more.
@@ -116,7 +117,7 @@ function LoadingState() {
 // ─── Dashboard tabs ───
 const TABS = [
   { id: 'nfts', label: 'My NFTs', disabled: false },
-  { id: 'signals', label: 'Signals', disabled: false },
+  { id: 'signals', label: 'Clubhouse', disabled: false },
   { id: 'businesses', label: 'Businesses', disabled: false },
   { id: 'staking', label: 'Staking', disabled: false },
 ] as const;
@@ -173,7 +174,7 @@ function DashboardContent({ address }: { address: string | null }) {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight font-body">
-                Signal <span className="text-red-600">Dashboard</span>
+                Nerdie Syndicate <span className="text-red-600">Dashboard</span>
               </h1>
               <p className="text-neutral-500 text-sm mt-1">
                 {address
@@ -291,6 +292,12 @@ export default function Dashboard() {
 
   return (
     <>
+      <Seo
+        title="Nerdie Syndicate Dashboard | Nerdie Blaq"
+        description="Token-gated Nerdie Blaq Clubhouse dashboard for NFT holders with activity, businesses, and staking tools."
+        path="/dashboard"
+        noindex
+      />
       <DashboardContent address={address} />
 
       {/* Footer */}

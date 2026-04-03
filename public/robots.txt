@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://nerdieblaq.xyz/sitemap.xml
+

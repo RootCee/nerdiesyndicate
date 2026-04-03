@@ -1,5 +1,6 @@
 import { ethers } from 'ethers';
 import { Link } from 'react-router-dom';
+import Seo from '../components/Seo';
 import MintingForm from '../MintingForm';
 import abi from '../contractABI';
 import twitter from '../images/twitter.png';
@@ -35,18 +36,24 @@ const handleMint = async (quantity: number): Promise<ethers.ContractTransaction>
 export default function Mint() {
   return (
     <>
+      <Seo
+        title="Nerdie Syndicate NFT Mint | Nerdie Blaq"
+        description="Mint a Nerdie Syndicate NFT on Base to unlock dashboard access, token-bound wallets, and deeper ecosystem utility."
+        path="/mint"
+        noindex
+      />
       {/* Hero / Intro */}
       <section className="pt-28 pb-16 px-4 text-center">
         <div className="max-w-3xl mx-auto">
           <Link to="/" className="text-sm text-neutral-500 hover:text-white transition mb-6 inline-block">
-            &larr; Back to Signals
+            &larr; Back to Clubhouse
           </Link>
           <h1 className="text-4xl md:text-5xl font-black text-white mb-4 tracking-tight">
             Nerdie Syndicate <span className="text-red-700">NFT</span>
           </h1>
           <p className="text-lg text-neutral-400 max-w-2xl mx-auto leading-relaxed">
             200 unique ERC-6551 NFTs on Base. Each one is your key to the advanced
-            Nerdie Blaq Signals dashboard, exclusive holder events, and the Nerdie City alpha pass.
+            Nerdie Blaq Clubhouse dashboard, exclusive holder events, and the Nerdie City alpha pass.
           </p>
         </div>
       </section>
@@ -58,7 +65,7 @@ export default function Mint() {
             <h2 className="text-xl font-bold text-white mb-6">What You Unlock</h2>
             <ul className="space-y-4">
               {[
-                { title: "Signal Dashboard", desc: "Full access to the advanced Nerdie Blaq Signals dashboard with real-time data." },
+                { title: "Clubhouse Dashboard", desc: "Full access to the advanced Nerdie Blaq Clubhouse dashboard with real-time data." },
                 { title: "ERC-6551 Token-Bound Wallet", desc: "Each NFT has its own wallet. Link it to manage assets directly." },
                 { title: "Nerdie City Alpha Pass", desc: "Early access to Nerdie City, the 3D blockchain game." },
                 { title: "Exclusive Events", desc: "Virtual competitions, chess battles, rap battles, and coding courses." },
@@ -118,6 +125,16 @@ export default function Mint() {
           </a>
           <a href="https://instagram.com/rootcee_" target="_blank" rel="noopener noreferrer">
             <img src={instagram} alt="Instagram" className="w-8 h-8 opacity-60 hover:opacity-100 transition" />
+          </a>
+        </div>
+        <div className="mb-8">
+          <a
+            href="https://farcaster.xyz/rootcee"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center rounded-full border border-red-800/40 bg-red-900/20 px-5 py-2.5 text-sm font-semibold text-red-300 transition hover:bg-red-900/30 hover:text-white"
+          >
+            Follow on Farcaster
           </a>
         </div>
         <p className="text-neutral-600 text-sm">&copy; 2025 Nerdie Blaq. All rights reserved.</p>
