@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ethers } from 'ethers';
+import { useAccount, useChainId } from 'wagmi';
 import Seo from '../components/Seo';
 import { useNFTs } from '../hooks/useNFTs';
 import { useTBA } from '../hooks/useTBA';
@@ -13,31 +14,6 @@ import twitter from '../images/twitter.png';
 import discord from '../images/discord.png';
 import telegram from '../images/telegram.png';
 import instagram from '../images/instagram.png';
-
-// ─── Wallet connection (uses same window.ethereum as MintingForm) ───
-function useWallet() {
-  const [address, setAddress] = useState<string | null>(null);
-  const [listening, setListening] = useState(false);
-
-  useEffect(() => {
-    async function check() {
-      if (!window.ethereum) return;
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const accounts = await provider.listAccounts();
-      if (accounts[0]) setAddress(accounts[0]);
-    }
-    check();
-
-    if (window.ethereum && !listening) {
-      setListening(true);
-      window.ethereum.on('accountsChanged', (accounts: string[]) => {
-        setAddress(accounts[0] ?? null);
-      });
-    }
-  }, [listening]);
-
-  return address;
-}
 
 // ─── State: No wallet connected ───
 function NoWalletState() {
@@ -64,10 +40,31 @@ function NoWalletState() {
 }
 
 // ─── State: Wallet connected but no NFT ───
-function NoNFTState() {
+function NoNFTState({
+  address,
+  chainId,
+  balance,
+  nftsCount,
+  nftsError,
+  debug,
+}: {
+  address: string | null;
+  chainId: number | null;
+  balance: number;
+  nftsCount: number;
+  nftsError: string | null;
+  debug: {
+    walletAddress: string | null;
+    contractAddress: string;
+    rpcUrl: string | null;
+    balance: number;
+    totalSupply: number | null;
+    ownedTokenIds: number[];
+  };
+}) {
   return (
     <section className="pt-28 pb-20 px-4 min-h-[70vh] flex items-center">
-      <div className="max-w-2xl mx-auto text-center">
+      <div className="max-w-3xl mx-auto text-center">
         <div className="w-20 h-20 bg-red-900/30 border border-red-800/40 rounded-full flex items-center justify-center mx-auto mb-6">
           <svg className="w-10 h-10 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
@@ -96,6 +93,14 @@ function NoNFTState() {
             Buy on OpenSea
           </a>
         </div>
+        <WalletDiagnostics
+          address={address}
+          chainId={chainId}
+          balance={balance}
+          nftsCount={nftsCount}
+          nftsError={nftsError}
+          debug={debug}
+        />
       </div>
     </section>
   );
@@ -124,12 +129,107 @@ const TABS = [
 
 type TabId = typeof TABS[number]['id'];
 
+function WalletDiagnostics({
+  address,
+  chainId,
+  balance,
+  nftsCount,
+  nftsError,
+  debug,
+}: {
+  address: string | null;
+  chainId: number | null;
+  balance: number;
+  nftsCount: number;
+  nftsError: string | null;
+  debug: {
+    walletAddress: string | null;
+    contractAddress: string;
+    rpcUrl: string | null;
+    balance: number;
+    totalSupply: number | null;
+    ownedTokenIds: number[];
+  };
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900/85 p-4">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full items-center justify-between gap-4 text-left"
+      >
+        <div>
+          <p className="text-xs uppercase tracking-[0.24em] text-neutral-500">Wallet Diagnostics</p>
+          <p className="mt-1 text-sm text-neutral-300">
+            Double-check the connected address, Base network, and NFT ownership lookup.
+          </p>
+        </div>
+        <span className="text-sm font-medium text-neutral-400">{open ? 'Hide' : 'Show'}</span>
+      </button>
+
+      {open && (
+        <div className="mt-4 grid gap-3 text-sm text-neutral-300 md:grid-cols-2">
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
+            <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Connected Wallet</p>
+            <p className="mt-2 break-all">{address ?? 'Not connected'}</p>
+          </div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
+            <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Detected Chain</p>
+            <p className="mt-2">{chainId ? `${chainId}${chainId === 8453 ? ' (Base)' : ''}` : 'Unknown'}</p>
+          </div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
+            <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">NFT Contract</p>
+            <p className="mt-2 break-all">{debug.contractAddress}</p>
+          </div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
+            <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Read RPC</p>
+            <p className="mt-2 break-all">{debug.rpcUrl ?? 'Unknown'}</p>
+          </div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
+            <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Contract Balance</p>
+            <p className="mt-2">{balance}</p>
+          </div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
+            <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Loaded NFTs</p>
+            <p className="mt-2">{nftsCount}</p>
+          </div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
+            <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Total Supply Scanned</p>
+            <p className="mt-2">{debug.totalSupply ?? 'Unknown'}</p>
+          </div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
+            <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Owned Token IDs</p>
+            <p className="mt-2 break-words">
+              {debug.ownedTokenIds.length > 0 ? debug.ownedTokenIds.join(', ') : 'None found'}
+            </p>
+          </div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3 md:col-span-2">
+            <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Status</p>
+            <p className="mt-2 break-words">
+              {nftsError
+                ? `NFT lookup error: ${nftsError}`
+                : chainId && chainId !== 8453
+                ? 'Wallet is connected to a non-Base network. Switch the wallet to Base and refresh.'
+                : debug.walletAddress !== address
+                ? 'Wallet mismatch detected between app session and NFT lookup.'
+                : 'Wallet and NFT lookup appear aligned.'}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Dashboard (NFT holder view) ───
 function DashboardContent({ address }: { address: string | null }) {
+  const chainId = useChainId();
   const [activeTab, setActiveTab] = useState<TabId>('signals');
   const [signalsRefreshKey, setSignalsRefreshKey] = useState(0);
   const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null);
-  const { nfts, balance, loading: nftsLoading, error: nftsError, refetch } = useNFTs(address);
+  const { nfts, balance, loading: nftsLoading, error: nftsError, debug, refetch } = useNFTs(address);
   const tokenIds = nfts.map((n) => n.tokenId);
   const { tbas, loading: tbaLoading } = useTBA(tokenIds);
 
@@ -162,7 +262,16 @@ function DashboardContent({ address }: { address: string | null }) {
   }
 
   if (balance === 0) {
-    return <NoNFTState />;
+    return (
+      <NoNFTState
+        address={address}
+        chainId={chainId ?? null}
+        balance={balance}
+        nftsCount={nfts.length}
+        nftsError={nftsError}
+        debug={debug}
+      />
+    );
   }
 
   return (
@@ -174,7 +283,7 @@ function DashboardContent({ address }: { address: string | null }) {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight font-body">
-                Nerdie Syndicate <span className="text-red-600">Dashboard</span>
+                Nerdie Blaq <span className="text-red-600">Dashboard</span>
               </h1>
               <p className="text-neutral-500 text-sm mt-1">
                 {address
@@ -193,6 +302,14 @@ function DashboardContent({ address }: { address: string | null }) {
               Refresh
             </button>
           </div>
+          <WalletDiagnostics
+            address={address}
+            chainId={chainId ?? null}
+            balance={balance}
+            nftsCount={nfts.length}
+            nftsError={nftsError}
+            debug={debug}
+          />
         </div>
       </section>
 
@@ -288,17 +405,17 @@ function DashboardContent({ address }: { address: string | null }) {
 
 // ─── Dashboard Page (route: /dashboard) ───
 export default function Dashboard() {
-  const address = useWallet();
+  const { address, isConnected } = useAccount();
 
   return (
     <>
       <Seo
-        title="Nerdie Syndicate Dashboard | Nerdie Blaq"
+        title="Nerdie Blaq Dashboard | Nerdie Blaq"
         description="Token-gated Nerdie Blaq Clubhouse dashboard for NFT holders with activity, businesses, and staking tools."
         path="/dashboard"
         noindex
       />
-      <DashboardContent address={address} />
+      <DashboardContent address={isConnected ? address ?? null : null} />
 
       {/* Footer */}
       <section className="py-16 px-4 text-center">

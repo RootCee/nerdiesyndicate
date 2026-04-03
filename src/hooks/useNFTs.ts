@@ -22,6 +22,14 @@ interface UseNFTsReturn {
   balance: number;
   loading: boolean;
   error: string | null;
+  debug: {
+    walletAddress: string | null;
+    contractAddress: string;
+    rpcUrl: string | null;
+    balance: number;
+    totalSupply: number | null;
+    ownedTokenIds: number[];
+  };
   refetch: () => void;
 }
 
@@ -82,6 +90,8 @@ export function useNFTs(walletAddress: string | null): UseNFTsReturn {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchKey, setFetchKey] = useState(0);
+  const [totalSupply, setTotalSupply] = useState<number | null>(null);
+  const [ownedTokenIds, setOwnedTokenIds] = useState<number[]>([]);
 
   const refetch = useCallback(() => setFetchKey((k) => k + 1), []);
 
@@ -89,6 +99,8 @@ export function useNFTs(walletAddress: string | null): UseNFTsReturn {
     if (!walletAddress) {
       setNfts([]);
       setBalance(0);
+      setTotalSupply(null);
+      setOwnedTokenIds([]);
       setLoading(false);
       setError(null);
       return;
@@ -112,6 +124,7 @@ export function useNFTs(walletAddress: string | null): UseNFTsReturn {
 
         if (balNum === 0) {
           setNfts([]);
+          setOwnedTokenIds([]);
           setLoading(false);
           return;
         }
@@ -119,18 +132,19 @@ export function useNFTs(walletAddress: string | null): UseNFTsReturn {
         // Find token IDs owned by this wallet by scanning totalSupply
         const totalSupply: ethers.BigNumber = await nftContract.totalSupply();
         const total = totalSupply.toNumber();
+        setTotalSupply(total);
 
-        const ownedTokenIds: number[] = [];
+        const nextOwnedTokenIds: number[] = [];
         // Batch ownerOf calls — check all minted tokens
         const batchSize = 50;
-        for (let start = 1; start <= total && ownedTokenIds.length < balNum; start += batchSize) {
-          const end = Math.min(start + batchSize, total + 1);
+        for (let start = 0; start < total && nextOwnedTokenIds.length < balNum; start += batchSize) {
+          const end = Math.min(start + batchSize, total);
           const promises = [];
           for (let id = start; id < end; id++) {
             promises.push(
               nftContract.ownerOf(id).then((owner: string) => {
                 if (owner.toLowerCase() === walletAddress!.toLowerCase()) {
-                  ownedTokenIds.push(id);
+                  nextOwnedTokenIds.push(id);
                 }
               }).catch(() => {
                 // Token may not exist or be burned
@@ -141,10 +155,11 @@ export function useNFTs(walletAddress: string | null): UseNFTsReturn {
         }
 
         if (cancelled) return;
+        setOwnedTokenIds(nextOwnedTokenIds);
 
         // Fetch metadata for each owned token
         const nftItems: NFTItem[] = await Promise.all(
-          ownedTokenIds.map(async (tokenId) => {
+          nextOwnedTokenIds.map(async (tokenId) => {
             const tokenURI: string = await nftContract.tokenURI(tokenId);
             const meta = await fetchMetadata(tokenURI);
             return {
@@ -173,5 +188,22 @@ export function useNFTs(walletAddress: string | null): UseNFTsReturn {
     return () => { cancelled = true; };
   }, [walletAddress, fetchKey]);
 
-  return { nfts, balance, loading, error, refetch };
+  return {
+    nfts,
+    balance,
+    loading,
+    error,
+    debug: {
+      walletAddress,
+      contractAddress: CONTRACTS.NFT,
+      rpcUrl:
+        (import.meta.env.VITE_ALCHEMY_RPC_URL as string | undefined) ||
+        (import.meta.env.VITE_BASE_RPC_URL as string | undefined) ||
+        'https://mainnet.base.org',
+      balance,
+      totalSupply,
+      ownedTokenIds,
+    },
+    refetch,
+  };
 }
