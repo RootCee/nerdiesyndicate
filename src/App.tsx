@@ -11,6 +11,10 @@ import Mint from './pages/Mint';
 import Vip from './pages/Vip';
 import Dashboard from './pages/Dashboard';
 import Academy from './pages/Academy';
+import Merch from './pages/Merch';
+import Music from './pages/Music';
+import MusicThankYou from './pages/MusicThankYou';
+import MusicCheckoutCancelled from './pages/MusicCheckoutCancelled';
 
 const queryClient = new QueryClient();
 
@@ -40,6 +44,20 @@ function Navbar() {
       href: '/vip',
       external: false,
       active: location.pathname === '/vip',
+    },
+    {
+      key: 'music',
+      label: 'Music',
+      href: '/music',
+      external: false,
+      active: location.pathname === '/music',
+    },
+    {
+      key: 'merch',
+      label: 'Merch',
+      href: '/merch',
+      external: false,
+      active: location.pathname === '/merch',
     },
     {
       key: 'mint',
@@ -197,6 +215,10 @@ function App() {
                 <Route path="/" element={<Home />} />
                 <Route path="/lander" element={<Home />} />
                 <Route path="/academy" element={<Academy />} />
+                <Route path="/music" element={<Music />} />
+                <Route path="/music/thank-you" element={<MusicThankYou />} />
+                <Route path="/music/checkout-cancelled" element={<MusicCheckoutCancelled />} />
+                <Route path="/merch" element={<Merch />} />
                 <Route path="/mint" element={<Mint />} />
                 <Route path="/vip" element={<Vip />} />
                 <Route path="/dashboard" element={<Dashboard />} />

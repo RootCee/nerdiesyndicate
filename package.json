@@ -24,10 +24,12 @@
   "dependencies": {
     "@rainbow-me/rainbowkit": "^2.2.10",
     "@tanstack/react-query": "^5.90.21",
+    "archiver": "^7.0.1",
     "ethers": "^5.5.2",
     "react": "^18.2",
     "react-dom": "^18.2",
     "react-router-dom": "^7.13.1",
+    "stripe": "^22.0.0",
     "viem": "^2.47.2",
     "wagmi": "^2.19.5"
   },
