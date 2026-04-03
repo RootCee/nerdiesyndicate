@@ -155,36 +155,36 @@ function getLatestActivity(rows: StatsRow[]) {
 function HeroSection() {
   return (
     <section className="min-h-screen flex flex-col items-center justify-center text-center px-4 pt-20 relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-b from-red-950/20 via-zinc-950 to-zinc-950 pointer-events-none" />
+      <div className="site-home-hero absolute inset-0 pointer-events-none" />
       <div className="relative z-10 max-w-4xl mx-auto">
         <img src={mainlogo} alt="Nerdie Blaq" className="w-48 md:w-64 mx-auto mb-8" />
-        <h1 className="text-5xl md:text-7xl font-black text-white mb-6 tracking-tight leading-[1.1]">
-          Music-Powered Web3
+        <h1 className="clubhouse-text-glow text-5xl md:text-7xl font-black text-white mb-6 tracking-[0.12em] leading-[1.02]">
+          Welcome To The
           <br />
-          <span className="text-red-700">Ecosystem</span> on Base.
+          <span className="text-[#c7b2f8]">Game</span>
         </h1>
-        <p className="text-lg md:text-xl text-neutral-400 max-w-2xl mx-auto mb-4 leading-relaxed">
+        <p className="text-lg md:text-xl text-neutral-300 max-w-2xl mx-auto mb-4 leading-relaxed font-semibold">
           Nerdie Blaq Clubhouse is a music-powered Web3 ecosystem built on Base. It combines NFTs,
           trading tools, creative content, and community into a unified platform for builders,
           artists, and supporters.
         </p>
-        <p className="text-sm text-neutral-500 mb-4 max-w-2xl mx-auto">
+        <p className="text-sm text-neutral-400 mb-4 max-w-2xl mx-auto font-medium">
           Discover the public Clubhouse, music releases, merch, education, and ecosystem access
           points from one premium hub.
         </p>
-        <p className="text-sm text-neutral-500 mb-10">
+        <p className="text-sm text-neutral-400 mb-10 font-medium">
           Free market access for everyone. Premium access for $NERDIE holders. Dashboard tools for NFT holders.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Link
             to="/clubhouse"
-            className="px-8 py-3.5 bg-red-800 hover:bg-red-700 text-white font-semibold rounded-full transition text-lg"
+            className="site-primary-btn px-8 py-3.5 font-semibold rounded-full transition text-lg"
           >
             Enter Clubhouse
           </Link>
           <Link
             to="/vip"
-            className="px-8 py-3.5 border border-red-800 text-red-400 hover:bg-red-900/30 font-semibold rounded-full transition text-lg"
+            className="site-secondary-btn px-8 py-3.5 font-semibold rounded-full transition text-lg"
           >
             Unlock VIP
           </Link>
@@ -284,10 +284,10 @@ function BotProofSection() {
           {statCards.map((stat) => (
             <div
               key={stat.label}
-              className="bg-zinc-900 border border-red-900/20 rounded-2xl p-6 md:p-8 text-center hover:border-red-800/50 transition"
+              className="site-card rounded-2xl p-6 md:p-8 text-center transition"
             >
               <p className="text-3xl md:text-4xl font-black text-white mb-1">{stat.value}</p>
-              <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1">{stat.label}</p>
+              <p className="text-xs text-neutral-400 uppercase tracking-wider mb-1 font-semibold">{stat.label}</p>
               <p className="text-xs text-neutral-600">{stat.sub}</p>
               {stat.label === "Bot Status" && (
                 <span
@@ -315,7 +315,7 @@ function EcosystemSection() {
         <h2 className="text-3xl md:text-4xl font-bold text-white mb-3">
           The Nerdie Blaq Ecosystem
         </h2>
-        <p className="text-neutral-500 mb-12 max-w-2xl mx-auto">
+        <p className="text-neutral-400 mb-12 max-w-2xl mx-auto font-medium">
           Clubhouse access is just the beginning. Nerdie Blaq is a full Web3 ecosystem: trading intelligence,
           a deflationary token, NFT-gated tools, staking, gaming, and community.
         </p>
@@ -326,19 +326,19 @@ function EcosystemSection() {
             { title: "Syndicate NFT", desc: "200 ERC-6551 NFTs that unlock the dashboard and alpha access", icon: "F" },
             { title: "Nerdie City", desc: "The future metaverse layer where music, ownership, learning, and community converge", icon: "C" },
           ].map((item) => (
-            <div key={item.title} className="bg-zinc-900 border border-red-900/15 rounded-2xl p-6 text-left">
-              <div className="w-10 h-10 bg-red-900/30 border border-red-800/30 rounded-lg flex items-center justify-center text-red-500 font-bold text-sm mb-4 font-display">
+            <div key={item.title} className="site-card rounded-2xl p-6 text-left">
+              <div className="site-accent-icon w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm mb-4 font-display">
                 {item.icon}
               </div>
               <h3 className="text-white font-bold mb-2 text-sm">{item.title}</h3>
-              <p className="text-neutral-500 text-xs leading-relaxed">{item.desc}</p>
+              <p className="text-neutral-400 text-xs leading-relaxed font-medium">{item.desc}</p>
             </div>
           ))}
         </div>
         <div className="mt-8">
           <Link
             to="/ecosystem"
-            className="inline-flex items-center justify-center rounded-full border border-zinc-700 bg-zinc-950/80 px-6 py-3 text-sm font-semibold text-neutral-100 transition hover:border-zinc-500 hover:text-white"
+            className="site-secondary-btn inline-flex items-center justify-center rounded-full px-6 py-3 text-sm font-semibold transition"
           >
             Read the Full Ecosystem Overview
           </Link>
@@ -405,7 +405,7 @@ function AccessTiersSection() {
         <h2 className="text-3xl md:text-4xl font-bold text-center text-white mb-3">
           Choose Your Access
         </h2>
-        <p className="text-neutral-500 text-center mb-12 max-w-xl mx-auto">
+        <p className="text-neutral-400 text-center mb-12 max-w-xl mx-auto font-medium">
           Three access paths designed for different levels of commitment.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -414,20 +414,20 @@ function AccessTiersSection() {
               key={tier.name}
               className={`rounded-2xl p-8 flex flex-col ${
                 tier.highlight
-                  ? "bg-red-950/40 border-2 border-red-800 ring-1 ring-red-800/30"
-                  : "bg-zinc-900 border border-red-900/20"
+                  ? "site-card-premium border-2 ring-1 ring-[#3f2d5c]"
+                  : "site-card"
               }`}
             >
               {tier.highlight && (
-                <span className="text-xs font-bold text-red-400 uppercase tracking-wider mb-3">Most Popular</span>
+                <span className="text-xs font-bold text-[#c7b2f8] uppercase tracking-wider mb-3">Most Popular</span>
               )}
               <h3 className="text-xl font-bold text-white mb-1">{tier.name}</h3>
-              <p className="text-red-500 text-sm font-semibold mb-1">{tier.price}</p>
-              <p className="text-neutral-500 text-sm mb-6">{tier.description}</p>
+              <p className="text-[#8fd7b5] text-sm font-semibold mb-1">{tier.price}</p>
+              <p className="text-neutral-400 text-sm mb-6 font-medium">{tier.description}</p>
               <ul className="space-y-3 mb-8 flex-1">
                 {tier.features.map((feature) => (
                   <li key={feature} className="flex items-start gap-2 text-neutral-300 text-sm">
-                    <span className="text-red-600 mt-0.5">&#10003;</span>
+                    <span className="text-[#c7b2f8] mt-0.5">&#10003;</span>
                     {feature}
                   </li>
                 ))}
@@ -437,8 +437,8 @@ function AccessTiersSection() {
                   to={tier.ctaHref}
                   className={`block text-center py-3 rounded-full font-semibold transition ${
                     tier.highlight
-                      ? "bg-red-800 hover:bg-red-700 text-white"
-                      : "border border-red-800 text-red-400 hover:bg-red-900/30"
+                      ? "site-primary-btn"
+                      : "site-secondary-btn"
                   }`}
                 >
                   {tier.cta}
@@ -448,7 +448,7 @@ function AccessTiersSection() {
                   href={tier.ctaHref}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block text-center py-3 rounded-full font-semibold transition border border-red-800 text-red-400 hover:bg-red-900/30"
+                  className="site-secondary-btn block text-center py-3 rounded-full font-semibold transition"
                 >
                   {tier.cta}
                 </a>
@@ -468,23 +468,23 @@ function TokenSection() {
         <h2 className="text-3xl md:text-4xl font-bold text-white mb-3">
           $NERDIE Token
         </h2>
-        <p className="text-neutral-500 mb-10 max-w-2xl mx-auto">
+        <p className="text-neutral-400 mb-10 max-w-2xl mx-auto font-medium">
           The utility token powering VIP access, staking rewards, and the entire Nerdie Blaq ecosystem.
           Deflationary by design — less supply over time, more value for holders.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
-          <div className="bg-zinc-900/60 border border-red-900/10 rounded-xl p-6">
+          <div className="site-card rounded-xl p-6">
             <p className="text-2xl font-bold text-white mb-1">1%</p>
-            <p className="text-sm text-neutral-500">Burn on every trade</p>
+            <p className="text-sm text-neutral-400 font-medium">Burn on every trade</p>
           </div>
-          <div className="bg-zinc-900/60 border border-red-900/10 rounded-xl p-6">
+          <div className="site-card rounded-xl p-6">
             <p className="text-2xl font-bold text-white mb-1">10%</p>
-            <p className="text-sm text-neutral-500">Burn on staking claims</p>
+            <p className="text-sm text-neutral-400 font-medium">Burn on staking claims</p>
           </div>
-          <div className="bg-zinc-900/60 border border-red-900/10 rounded-xl p-6">
+          <div className="site-card rounded-xl p-6">
             <p className="text-2xl font-bold text-white mb-1">10K</p>
-            <p className="text-sm text-neutral-500">$NERDIE = VIP access</p>
+            <p className="text-sm text-neutral-400 font-medium">$NERDIE = VIP access</p>
           </div>
         </div>
 
@@ -493,7 +493,7 @@ function TokenSection() {
             href="https://dexscreener.com/base/0xe398371e809316d747e323b859a25e3c7dba8306"
             target="_blank"
             rel="noopener noreferrer"
-            className="px-8 py-3 bg-red-800 hover:bg-red-700 text-white font-semibold rounded-full transition"
+            className="site-primary-btn px-8 py-3 font-semibold rounded-full transition"
           >
             View on DexScreener
           </a>
@@ -501,7 +501,7 @@ function TokenSection() {
             href="https://app.uniswap.org/explore/tokens/base/0x4b138bd7e18a3a725a4672814f84b00711c1939d"
             target="_blank"
             rel="noopener noreferrer"
-            className="px-8 py-3 border border-red-800 text-red-400 hover:bg-red-900/30 font-semibold rounded-full transition"
+            className="site-secondary-btn px-8 py-3 font-semibold rounded-full transition"
           >
             Buy $NERDIE
           </a>
@@ -515,29 +515,29 @@ function NftPreviewSection() {
   return (
     <section id="nft-preview" className="py-20 px-4">
       <div className="max-w-4xl mx-auto">
-        <div className="bg-zinc-900 border border-red-900/20 rounded-2xl p-8 md:p-12">
+        <div className="site-card rounded-2xl p-8 md:p-12">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
             <div>
-              <span className="inline-block px-3 py-1 bg-red-900/30 border border-red-800/40 text-red-400 text-xs font-semibold uppercase tracking-wider rounded-full mb-4">
+              <span className="site-accent-pill inline-block px-3 py-1 text-xs font-semibold uppercase tracking-wider rounded-full mb-4">
                 NFT Collection
               </span>
               <h2 className="text-2xl md:text-3xl font-bold text-white mb-4">
                 Nerdie Syndicate NFT
               </h2>
-              <p className="text-neutral-400 leading-relaxed mb-6">
+              <p className="text-neutral-300 leading-relaxed mb-6 font-medium">
                 200 unique ERC-6551 NFTs on Base. Each one unlocks the advanced Clubhouse dashboard,
                 exclusive holder events, the Nerdie City alpha pass, and your own token-bound wallet.
               </p>
               <div className="flex flex-col sm:flex-row gap-3">
                 <Link
                   to="/mint"
-                  className="px-6 py-3 bg-red-800 hover:bg-red-700 text-white font-semibold rounded-full transition text-center"
+                  className="site-primary-btn px-6 py-3 font-semibold rounded-full transition text-center"
                 >
                   Mint NFT (0.01 ETH)
                 </Link>
                 <Link
                   to="/dashboard"
-                  className="px-6 py-3 border border-red-800 text-red-400 hover:bg-red-900/30 font-semibold rounded-full transition text-center"
+                  className="site-secondary-btn px-6 py-3 font-semibold rounded-full transition text-center"
                 >
                   View Dashboard
                 </Link>
@@ -551,9 +551,9 @@ function NftPreviewSection() {
                   { label: "Chain", value: "Base" },
                   { label: "Standard", value: "ERC-6551" },
                 ].map((item) => (
-                  <div key={item.label} className="bg-zinc-950 border border-zinc-800 rounded-xl p-4">
+                  <div key={item.label} className="site-card rounded-xl p-4">
                     <p className="text-white font-bold text-lg">{item.value}</p>
-                    <p className="text-neutral-500 text-xs">{item.label}</p>
+                    <p className="text-neutral-400 text-xs font-medium">{item.label}</p>
                   </div>
                 ))}
               </div>
@@ -572,7 +572,7 @@ function FinalCtaSection() {
         <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
           Step Into The Clubhouse
         </h2>
-        <p className="text-neutral-500 mb-10 max-w-xl mx-auto">
+        <p className="text-neutral-400 mb-10 max-w-xl mx-auto font-medium">
           Start with the public Clubhouse, level up through VIP access, and unlock deeper tools with a Nerdie Syndicate NFT.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
@@ -580,19 +580,19 @@ function FinalCtaSection() {
             href="https://t.me/+RPRDDLSZWSk3ZjZh"
             target="_blank"
             rel="noopener noreferrer"
-            className="px-8 py-3.5 bg-red-800 hover:bg-red-700 text-white font-semibold rounded-full transition text-lg"
+            className="site-primary-btn px-8 py-3.5 font-semibold rounded-full transition text-lg"
           >
             Join Free Telegram
           </a>
           <Link
             to="/vip"
-            className="px-8 py-3.5 border border-red-800 text-red-400 hover:bg-red-900/30 font-semibold rounded-full transition text-lg"
+            className="site-secondary-btn px-8 py-3.5 font-semibold rounded-full transition text-lg"
           >
             Unlock VIP
           </Link>
           <Link
             to="/mint"
-            className="px-8 py-3.5 border border-zinc-700 text-neutral-400 hover:border-neutral-500 hover:text-white font-semibold rounded-full transition text-lg"
+            className="site-secondary-btn px-8 py-3.5 font-semibold rounded-full transition text-lg"
           >
             Mint NFT
           </Link>
@@ -617,7 +617,7 @@ function FinalCtaSection() {
             href="https://farcaster.xyz/rootcee"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center justify-center rounded-full border border-red-800/40 bg-red-900/20 px-5 py-2.5 text-sm font-semibold text-red-300 transition hover:bg-red-900/30 hover:text-white"
+            className="site-secondary-btn inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-semibold transition"
           >
             Follow on Farcaster
           </a>

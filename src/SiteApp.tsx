@@ -89,20 +89,20 @@ function Navbar() {
   }
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-zinc-950/90 backdrop-blur-md border-b border-red-900/20">
+    <nav className="site-nav fixed top-0 left-0 right-0 z-50 backdrop-blur-md">
       <div className="max-w-7xl mx-auto px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <Link to="/" className="flex items-center gap-2">
             <img src={logo} alt="Logo" className="w-10 h-10" />
             <span className="hidden text-xl text-white sm:inline font-brand">Nerdie Blaq</span>
           </Link>
-          <div className="hidden md:flex items-center gap-6 text-sm text-neutral-400 font-medium">
+          <div className="hidden md:flex items-center gap-6 text-sm font-medium">
             {navLinks.map((link) => (
               link.external ? (
                 <a
                   key={link.key}
                   href={link.href}
-                  className="hover:text-white transition"
+                  className="site-nav-link transition"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -112,7 +112,7 @@ function Navbar() {
                 <Link
                   key={link.key}
                   to={link.href}
-                  className={`hover:text-white transition ${link.active ? 'text-white' : ''}`}
+                  className={`site-nav-link transition ${link.active ? 'site-nav-link-active' : ''}`}
                 >
                   {link.label}
                 </Link>
@@ -126,7 +126,7 @@ function Navbar() {
           <button
             type="button"
             onClick={() => setMobileMenuOpen((value) => !value)}
-            className="inline-flex min-w-[140px] items-center justify-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/90 px-4 py-2 text-sm font-medium text-neutral-200 transition hover:border-zinc-700 hover:text-white"
+            className="site-secondary-btn inline-flex min-w-[140px] items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition"
             aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
             aria-expanded={mobileMenuOpen}
           >
@@ -142,7 +142,7 @@ function Navbar() {
         </div>
 
         {mobileMenuOpen && (
-          <div className="md:hidden mt-3 rounded-2xl border border-zinc-800 bg-zinc-950/95 p-3 shadow-2xl">
+          <div className="site-mobile-shell md:hidden mt-3 rounded-2xl p-3 shadow-2xl">
             <div className="flex flex-col">
               {navLinks.map((link) => (
                 link.external ? (
@@ -152,7 +152,7 @@ function Navbar() {
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={closeMobileMenu}
-                    className="rounded-xl px-3 py-3 text-sm font-medium text-neutral-300 transition hover:bg-zinc-900 hover:text-white"
+                    className="rounded-xl px-3 py-3 text-sm font-semibold text-neutral-200 transition hover:bg-black/20 hover:text-white"
                   >
                     {link.label}
                   </a>
@@ -161,8 +161,8 @@ function Navbar() {
                     key={link.key}
                     to={link.href}
                     onClick={closeMobileMenu}
-                    className={`rounded-xl px-3 py-3 text-sm font-medium transition hover:bg-zinc-900 hover:text-white ${
-                      link.active ? 'text-white bg-zinc-900/80' : 'text-neutral-300'
+                    className={`rounded-xl px-3 py-3 text-sm font-semibold transition hover:bg-black/20 hover:text-white ${
+                      link.active ? 'text-white bg-black/20' : 'text-neutral-200'
                     }`}
                   >
                     {link.label}
@@ -211,7 +211,7 @@ export function AppShell({
   }, []);
 
   return (
-    <div className="scroll-smooth">
+    <div className="site-shell scroll-smooth">
       <Navbar />
 
       {showConnectButton && isHydrated ? (

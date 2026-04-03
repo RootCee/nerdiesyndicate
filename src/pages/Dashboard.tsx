@@ -122,7 +122,7 @@ function LoadingState() {
 // ─── Dashboard tabs ───
 const TABS = [
   { id: 'nfts', label: 'My NFTs', disabled: false },
-  { id: 'signals', label: 'Clubhouse', disabled: false },
+  { id: 'signals', label: 'Signals', disabled: false },
   { id: 'businesses', label: 'Businesses', disabled: false },
   { id: 'staking', label: 'Staking', disabled: false },
 ] as const;
@@ -283,7 +283,7 @@ function DashboardContent({ address }: { address: string | null }) {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight font-body">
-                Nerdie Blaq <span className="text-red-600">Dashboard</span>
+                Nerdie Syndicate <span className="text-red-600">Dashboard</span>
               </h1>
               <p className="text-neutral-500 text-sm mt-1">
                 {address
@@ -410,7 +410,7 @@ export default function Dashboard() {
   return (
     <>
       <Seo
-        title="Nerdie Blaq Dashboard | Nerdie Blaq"
+        title="Nerdie Syndicate Dashboard | Nerdie Blaq"
         description="Token-gated Nerdie Blaq Clubhouse dashboard for NFT holders with activity, businesses, and staking tools."
         path="/dashboard"
         noindex

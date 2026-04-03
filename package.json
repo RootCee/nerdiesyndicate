@@ -22,6 +22,8 @@
     "test:blaq-ceaser:e2e:local": "npm run -w @nerdieblaq/blaq-ceaser test:e2e:local"
   },
   "dependencies": {
+    "@fontsource/bebas-neue": "^5.2.7",
+    "@fontsource/rajdhani": "^5.2.7",
     "@rainbow-me/rainbowkit": "^2.2.10",
     "@tanstack/react-query": "^5.90.21",
     "archiver": "^7.0.1",
