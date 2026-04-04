@@ -11,8 +11,8 @@ export default function Vip() {
       <Seo
         title="Nerdie Blaq Clubhouse | Tools, Signals, NFTs and Community"
         description="Enter Nerdie Blaq Clubhouse to access Web3-native tools, trading intelligence, digital assets, and community experiences built on Base."
-        path="/clubhouse"
-        canonicalPath="/clubhouse"
+        path="/vip"
+        canonicalPath="/vip"
       />
 
       <div className="clubhouse-shell">

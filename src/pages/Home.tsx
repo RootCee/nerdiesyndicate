@@ -636,7 +636,13 @@ function FinalCtaSection() {
   );
 }
 
-export default function Home() {
+export default function Home({
+  seoPath = '/',
+  canonicalPath,
+}: {
+  seoPath?: string;
+  canonicalPath?: string;
+}) {
   const homepageDescription =
     'Nerdie Blaq Clubhouse is a music-powered Web3 ecosystem built on Base. It combines NFTs, trading tools, creative content, and community into a unified platform for builders, artists, and supporters.';
 
@@ -668,7 +674,8 @@ export default function Home() {
       <Seo
         title="Nerdie Blaq | Music-Powered Web3 Ecosystem on Base"
         description={homepageDescription}
-        path="/"
+        path={seoPath}
+        canonicalPath={canonicalPath}
         jsonLd={homepageJsonLd}
       />
       <HeroSection />

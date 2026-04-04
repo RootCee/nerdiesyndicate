@@ -22,9 +22,12 @@ function Navbar() {
     {
       key: 'clubhouse',
       label: 'Nerdie Blaq Clubhouse',
-      href: '/clubhouse',
+      href: '/',
       external: false,
-      active: location.pathname === '/clubhouse' || location.pathname === '/vip',
+      active:
+        location.pathname === '/' ||
+        location.pathname === '/clubhouse' ||
+        location.pathname === '/lander',
     },
     {
       key: 'ecosystem',
@@ -181,8 +184,8 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
-      <Route path="/lander" element={<Home />} />
-      <Route path="/clubhouse" element={<Vip />} />
+      <Route path="/lander" element={<Home seoPath="/lander" canonicalPath="/" />} />
+      <Route path="/clubhouse" element={<Home seoPath="/clubhouse" canonicalPath="/" />} />
       <Route path="/ecosystem" element={<Ecosystem />} />
       <Route path="/academy" element={<Academy />} />
       <Route path="/businesses" element={<Businesses />} />
