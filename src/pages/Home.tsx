@@ -154,25 +154,25 @@ function getLatestActivity(rows: StatsRow[]) {
 
 function HeroSection() {
   return (
-    <section className="min-h-screen flex flex-col items-center justify-center text-center px-4 pt-20 relative overflow-hidden">
+    <section className="min-h-[88svh] md:min-h-screen flex flex-col items-center justify-center text-center px-4 pt-24 pb-14 md:pt-20 relative overflow-hidden">
       <div className="site-home-hero absolute inset-0 pointer-events-none" />
       <div className="relative z-10 max-w-4xl mx-auto">
-        <img src={mainlogo} alt="Nerdie Blaq" className="w-48 md:w-64 mx-auto mb-8" />
-        <h1 className="clubhouse-text-glow text-5xl md:text-7xl font-black text-white mb-6 tracking-[0.12em] leading-[1.02]">
+        <img src={mainlogo} alt="Nerdie Blaq" className="w-40 sm:w-48 md:w-64 mx-auto mb-6 md:mb-8" />
+        <h1 className="clubhouse-text-glow text-4xl sm:text-5xl md:text-7xl font-black text-white mb-5 md:mb-6 tracking-[0.12em] leading-[1.02]">
           Welcome To The
           <br />
           <span className="text-[#c7b2f8]">Game</span>
         </h1>
-        <p className="text-lg md:text-xl text-neutral-300 max-w-2xl mx-auto mb-4 leading-relaxed font-semibold">
+        <p className="text-base sm:text-lg md:text-xl text-neutral-300 max-w-2xl mx-auto mb-4 leading-relaxed font-semibold">
           Nerdie Blaq Clubhouse is a music-powered Web3 ecosystem built on Base. It combines NFTs,
           trading tools, creative content, and community into a unified platform for builders,
           artists, and supporters.
         </p>
-        <p className="text-sm text-neutral-400 mb-4 max-w-2xl mx-auto font-medium">
+        <p className="text-sm sm:text-base text-neutral-400 mb-4 max-w-2xl mx-auto font-medium">
           Discover the public Clubhouse, music releases, merch, education, and ecosystem access
           points from one premium hub.
         </p>
-        <p className="text-sm text-neutral-400 mb-10 font-medium">
+        <p className="text-sm sm:text-base text-neutral-400 mb-8 md:mb-10 font-medium">
           Free market access for everyone. Premium access for $NERDIE holders. Dashboard tools for NFT holders.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -188,6 +188,14 @@ function HeroSection() {
           >
             Unlock VIP
           </Link>
+        </div>
+        <div className="mt-5 md:mt-6">
+          <a
+            href="#bot-proof"
+            className="inline-flex items-center justify-center rounded-full border border-zinc-700/80 bg-zinc-950/60 px-5 py-2.5 text-sm font-semibold text-neutral-100 transition hover:border-zinc-500 hover:text-white"
+          >
+            View Live Bot Performance
+          </a>
         </div>
       </div>
     </section>
@@ -272,7 +280,7 @@ function BotProofSection() {
   ];
 
   return (
-    <section id="bot-proof" className="py-20 px-4">
+    <section id="bot-proof" className="scroll-mt-28 py-16 md:py-20 px-4">
       <div className="max-w-6xl mx-auto">
         <h2 className="text-3xl md:text-4xl font-bold text-center text-white mb-3">
           Live Bot Performance
@@ -280,7 +288,7 @@ function BotProofSection() {
         <p className="text-neutral-500 text-center mb-12 max-w-xl mx-auto">
           The Nerdie Blaq Clubhouse trading engine runs 24/7, analyzing BTC markets and generating trade calls in real time.
         </p>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
           {statCards.map((stat) => (
             <div
               key={stat.label}
