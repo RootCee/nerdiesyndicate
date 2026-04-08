@@ -3,10 +3,7 @@ import { Link } from 'react-router-dom';
 import Seo from '../components/Seo';
 import MintingForm from '../MintingForm';
 import abi from '../contractABI';
-import twitter from '../images/twitter.png';
-import discord from '../images/discord.png';
-import telegram from '../images/telegram.png';
-import instagram from '../images/instagram.png';
+import PublicSiteFooter from '../components/PublicSiteFooter';
 
 const handleMint = async (quantity: number): Promise<ethers.ContractTransaction> => {
   if (typeof window.ethereum === 'undefined') {
@@ -110,35 +107,7 @@ export default function Mint() {
           </div>
         </div>
       </section>
-
-      {/* Footer */}
-      <section className="py-12 px-4 text-center">
-        <div className="flex justify-center items-center gap-6 mb-8">
-          <a href="https://twitter.com/rootcee" target="_blank" rel="noopener noreferrer">
-            <img src={twitter} alt="Twitter" className="w-8 h-8 opacity-60 hover:opacity-100 transition" />
-          </a>
-          <a href="https://discord.com/invite/S874axwJyY" target="_blank" rel="noopener noreferrer">
-            <img src={discord} alt="Discord" className="w-8 h-8 opacity-60 hover:opacity-100 transition" />
-          </a>
-          <a href="https://t.me/+RPRDDLSZWSk3ZjZh" target="_blank" rel="noopener noreferrer">
-            <img src={telegram} alt="Telegram" className="w-8 h-8 opacity-60 hover:opacity-100 transition" />
-          </a>
-          <a href="https://instagram.com/rootcee_" target="_blank" rel="noopener noreferrer">
-            <img src={instagram} alt="Instagram" className="w-8 h-8 opacity-60 hover:opacity-100 transition" />
-          </a>
-        </div>
-        <div className="mb-8">
-          <a
-            href="https://farcaster.xyz/rootcee"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center rounded-full border border-red-800/40 bg-red-900/20 px-5 py-2.5 text-sm font-semibold text-red-300 transition hover:bg-red-900/30 hover:text-white"
-          >
-            Follow on Farcaster
-          </a>
-        </div>
-        <p className="text-neutral-600 text-sm">&copy; 2025 Nerdie Blaq. All rights reserved.</p>
-      </section>
+      <PublicSiteFooter />
     </>
   );
 }

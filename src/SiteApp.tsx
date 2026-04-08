@@ -13,6 +13,10 @@ import Businesses from './pages/Businesses';
 import Ecosystem from './pages/Ecosystem';
 import MusicThankYou from './pages/MusicThankYou';
 import MusicCheckoutCancelled from './pages/MusicCheckoutCancelled';
+import Privacy from './pages/Privacy';
+import Terms from './pages/Terms';
+import Disclaimer from './pages/Disclaimer';
+import Contact from './pages/Contact';
 
 function Navbar() {
   const location = useLocation();
@@ -193,6 +197,10 @@ function AppRoutes() {
       <Route path="/music/thank-you" element={<MusicThankYou />} />
       <Route path="/music/checkout-cancelled" element={<MusicCheckoutCancelled />} />
       <Route path="/merch" element={<Merch />} />
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/terms" element={<Terms />} />
+      <Route path="/disclaimer" element={<Disclaimer />} />
+      <Route path="/contact" element={<Contact />} />
       <Route path="/mint" element={<Mint />} />
       <Route path="/vip" element={<Vip />} />
       <Route path="/dashboard" element={<Dashboard />} />

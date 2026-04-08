@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Seo from '../components/Seo';
+import PublicSiteFooter from '../components/PublicSiteFooter';
 
 const LISTEN_EVERYWHERE_LINK =
   'https://distrokid.com/hyperfollow/buddieroots/blaq?ref=release';
@@ -530,6 +531,7 @@ export default function Music() {
           </div>
         </div>
       </section>
+      <PublicSiteFooter />
     </>
   );
 }

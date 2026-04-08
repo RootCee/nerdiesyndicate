@@ -1,4 +1,5 @@
 import LearningCard from '../components/LearningCard';
+import PublicSiteFooter from '../components/PublicSiteFooter';
 import Seo from '../components/Seo';
 
 const coursePlaylistUrl = 'https://youtube.com/playlist?list=PLAX8YWrl6eTQsXS3R_onp5efHoLGWjxoC&si=Vgd0nalewfGigNki';
@@ -296,6 +297,7 @@ export default function Academy() {
           </div>
         </div>
       </section>
+      <PublicSiteFooter />
     </>
   );
 }

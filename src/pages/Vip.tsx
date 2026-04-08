@@ -1,9 +1,6 @@
 import { Link } from 'react-router-dom';
 import Seo from '../components/Seo';
-import twitter from '../images/twitter.png';
-import discord from '../images/discord.png';
-import telegram from '../images/telegram.png';
-import instagram from '../images/instagram.png';
+import PublicSiteFooter from '../components/PublicSiteFooter';
 
 export default function Vip() {
   return (
@@ -228,35 +225,10 @@ export default function Vip() {
           <p className="text-neutral-600 text-sm mb-10">
             Also hold a <Link to="/mint" className="clubhouse-link underline">Nerdie Syndicate NFT</Link> to unlock the full Clubhouse dashboard.
           </p>
-
-          <div className="flex justify-center items-center gap-6 mb-8">
-            <a href="https://twitter.com/rootcee" target="_blank" rel="noopener noreferrer">
-              <img src={twitter} alt="Twitter" className="w-8 h-8 opacity-60 hover:opacity-100 transition" />
-            </a>
-            <a href="https://discord.com/invite/S874axwJyY" target="_blank" rel="noopener noreferrer">
-              <img src={discord} alt="Discord" className="w-8 h-8 opacity-60 hover:opacity-100 transition" />
-            </a>
-            <a href="https://t.me/+RPRDDLSZWSk3ZjZh" target="_blank" rel="noopener noreferrer">
-              <img src={telegram} alt="Telegram" className="w-8 h-8 opacity-60 hover:opacity-100 transition" />
-            </a>
-            <a href="https://instagram.com/rootcee_" target="_blank" rel="noopener noreferrer">
-              <img src={instagram} alt="Instagram" className="w-8 h-8 opacity-60 hover:opacity-100 transition" />
-            </a>
-          </div>
-          <div className="mb-8">
-            <a
-              href="https://farcaster.xyz/rootcee"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="clubhouse-secondary-btn inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-semibold transition"
-            >
-              Follow on Farcaster
-            </a>
-          </div>
-          <p className="text-neutral-600 text-sm">&copy; 2025 Nerdie Blaq. All rights reserved.</p>
         </div>
       </section>
       </div>
+      <PublicSiteFooter />
     </>
   );
 }

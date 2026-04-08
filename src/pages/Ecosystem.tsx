@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import Seo from '../components/Seo';
+import PublicSiteFooter from '../components/PublicSiteFooter';
 
 const pillars = [
   {
@@ -323,17 +324,10 @@ export default function Ecosystem() {
                 {link.label}
               </Link>
             ))}
-            <a
-              href="https://farcaster.xyz/rootcee"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-full border border-red-800/40 bg-red-900/20 px-5 py-2.5 text-sm font-semibold text-red-300 transition hover:bg-red-900/30 hover:text-white"
-            >
-              Follow on Farcaster
-            </a>
           </div>
         </div>
       </section>
+      <PublicSiteFooter />
     </>
   );
 }

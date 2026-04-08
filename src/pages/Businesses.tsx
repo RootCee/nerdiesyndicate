@@ -1,4 +1,5 @@
 import Seo from '../components/Seo';
+import PublicSiteFooter from '../components/PublicSiteFooter';
 
 const featuredBusinesses = [
   {
@@ -99,7 +100,7 @@ export default function Businesses() {
           ))}
         </div>
       </section>
+      <PublicSiteFooter />
     </>
   );
 }
-

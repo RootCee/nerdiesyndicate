@@ -1,4 +1,5 @@
 import MerchProductCard from '../components/MerchProductCard';
+import PublicSiteFooter from '../components/PublicSiteFooter';
 import Seo from '../components/Seo';
 
 const ALIVE_SHOES_LINK = 'https://www.aliveshoes.com/nerdie-blaq-pearl2';
@@ -238,6 +239,7 @@ export default function Merch() {
           </a>
         </div>
       </section>
+      <PublicSiteFooter />
     </>
   );
 }
