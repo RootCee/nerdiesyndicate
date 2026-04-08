@@ -7,7 +7,7 @@ export const SITE_BASE_URL =
   (import.meta.env.VITE_CANONICAL_SITE_URL as string | undefined)?.replace(/\/+$/, '') ||
   'https://nerdieblaq.xyz';
 
-export const DEFAULT_OG_IMAGE_PATH = '/og-default.svg';
+export const DEFAULT_OG_IMAGE_PATH = '/nerdie-token-logo.png';
 
 export function buildCanonicalUrl(path = '/') {
   const normalizedPath = path === '/' ? '' : path.replace(/\/+$/, '');
