@@ -366,7 +366,8 @@ function DashboardContent({ address }: { address: string | null }) {
                         tbaAddress={tba?.tbaAddress}
                         ethBalance={tba?.ethBalance}
                         nerdieBalance={tba?.nerdieBalance}
-                        nerdieSymbol={tba?.nerdieSymbol}
+                        nerdieName={nerdieTokenMetadata?.name}
+                        nerdieSymbol={nerdieTokenMetadata?.symbol ?? tba?.nerdieSymbol}
                         nerdieLogoUri={nerdieTokenMetadata?.logoURI}
                         onClick={() => setSelectedTokenId(nft.tokenId)}
                       />
@@ -399,7 +400,8 @@ function DashboardContent({ address }: { address: string | null }) {
           tbaAddress={selectedTba?.tbaAddress}
           ethBalance={selectedTba?.ethBalance}
           nerdieBalance={selectedTba?.nerdieBalance}
-          nerdieSymbol={selectedTba?.nerdieSymbol}
+          nerdieName={nerdieTokenMetadata?.name}
+          nerdieSymbol={nerdieTokenMetadata?.symbol ?? selectedTba?.nerdieSymbol}
           nerdieLogoUri={nerdieTokenMetadata?.logoURI}
           onClose={() => setSelectedTokenId(null)}
         />

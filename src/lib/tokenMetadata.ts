@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 
 const TOKEN_LIST_URL = '/tokenlist.json';
-const PLACEHOLDER_LOGO_URI = 'REPLACE_WITH_MY_PUBLIC_LOGO_URL';
 
 interface TokenListToken {
   chainId: number;
@@ -37,17 +36,18 @@ function normalizeAddress(address: string) {
   return address.trim().toLowerCase();
 }
 
-export function useTokenMetadata(chainId: number, address?: string | null) {
-  const [metadata, setMetadata] = useState<TokenMetadata | null>(null);
+function sanitizeToken(token: TokenListToken): TokenMetadata {
+  return {
+    ...token,
+    logoURI: token.logoURI || undefined,
+  };
+}
+
+export function useTokenList(chainId: number) {
+  const [tokensByAddress, setTokensByAddress] = useState<Record<string, TokenMetadata>>({});
 
   useEffect(() => {
-    if (!address) {
-      setMetadata(null);
-      return;
-    }
-
     let cancelled = false;
-    const normalizedAddress = normalizeAddress(address);
 
     async function load() {
       try {
@@ -57,28 +57,19 @@ export function useTokenMetadata(chainId: number, address?: string | null) {
         }
 
         const tokenList = (await response.json()) as TokenList;
-        const matchedToken = tokenList.tokens.find(
-          (token) =>
-            token.chainId === chainId &&
-            normalizeAddress(token.address) === normalizedAddress
-        );
-
         if (!cancelled) {
-          setMetadata(
-            matchedToken
-              ? {
-                  ...matchedToken,
-                  logoURI:
-                    matchedToken.logoURI && matchedToken.logoURI !== PLACEHOLDER_LOGO_URI
-                      ? matchedToken.logoURI
-                      : undefined,
-                }
-              : null
+          setTokensByAddress(
+            tokenList.tokens.reduce<Record<string, TokenMetadata>>((acc, token) => {
+              if (token.chainId === chainId) {
+                acc[normalizeAddress(token.address)] = sanitizeToken(token);
+              }
+              return acc;
+            }, {})
           );
         }
       } catch {
         if (!cancelled) {
-          setMetadata(null);
+          setTokensByAddress({});
         }
       }
     }
@@ -88,7 +79,17 @@ export function useTokenMetadata(chainId: number, address?: string | null) {
     return () => {
       cancelled = true;
     };
-  }, [address, chainId]);
+  }, [chainId]);
 
-  return metadata;
+  return tokensByAddress;
+}
+
+export function useTokenMetadata(chainId: number, address?: string | null) {
+  const tokensByAddress = useTokenList(chainId);
+
+  if (!address) {
+    return null;
+  }
+
+  return tokensByAddress[normalizeAddress(address)] ?? null;
 }

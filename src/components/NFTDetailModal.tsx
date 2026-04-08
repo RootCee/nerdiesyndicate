@@ -10,6 +10,7 @@ interface NFTDetailModalProps {
   tbaAddress?: string;
   ethBalance?: string;
   nerdieBalance?: string;
+  nerdieName?: string;
   nerdieSymbol?: string;
   nerdieLogoUri?: string;
   onClose: () => void;
@@ -105,6 +106,7 @@ export default function NFTDetailModal({
   tbaAddress,
   ethBalance,
   nerdieBalance,
+  nerdieName,
   nerdieSymbol,
   nerdieLogoUri,
   onClose,
@@ -267,15 +269,18 @@ export default function NFTDetailModal({
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-1.5 text-neutral-500 text-xs">
+                    <span
+                      className="flex items-center gap-1.5 text-neutral-500 text-xs"
+                      title={nerdieName || nerdieSymbol || 'NERDIE'}
+                    >
                       {nerdieLogoUri && (
                         <img
                           src={nerdieLogoUri}
-                          alt={`${nerdieSymbol || 'NERDIE'} logo`}
+                          alt={`${nerdieName || nerdieSymbol || 'NERDIE'} logo`}
                           className="h-4 w-4 rounded-full object-cover"
                         />
                       )}
-                      <span>$NERDIE Balance</span>
+                      <span>{nerdieName || '$NERDIE Balance'}</span>
                     </span>
                     <span className="text-white text-sm font-mono font-bold">
                       {nerdieBalance ? parseFloat(nerdieBalance).toFixed(2) : '0.00'} {nerdieSymbol || 'NERDIE'}
