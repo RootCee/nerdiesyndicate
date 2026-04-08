@@ -14,6 +14,8 @@ import twitter from '../images/twitter.png';
 import discord from '../images/discord.png';
 import telegram from '../images/telegram.png';
 import instagram from '../images/instagram.png';
+import { CONTRACTS, BASE_CHAIN_ID } from '../lib/contracts';
+import { useTokenMetadata } from '../lib/tokenMetadata';
 
 // ─── State: No wallet connected ───
 function NoWalletState() {
@@ -232,6 +234,7 @@ function DashboardContent({ address }: { address: string | null }) {
   const { nfts, balance, loading: nftsLoading, error: nftsError, debug, refetch } = useNFTs(address);
   const tokenIds = nfts.map((n) => n.tokenId);
   const { tbas, loading: tbaLoading } = useTBA(tokenIds);
+  const nerdieTokenMetadata = useTokenMetadata(BASE_CHAIN_ID, CONTRACTS.NERDIE_TOKEN);
 
   const tbaMap = new Map(tbas.map((t) => [t.tokenId, t]));
   const selectedNft = nfts.find((n) => n.tokenId === selectedTokenId);
@@ -364,6 +367,7 @@ function DashboardContent({ address }: { address: string | null }) {
                         ethBalance={tba?.ethBalance}
                         nerdieBalance={tba?.nerdieBalance}
                         nerdieSymbol={tba?.nerdieSymbol}
+                        nerdieLogoUri={nerdieTokenMetadata?.logoURI}
                         onClick={() => setSelectedTokenId(nft.tokenId)}
                       />
                     );
@@ -396,6 +400,7 @@ function DashboardContent({ address }: { address: string | null }) {
           ethBalance={selectedTba?.ethBalance}
           nerdieBalance={selectedTba?.nerdieBalance}
           nerdieSymbol={selectedTba?.nerdieSymbol}
+          nerdieLogoUri={nerdieTokenMetadata?.logoURI}
           onClose={() => setSelectedTokenId(null)}
         />
       )}

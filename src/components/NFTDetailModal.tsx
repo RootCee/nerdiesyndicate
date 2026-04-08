@@ -11,6 +11,7 @@ interface NFTDetailModalProps {
   ethBalance?: string;
   nerdieBalance?: string;
   nerdieSymbol?: string;
+  nerdieLogoUri?: string;
   onClose: () => void;
 }
 
@@ -105,6 +106,7 @@ export default function NFTDetailModal({
   ethBalance,
   nerdieBalance,
   nerdieSymbol,
+  nerdieLogoUri,
   onClose,
 }: NFTDetailModalProps) {
   const [imgError, setImgError] = useState(false);
@@ -265,7 +267,16 @@ export default function NFTDetailModal({
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-neutral-500 text-xs">$NERDIE Balance</span>
+                    <span className="flex items-center gap-1.5 text-neutral-500 text-xs">
+                      {nerdieLogoUri && (
+                        <img
+                          src={nerdieLogoUri}
+                          alt={`${nerdieSymbol || 'NERDIE'} logo`}
+                          className="h-4 w-4 rounded-full object-cover"
+                        />
+                      )}
+                      <span>$NERDIE Balance</span>
+                    </span>
                     <span className="text-white text-sm font-mono font-bold">
                       {nerdieBalance ? parseFloat(nerdieBalance).toFixed(2) : '0.00'} {nerdieSymbol || 'NERDIE'}
                     </span>

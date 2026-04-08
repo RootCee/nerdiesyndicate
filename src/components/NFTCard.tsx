@@ -10,6 +10,7 @@ interface NFTCardProps {
   ethBalance?: string;
   nerdieBalance?: string;
   nerdieSymbol?: string;
+  nerdieLogoUri?: string;
   onClick: () => void;
 }
 
@@ -88,6 +89,7 @@ export default function NFTCard({
   ethBalance,
   nerdieBalance,
   nerdieSymbol,
+  nerdieLogoUri,
   onClick,
 }: NFTCardProps) {
   const [imgError, setImgError] = useState(false);
@@ -210,7 +212,16 @@ export default function NFTCard({
                 </span>
               </div>
               <div className="rounded-lg bg-zinc-950/70 p-2">
-                <span className="block text-neutral-600 text-[10px]">{nerdieSymbol || 'NERDIE'}</span>
+                <span className="flex items-center gap-1 text-neutral-600 text-[10px]">
+                  {nerdieLogoUri && (
+                    <img
+                      src={nerdieLogoUri}
+                      alt={`${nerdieSymbol || 'NERDIE'} logo`}
+                      className="h-3 w-3 rounded-full object-cover"
+                    />
+                  )}
+                  <span>{nerdieSymbol || 'NERDIE'}</span>
+                </span>
                 <span className="block text-neutral-300 text-[11px] font-mono mt-0.5">
                   {compactNerdieBalance || '0.00'}
                 </span>
