@@ -623,7 +623,7 @@ export default function Home({
       '@type': 'Organization',
       name: 'Nerdie Blaq',
       url: 'https://nerdieblaq.xyz/',
-      logo: 'https://nerdieblaq.xyz/og-default.svg',
+      logo: 'https://nerdieblaq.xyz/nerdie-token-logo.png',
       sameAs: [
         'https://twitter.com/rootcee',
         'https://instagram.com/rootcee_',
