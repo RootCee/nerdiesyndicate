@@ -18,6 +18,17 @@ import Terms from './pages/Terms';
 import Disclaimer from './pages/Disclaimer';
 import Contact from './pages/Contact';
 
+function ScrollToTop() {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.hash) return;
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [location.pathname, location.search, location.hash]);
+
+  return null;
+}
+
 function Navbar() {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -223,6 +234,7 @@ export function AppShell({
 
   return (
     <div className="site-shell scroll-smooth">
+      <ScrollToTop />
       <Navbar />
 
       {showConnectButton && isHydrated ? (
