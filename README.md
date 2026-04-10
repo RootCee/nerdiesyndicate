@@ -1,3 +1,6 @@
+![Build](https://img.shields.io/badge/build-passing-brightgreen)
+![Web3](https://img.shields.io/badge/web3-enabled-blue)
+![Status](https://img.shields.io/badge/status-active-orange)
 🧠 Nerdie Syndicate
 
 Web3 meets the Metaverse. Build, operate, and scale your own city economy.
@@ -215,14 +218,3 @@ Players don’t just own assets — they earn the right to operate them.
 RootCee (Cornelius Bowser Jr.)
 San Diego, CA
 Web3 Developer • Musician • Builder
-
-⸻
-
-🔥 Optional Add-Ons (I recommend)
-
-After you paste this, you can also add:
-
-Badges at the top
-![Build](https://img.shields.io/badge/build-passing-brightgreen)
-![Web3](https://img.shields.io/badge/web3-enabled-blue)
-![Status](https://img.shields.io/badge/status-active-orange)
