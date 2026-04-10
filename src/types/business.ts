@@ -3,16 +3,33 @@ import type { CertificationMissionDefinition } from "./missions";
 import type { RankTier } from "./progression";
 
 export type BusinessSector =
-  | "retail"
-  | "racing_mechanical"
-  | "technology"
-  | "black_market_underground";
+  | "retail_business"
+  | "tech_startup"
+  | "entertainment_venue"
+  | "manufacturing_unit"
+  | "financial_institution";
 
 export type BusinessTypeId =
   | "market_shop"
-  | "garage"
+  | "streetwear_boutique"
+  | "supply_store"
+  | "black_market_stall"
   | "data_hub"
-  | "black_market_stall";
+  | "bot_lab"
+  | "signal_center"
+  | "security_office"
+  | "club"
+  | "music_lounge"
+  | "event_hall"
+  | "streaming_studio"
+  | "garage"
+  | "repair_shop"
+  | "mod_shop"
+  | "workshop"
+  | "bank_branch"
+  | "exchange_desk"
+  | "treasury_office"
+  | "lending_hall";
 
 export type BusinessNftClassId =
   | "retail_business"
@@ -23,14 +40,36 @@ export type BusinessNftClassId =
 
 export type BusinessPermissionId =
   | "open_market_shop"
-  | "open_garage"
-  | "open_data_hub"
+  | "open_streetwear_boutique"
+  | "open_supply_store"
   | "open_black_market_stall"
+  | "open_data_hub"
+  | "open_bot_lab"
+  | "open_signal_center"
+  | "open_security_office"
+  | "open_club"
+  | "open_music_lounge"
+  | "open_event_hall"
+  | "open_streaming_studio"
+  | "open_garage"
+  | "open_repair_shop"
+  | "open_mod_shop"
+  | "open_workshop"
+  | "open_bank_branch"
+  | "open_exchange_desk"
+  | "open_treasury_office"
+  | "open_lending_hall"
   | "public_commerce_ops"
   | "technical_service_ops"
+  | "entertainment_ops"
+  | "manufacturing_ops"
+  | "financial_ops"
   | "underground_trade_ops"
   | "trusted_public_commerce_ops"
   | "trusted_technical_ops"
+  | "trusted_entertainment_ops"
+  | "trusted_manufacturing_ops"
+  | "trusted_financial_ops"
   | "trusted_underground_ops"
   | "advanced_operator_access"
   | "trusted_defense_coordination"
@@ -99,6 +138,7 @@ export interface BusinessEligibilityDefinition {
   preferredDistricts: NerdieCityDistrict[];
   recommendedRoles: NerdieCityRole[];
   requiredCertificationMissionIds: CertificationMissionDefinition["id"][];
+  requiredActivationCertificationMissionIds: CertificationMissionDefinition["id"][];
   teamSlots: BusinessTeamSlotDefinition;
   defenseSlots: BusinessDefenseSlotDefinition;
   trustPolicy: BusinessTrustPolicyDefinition;

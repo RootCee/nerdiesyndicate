@@ -151,8 +151,14 @@ export function buildBusinessSurfaceActionGuidance(
 
   return {
     activeOperatorLabel: `NFT #${gameplayProfile.progression.profile.subjectId}`,
-    certificationsImplemented: qualificationSummaries
-      .flatMap((summary) => summary.definition.requiredCertificationMissionIds)
+    certificationsImplemented: [
+      ...qualificationSummaries.flatMap(
+        (summary) => summary.definition.requiredCertificationMissionIds
+      ),
+      ...openedBusinessSummaries.flatMap(
+        (summary) => summary.definition.requiredActivationCertificationMissionIds
+      ),
+    ]
       .filter((value, index, array) => array.indexOf(value) === index),
     approval: {
       locked: approvalLocked,

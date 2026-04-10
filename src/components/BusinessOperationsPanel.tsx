@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { BUSINESS_STAKING_TIER_ORDER } from "../config/gameplay";
 import { buildOpenedBusinessOperationSummaries } from "../lib/businessOperationsStatus";
 import { getPhase1BusinessStakingTierDefinition } from "../lib/businessEligibility";
@@ -82,6 +82,7 @@ export default function BusinessOperationsPanel({
   missionState,
   onMissionStateChange,
 }: BusinessOperationsPanelProps) {
+  const [expandedBusinessKeys, setExpandedBusinessKeys] = useState<Record<string, boolean>>({});
   const businessSummaries = useMemo(
     () => buildOpenedBusinessOperationSummaries(gameplayProfile, missionState),
     [gameplayProfile, missionState]
@@ -143,46 +144,65 @@ export default function BusinessOperationsPanel({
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
-        {businessSummaries.map((summary) => (
-          <div
-            key={`${summary.definition.id}:${summary.openedBusiness.district}`}
-            className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-white">{summary.definition.name}</p>
-                <p className="mt-1 text-xs text-neutral-500">
-                  {formatValue(summary.definition.sector)} • {formatValue(summary.openedBusiness.district)}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className={`rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] ${getOperationalStateClasses(
-                    summary.operationalState.state
-                  )}`}
-                >
-                  {summary.operationalState.label}
-                </span>
-                <span
-                  className={`rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] ${
-                    summary.activationStatus === "activation_ready"
-                      ? "bg-emerald-950/80 text-emerald-300"
-                      : "bg-amber-950/80 text-amber-300"
-                  }`}
-                >
-                  {getActivationLabel(summary.activationStatus)}
-                </span>
-                <span
-                  className={`rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] ${getTeamReadinessClasses(
-                    summary.team.readyForActivation
-                  )}`}
-                >
-                  {summary.team.readinessLabel}
-                </span>
-              </div>
-            </div>
+        {businessSummaries.map((summary) => {
+          const businessKey = `${summary.definition.id}:${summary.openedBusiness.district}`;
+          const isExpanded = expandedBusinessKeys[businessKey] ?? false;
 
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          return (
+            <div
+              key={businessKey}
+              className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-white">{summary.definition.name}</p>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    {formatValue(summary.definition.sector)} •{" "}
+                    {formatValue(summary.openedBusiness.district)}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] ${getOperationalStateClasses(
+                      summary.operationalState.state
+                    )}`}
+                  >
+                    {summary.operationalState.label}
+                  </span>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] ${
+                      summary.activationStatus === "activation_ready"
+                        ? "bg-emerald-950/80 text-emerald-300"
+                        : "bg-amber-950/80 text-amber-300"
+                    }`}
+                  >
+                    {getActivationLabel(summary.activationStatus)}
+                  </span>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] ${getTeamReadinessClasses(
+                      summary.team.readyForActivation
+                    )}`}
+                  >
+                    {summary.team.readinessLabel}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpandedBusinessKeys((current) => ({
+                        ...current,
+                        [businessKey]: !isExpanded,
+                      }))
+                    }
+                    className="rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-[10px] uppercase tracking-[0.18em] text-neutral-200 transition hover:border-zinc-600 hover:text-white"
+                  >
+                    {isExpanded ? "Collapse Variant" : "Expand Variant"}
+                  </button>
+                </div>
+              </div>
+
+              {isExpanded ? (
+                <>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
                 <p className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">
                   Business NFT Class
@@ -291,6 +311,37 @@ export default function BusinessOperationsPanel({
                       : "None linked"}
                   </span>
                 </p>
+              </div>
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3 sm:col-span-2">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">
+                    Activation Certification
+                  </p>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] ${
+                      summary.activationCertification.satisfied
+                        ? "bg-emerald-950/80 text-emerald-300"
+                        : "bg-amber-950/80 text-amber-300"
+                    }`}
+                  >
+                    {summary.activationCertification.satisfied ? "Qualified" : "Required"}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm font-medium text-white">
+                  {summary.activationCertification.requiredLabels.length > 0
+                    ? summary.activationCertification.requiredLabels.join(", ")
+                    : "No activation certification required"}
+                </p>
+                <p className="mt-1 text-xs text-neutral-500">
+                  {summary.activationCertification.missingLabels.length > 0
+                    ? `Missing: ${summary.activationCertification.missingLabels.join(", ")}`
+                    : "All current activation certifications are satisfied."}
+                </p>
+                {summary.activationCertification.proofLabels.length > 0 && (
+                  <p className="mt-1 text-xs text-neutral-500">
+                    Future proof: {summary.activationCertification.proofLabels.join(", ")}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -767,8 +818,11 @@ export default function BusinessOperationsPanel({
                 </div>
               </div>
             </div>
-          </div>
-        ))}
+                </>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

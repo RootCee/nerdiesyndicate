@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import BusinessEligibilityPreviewPanel from "./BusinessEligibilityPreviewPanel";
 import BusinessOperationsPanel from "./BusinessOperationsPanel";
 import {
@@ -80,6 +80,41 @@ function groupMissionsByDistrict(missions: MissionDefinition[]) {
   };
 }
 
+interface CollapsibleSectionProps {
+  title: string;
+  subtitle?: string;
+  isOpen: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}
+
+function CollapsibleSection({
+  title,
+  subtitle,
+  isOpen,
+  onToggle,
+  children,
+}: CollapsibleSectionProps) {
+  return (
+    <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/30">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-zinc-900/40"
+      >
+        <div>
+          <p className="text-sm font-semibold text-white">{title}</p>
+          {subtitle ? <p className="mt-1 text-xs text-neutral-500">{subtitle}</p> : null}
+        </div>
+        <span className="rounded-full border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-neutral-300">
+          {isOpen ? "Collapse" : "Expand"}
+        </span>
+      </button>
+      {isOpen ? <div className="border-t border-zinc-800 px-4 py-4">{children}</div> : null}
+    </div>
+  );
+}
+
 export default function MissionHarnessPanel({
   subjects,
   selectedTokenId,
@@ -88,6 +123,12 @@ export default function MissionHarnessPanel({
   onMissionStateChange,
   onResetSubject,
 }: MissionHarnessPanelProps) {
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    qualification: false,
+    certifications: false,
+    ownershipSetup: false,
+    activationOperations: false,
+  });
   const selectedSubject =
     subjects.find((subject) => subject.tokenId === selectedTokenId) ?? subjects[0] ?? null;
 
@@ -140,6 +181,11 @@ export default function MissionHarnessPanel({
   );
   const subjectDistrict = selectedSubject.gameplayProfile.metadata.normalizedTraits.location;
   const subjectRole = selectedSubject.gameplayProfile.metadata.normalizedTraits.roleInNerdieCity;
+  const setSectionOpen = (sectionId: string) =>
+    setOpenSections((current) => ({
+      ...current,
+      [sectionId]: !current[sectionId],
+    }));
 
   const renderMissionCard = (mission: MissionDefinition) => {
     const evaluation = evaluations.find((entry) => entry.missionId === mission.id);
@@ -452,53 +498,82 @@ export default function MissionHarnessPanel({
         </span>
       </div>
 
-      <div className="mt-4 flex items-center gap-3">
-        <h3 className="text-sm font-semibold text-white">Qualification</h3>
-        <div className="h-px flex-1 bg-zinc-800" />
-      </div>
-
-      {certificationCatalog.length > 0 && (
-        <div className="mt-4 space-y-3">
-          <div className="flex items-center gap-3">
-            <h3 className="text-sm font-semibold text-white">Certification Missions</h3>
-            <div className="h-px flex-1 bg-zinc-800" />
-          </div>
-          {certificationCatalog.map(renderCertificationCard)}
-        </div>
-      )}
-
-      <div className="mt-4 space-y-3">
-        {grouped.map((entry) => (
-          <div key={entry.district} className="space-y-3">
-            <div className="flex items-center gap-3">
-              <h3 className="text-sm font-semibold text-white">{formatDistrictLabel(entry.district)}</h3>
-              <div className="h-px flex-1 bg-zinc-800" />
-            </div>
-            {entry.missions.map(renderMissionCard)}
-          </div>
-        ))}
-        {generalMissions.length > 0 && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <h3 className="text-sm font-semibold text-white">General Contracts</h3>
-              <div className="h-px flex-1 bg-zinc-800" />
-            </div>
-            {generalMissions.map(renderMissionCard)}
-          </div>
+      <CollapsibleSection
+        title="Qualification"
+        subtitle="Certifications and mission groups can now be opened one section at a time."
+        isOpen={openSections.qualification ?? false}
+        onToggle={() => setSectionOpen("qualification")}
+      >
+        {certificationCatalog.length > 0 && (
+          <CollapsibleSection
+            title="Certification Missions"
+            subtitle={`${certificationCatalog.length} certification mission${certificationCatalog.length === 1 ? "" : "s"}`}
+            isOpen={openSections.certifications ?? false}
+            onToggle={() => setSectionOpen("certifications")}
+          >
+            <div className="space-y-3">{certificationCatalog.map(renderCertificationCard)}</div>
+          </CollapsibleSection>
         )}
-      </div>
 
-      <BusinessEligibilityPreviewPanel
-        gameplayProfile={selectedSubject.gameplayProfile}
-        missionState={selectedState}
-        onMissionStateChange={(nextState) => onMissionStateChange(selectedSubject.tokenId, nextState)}
-      />
+        <div className="space-y-3">
+          {grouped.map((entry) => {
+            const sectionId = `district:${entry.district}`;
 
-      <BusinessOperationsPanel
-        gameplayProfile={selectedSubject.gameplayProfile}
-        missionState={selectedState}
-        onMissionStateChange={(nextState) => onMissionStateChange(selectedSubject.tokenId, nextState)}
-      />
+            return (
+              <CollapsibleSection
+                key={entry.district}
+                title={formatDistrictLabel(entry.district)}
+                subtitle={`${entry.missions.length} mission${entry.missions.length === 1 ? "" : "s"}`}
+                isOpen={openSections[sectionId] ?? false}
+                onToggle={() => setSectionOpen(sectionId)}
+              >
+                <div className="space-y-3">{entry.missions.map(renderMissionCard)}</div>
+              </CollapsibleSection>
+            );
+          })}
+
+          {generalMissions.length > 0 && (
+            <CollapsibleSection
+              title="General Contracts"
+              subtitle={`${generalMissions.length} repeatable contract${generalMissions.length === 1 ? "" : "s"}`}
+              isOpen={openSections.generalContracts ?? false}
+              onToggle={() => setSectionOpen("generalContracts")}
+            >
+              <div className="space-y-3">{generalMissions.map(renderMissionCard)}</div>
+            </CollapsibleSection>
+          )}
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Ownership / Setup"
+        subtitle="Browse sector-backed business variants and expand only the one you want to inspect."
+        isOpen={openSections.ownershipSetup ?? false}
+        onToggle={() => setSectionOpen("ownershipSetup")}
+      >
+        <BusinessEligibilityPreviewPanel
+          gameplayProfile={selectedSubject.gameplayProfile}
+          missionState={selectedState}
+          onMissionStateChange={(nextState) =>
+            onMissionStateChange(selectedSubject.tokenId, nextState)
+          }
+        />
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Activation / Operations"
+        subtitle="Opened businesses can now be browsed one variant at a time."
+        isOpen={openSections.activationOperations ?? false}
+        onToggle={() => setSectionOpen("activationOperations")}
+      >
+        <BusinessOperationsPanel
+          gameplayProfile={selectedSubject.gameplayProfile}
+          missionState={selectedState}
+          onMissionStateChange={(nextState) =>
+            onMissionStateChange(selectedSubject.tokenId, nextState)
+          }
+        />
+      </CollapsibleSection>
     </div>
   );
 }

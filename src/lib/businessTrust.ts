@@ -101,15 +101,46 @@ function getAdvancedPermissionLabels(
 } {
   switch (definition.id) {
     case "market_shop":
+    case "streetwear_boutique":
+    case "supply_store":
       return {
         higherTrustOperations: "trusted_public_commerce_ops",
         defensePermissions: "trusted_defense_coordination",
         advancedOperatorAccess: "advanced_operator_access",
       };
-    case "garage":
+    case "bot_lab":
+    case "signal_center":
+    case "security_office":
     case "data_hub":
       return {
         higherTrustOperations: "trusted_technical_ops",
+        defensePermissions: "hardened_defense_access",
+        advancedOperatorAccess: "advanced_operator_access",
+      };
+    case "garage":
+    case "repair_shop":
+    case "mod_shop":
+    case "workshop":
+      return {
+        higherTrustOperations: "trusted_manufacturing_ops",
+        defensePermissions: "hardened_defense_access",
+        advancedOperatorAccess: "advanced_operator_access",
+      };
+    case "club":
+    case "music_lounge":
+    case "event_hall":
+    case "streaming_studio":
+      return {
+        higherTrustOperations: "trusted_entertainment_ops",
+        defensePermissions: "trusted_defense_coordination",
+        advancedOperatorAccess: "advanced_operator_access",
+      };
+    case "bank_branch":
+    case "exchange_desk":
+    case "treasury_office":
+    case "lending_hall":
+      return {
+        higherTrustOperations: "trusted_financial_ops",
         defensePermissions: "hardened_defense_access",
         advancedOperatorAccess: "advanced_operator_access",
       };

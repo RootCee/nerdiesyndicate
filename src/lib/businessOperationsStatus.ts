@@ -42,6 +42,15 @@ export interface OpenedBusinessOperationSummary {
   lotContext: string;
   ownershipStatus: BusinessOwnershipStatus;
   activationStatus: BusinessActivationStatus;
+  activationCertification: {
+    requiredMissionIds: string[];
+    completedMissionIds: string[];
+    missingMissionIds: string[];
+    requiredLabels: string[];
+    missingLabels: string[];
+    proofLabels: string[];
+    satisfied: boolean;
+  };
   operatorStatus: BusinessRoleFit;
   staking: BusinessGameplayStakingSummary;
   team: BusinessTeamStatusSummary;
@@ -52,6 +61,25 @@ export interface OpenedBusinessOperationSummary {
   futureRequirementPlaceholders: string[];
   requiredChecks: BusinessEligibilityCheck[];
   missingChecks: BusinessEligibilityCheck[];
+}
+
+function buildCertificationLabelLookup() {
+  return new Map(
+    getMockCertificationMissions().map((mission) => [
+      mission.id,
+      {
+        title: mission.title,
+        proofLabel: mission.proof?.label ?? null,
+      },
+    ])
+  );
+}
+
+function formatMissionIdLabel(value: string): string {
+  return value
+    .split("_")
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
 }
 
 function getBusinessDefinition(
@@ -87,31 +115,77 @@ function getOwnershipStatus(
 }
 
 function getCertificationNotes(
-  businessTypeId: BusinessEligibilityDefinition["id"]
+  definition: BusinessEligibilityDefinition,
+  activationCertification: OpenedBusinessOperationSummary["activationCertification"]
 ): string[] {
-  switch (businessTypeId) {
+  const activationNotes =
+    definition.requiredActivationCertificationMissionIds.length > 0
+      ? [
+          activationCertification.satisfied
+            ? `Activation certification satisfied: ${activationCertification.requiredLabels.join(", ")}.`
+            : `Activation currently requires: ${activationCertification.requiredLabels.join(", ")}.`,
+          activationCertification.proofLabels.length > 0
+            ? `Future proof path: ${activationCertification.proofLabels.join(", ")}.`
+            : "Future proof path for activation certification has not been named yet.",
+        ]
+      : [];
+
+  switch (definition.id) {
     case "market_shop":
+    case "streetwear_boutique":
+    case "supply_store":
       return [
+        ...activationNotes,
         "No certification is required for the current starter-tier business opening flow.",
-        "Future commerce or branding certification may be recommended for higher-trust retail variants.",
+        "Future commerce, branding, or supply-chain certification may be recommended for higher-trust retail variants.",
+      ];
+    case "club":
+    case "music_lounge":
+    case "event_hall":
+    case "streaming_studio":
+      return [
+        ...activationNotes,
+        "No certification is required for the current starter entertainment opening flow.",
+        "Future venue, creator, or event-operations certification is expected for higher-trust entertainment variants later.",
       ];
     case "garage":
+    case "repair_shop":
+    case "mod_shop":
+    case "workshop":
       return [
-        "No certification is required for the current starter-tier garage opening flow.",
-        "Future systems, automation, or mechanical/logistics testing is expected for higher-trust garage operations.",
+        ...activationNotes,
+        "No certification is required for the current starter manufacturing opening flow.",
+        "Future systems, automation, mechanical, or logistics testing is expected for higher-trust manufacturing variants.",
       ];
+    case "bot_lab":
+    case "signal_center":
+    case "security_office":
     case "data_hub":
       return [
-        "Beginner DeFi Certification is a recommended knowledge signal for this business family.",
-        "Advanced finance, data, or systems testing is expected for higher-trust technical operations later.",
+        ...activationNotes,
+        "Current certification rules vary by technical variant, but systems and operator trust remain central to this business family.",
+        "Where Beginner DeFi Certification is already required, it should be treated as a starter proof and not the final trust gate.",
+      ];
+    case "bank_branch":
+    case "exchange_desk":
+    case "treasury_office":
+    case "lending_hall":
+      return [
+        ...activationNotes,
+        "Beginner DeFi Certification is the current finance-aligned proof path for these variants.",
+        "Future treasury, lending, exchange, or compliance certification is expected for higher-trust financial operations later.",
       ];
     case "black_market_stall":
       return [
+        ...activationNotes,
         "No certification is strictly required for the current local opening flow.",
         "Future underground-trade, security, or trust testing is expected for advanced operations later.",
       ];
     default:
-      return ["No certification guidance has been defined for this business yet."];
+      return [
+        ...activationNotes,
+        "No certification guidance has been defined for this business yet.",
+      ];
   }
 }
 
@@ -154,20 +228,70 @@ function getActivationStatus(
   return "opened_but_gated";
 }
 
+function buildActivationCertificationChecks(
+  definition: BusinessEligibilityDefinition,
+  completedMissionIds: string[],
+  certificationLabelLookup: Map<string, { title: string; proofLabel: string | null }>
+) {
+  const requiredMissionIds = definition.requiredActivationCertificationMissionIds;
+  const completedForRequirement = requiredMissionIds.filter((missionId) =>
+    completedMissionIds.includes(missionId)
+  );
+  const missingMissionIds = requiredMissionIds.filter(
+    (missionId) => !completedMissionIds.includes(missionId)
+  );
+  const requiredLabels = requiredMissionIds.map(
+    (missionId) => certificationLabelLookup.get(missionId)?.title ?? formatMissionIdLabel(missionId)
+  );
+  const missingLabels = missingMissionIds.map(
+    (missionId) => certificationLabelLookup.get(missionId)?.title ?? formatMissionIdLabel(missionId)
+  );
+  const proofLabels = requiredMissionIds
+    .map((missionId) => certificationLabelLookup.get(missionId)?.proofLabel ?? null)
+    .filter((value): value is string => Boolean(value));
+
+  return {
+    summary: {
+      requiredMissionIds,
+      completedMissionIds: completedForRequirement,
+      missingMissionIds,
+      requiredLabels,
+      missingLabels,
+      proofLabels,
+      satisfied: missingMissionIds.length === 0,
+    },
+    checks: missingMissionIds.map((missionId) => {
+      const label =
+        certificationLabelLookup.get(missionId)?.title ?? formatMissionIdLabel(missionId);
+
+      return {
+        type: "certification" as const,
+        passed: false,
+        blocking: true,
+        message: `Activation requires certification: ${label}.`,
+        currentValue: completedForRequirement.join(", ") || null,
+        requiredValue: requiredLabels.join(", ") || null,
+      };
+    }),
+  };
+}
+
 export function buildOpenedBusinessOperationSummaries(
   gameplayProfile: NFTGameplayProfile,
   missionState: LocalMissionSubjectState
 ): OpenedBusinessOperationSummary[] {
   const districtAffinity = gameplayProfile.metadata.normalizedTraits.location;
   const role = gameplayProfile.metadata.normalizedTraits.roleInNerdieCity;
+  const completedCertificationMissionIds = getMockCertificationMissions()
+    .map((mission) => mission.id)
+    .filter((missionId) => missionState.completedMissionIds.includes(missionId));
+  const certificationLabelLookup = buildCertificationLabelLookup();
   const subject = buildBusinessEligibilitySubject({
     progression: gameplayProfile.progression,
     stakingTier: missionState.stakingTier,
     ownedBusinessNftCount: missionState.ownedBusinessNftCount,
     ownedBusinessNftClasses: missionState.ownedBusinessNftClasses,
-    completedCertificationMissionIds: getMockCertificationMissions()
-      .map((mission) => mission.id)
-      .filter((missionId) => missionState.completedMissionIds.includes(missionId)),
+    completedCertificationMissionIds,
     districtAffinity,
     role,
   });
@@ -179,10 +303,30 @@ export function buildOpenedBusinessOperationSummaries(
       businessTypeId: openedBusiness.businessTypeId,
       district: openedBusiness.district,
     });
+    const activationCertification = buildActivationCertificationChecks(
+      definition,
+      completedCertificationMissionIds,
+      certificationLabelLookup
+    );
+    const activationEvaluation: BusinessEligibilityResult = {
+      ...evaluation,
+      eligible: evaluation.eligible && activationCertification.summary.satisfied,
+      checks: [...evaluation.checks, ...activationCertification.checks],
+      missingRequirements: [
+        ...evaluation.missingRequirements,
+        ...activationCertification.checks,
+      ],
+      advisoryNotes: activationCertification.summary.satisfied
+        ? evaluation.advisoryNotes
+        : [
+            ...evaluation.advisoryNotes,
+            `Activation still requires ${activationCertification.summary.missingLabels.join(", ")}.`,
+          ],
+    };
     const businessNftClass = openedBusiness.openedViaBusinessNftClass
       ? getBusinessNftClassDefinition(openedBusiness.openedViaBusinessNftClass)
       : null;
-    const ownershipStatus = getOwnershipStatus(openedBusiness, evaluation);
+    const ownershipStatus = getOwnershipStatus(openedBusiness, activationEvaluation);
     const lotEntry = openedBusiness.lotId
       ? getBusinessLotRegistryEntry(missionState, openedBusiness.lotId)
       : null;
@@ -224,7 +368,7 @@ export function buildOpenedBusinessOperationSummaries(
     );
     const operationalState = buildBusinessOperationalStateSummary({
       ownershipStatus,
-      evaluation,
+      evaluation: activationEvaluation,
       staking,
       team,
       defense,
@@ -235,21 +379,25 @@ export function buildOpenedBusinessOperationSummaries(
     return {
       openedBusiness,
       definition,
-      evaluation,
+      evaluation: activationEvaluation,
       businessNftClass,
       lotContext,
       ownershipStatus,
-      activationStatus: getActivationStatus(evaluation),
+      activationStatus: getActivationStatus(activationEvaluation),
+      activationCertification: activationCertification.summary,
       operatorStatus: evaluation.roleFit,
       staking,
       team,
       defense,
       trust,
       operationalState,
-      certificationNotes: getCertificationNotes(openedBusiness.businessTypeId),
+      certificationNotes: getCertificationNotes(
+        definition,
+        activationCertification.summary
+      ),
       futureRequirementPlaceholders: getFutureRequirementPlaceholders(definition),
-      requiredChecks: evaluation.checks.filter((check) => check.passed),
-      missingChecks: evaluation.missingRequirements,
+      requiredChecks: activationEvaluation.checks.filter((check) => check.passed),
+      missingChecks: activationEvaluation.missingRequirements,
     };
   });
 }

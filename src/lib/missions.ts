@@ -13,6 +13,7 @@ import type {
 const PHASE1_MISSION_BALANCE = {
   districtRunnerBonus: { xp: 140, reputation: 8 },
   beginnerCertification: { xp: 110, reputation: 6 },
+  operatorStakingCertification: { xp: 135, reputation: 8 },
   darkAlleyRiskPremium: {
     smugglerReputation: 8,
     smugglerHeat: 3,
@@ -238,6 +239,85 @@ const MOCK_CERTIFICATION_MISSIONS: CertificationMissionDefinition[] = [
         explanation: "Slippage is the price movement between quote time and execution time.",
       },
     ],
+    proof: {
+      proofType: "soulbound_badge",
+      proofKey: "proof.beginner_defi",
+      label: "Beginner DeFi Proof",
+      description:
+        "Future soulbound proof for baseline DeFi literacy in city-linked financial and technical lanes.",
+    },
+  },
+  {
+    id: "business-operator-staking-certification",
+    title: "Business Operator / Staking Certification",
+    description:
+      "Pass a short operator-readiness quiz to prove baseline understanding of activation, staking entitlement, operator responsibility, and local business safety before live activation expands.",
+    missionClass: "certification",
+    category: "certification",
+    minLevel: 5,
+    rewards: {
+      xp: PHASE1_MISSION_BALANCE.operatorStakingCertification.xp,
+      xpSource: "business_operation",
+      reputation: PHASE1_MISSION_BALANCE.operatorStakingCertification.reputation,
+    },
+    passThreshold: 3,
+    questions: [
+      {
+        id: "activation-bridge-purpose",
+        prompt: "What is the current purpose of the staking bridge in the local business slice?",
+        options: [
+          { id: "a", label: "It acts as an activation entitlement for business gameplay, not a second reward lane." },
+          { id: "b", label: "It permanently replaces all business ownership checks." },
+          { id: "c", label: "It automatically fills operator and defense slots." },
+        ],
+        correctOptionId: "a",
+        explanation:
+          "The current slice treats staking as an activation entitlement bridge while leaving token rewards on the existing staking contract lane.",
+      },
+      {
+        id: "operator-readiness",
+        prompt: "What must still be true before a locally opened business can become active after staking is present?",
+        options: [
+          { id: "a", label: "Only the district color theme must match the NFT image." },
+          { id: "b", label: "Required owner/operator coverage and other business requirements still need to be satisfied." },
+          { id: "c", label: "The business automatically becomes active with no other checks." },
+        ],
+        correctOptionId: "b",
+        explanation:
+          "Activation still depends on the broader business rules, including required staffing and any remaining gating conditions.",
+      },
+      {
+        id: "activation-scope",
+        prompt: "Why is a separate operator/staking certification useful in the current roadmap?",
+        options: [
+          { id: "a", label: "It separates activation readiness from setup and can later become a reusable proof." },
+          { id: "b", label: "It removes the need for business variants and district fit." },
+          { id: "c", label: "It lets the UI bypass domain-level eligibility rules." },
+        ],
+        correctOptionId: "a",
+        explanation:
+          "The operator/staking certification is a distinct readiness proof for activation and can later evolve into a soulbound credential.",
+      },
+      {
+        id: "stake-tier-awareness",
+        prompt: "What does the required staking tier represent in the current business model?",
+        options: [
+          { id: "a", label: "A gameplay activation threshold tied to the business path being operated." },
+          { id: "b", label: "A guaranteed city-wide combat bonus." },
+          { id: "c", label: "A replacement for certifications, staffing, and trust." },
+        ],
+        correctOptionId: "a",
+        explanation:
+          "The required tier represents the level of staking entitlement needed for that business path's activation state.",
+      },
+    ],
+    proof: {
+      proofType: "soulbound_badge",
+      proofKey: "proof.business_operator_staking",
+      label: "Business Operator / Staking Proof",
+      description:
+        "Future soulbound proof for operator readiness and staking-aware business activation.",
+    },
   },
 ];
 

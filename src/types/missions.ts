@@ -61,6 +61,13 @@ export interface CertificationQuestionDefinition {
   explanation: string;
 }
 
+export interface CertificationProofDefinition {
+  proofType: "soulbound_badge";
+  proofKey: string;
+  label: string;
+  description: string;
+}
+
 export interface CertificationMissionDefinition {
   id: string;
   title: string;
@@ -71,6 +78,7 @@ export interface CertificationMissionDefinition {
   rewards: MissionReward;
   passThreshold: number;
   questions: CertificationQuestionDefinition[];
+  proof?: CertificationProofDefinition;
 }
 
 export interface MissionProgressInput {

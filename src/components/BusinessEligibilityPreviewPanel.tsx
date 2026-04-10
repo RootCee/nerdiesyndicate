@@ -44,6 +44,8 @@ export default function BusinessEligibilityPreviewPanel({
   missionState,
   onMissionStateChange,
 }: BusinessEligibilityPreviewPanelProps) {
+  const [isQualificationOpen, setIsQualificationOpen] = useState(false);
+  const [isBusinessSetupOpen, setIsBusinessSetupOpen] = useState(false);
   const [districtSelections, setDistrictSelections] = useState<
     Record<string, NerdieCityDistrict>
   >({});
@@ -75,6 +77,13 @@ export default function BusinessEligibilityPreviewPanel({
     () => buildBusinessClassFlowSummary(selectedBusinessNftClassId),
     [selectedBusinessNftClassId]
   );
+  const allClassFlowSummaries = useMemo(
+    () =>
+      businessNftClassOptions
+        .map((businessNftClass) => buildBusinessClassFlowSummary(businessNftClass.id))
+        .filter((summary): summary is NonNullable<typeof classFlowSummary> => Boolean(summary)),
+    [businessNftClassOptions]
+  );
   const completedCertificationIds = new Set(
     getMockCertificationMissions()
       .map((mission) => mission.id)
@@ -96,8 +105,8 @@ export default function BusinessEligibilityPreviewPanel({
     );
     const firstBusinessTypeId = setupSummaries[0].definition.id;
 
-    if (!expandedBusinessTypeId || !validBusinessTypeIds.has(expandedBusinessTypeId)) {
-      setExpandedBusinessTypeId(firstBusinessTypeId);
+    if (expandedBusinessTypeId && !validBusinessTypeIds.has(expandedBusinessTypeId)) {
+      setExpandedBusinessTypeId(null);
     }
 
     if (!activeBusinessTypeId || !validBusinessTypeIds.has(activeBusinessTypeId)) {
@@ -119,8 +128,12 @@ export default function BusinessEligibilityPreviewPanel({
         </p>
       </div>
 
-      <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <div className="mt-4 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50">
+        <button
+          type="button"
+          onClick={() => setIsQualificationOpen((current) => !current)}
+          className="flex w-full items-start justify-between gap-4 px-4 py-4 text-left transition hover:bg-zinc-900/40"
+        >
           <div>
             <p className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">
               Qualification
@@ -138,80 +151,109 @@ export default function BusinessEligibilityPreviewPanel({
               </p>
             )}
           </div>
-          <div className="grid gap-2 sm:grid-cols-3">
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">
-                Character
-              </p>
-              <p className="mt-2 text-sm font-medium text-white">
-                NFT #{gameplayProfile.progression.profile.subjectId}
-              </p>
+          <span className="rounded-full border border-zinc-700 bg-zinc-950 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-neutral-300">
+            {isQualificationOpen ? "Collapse" : "Expand"}
+          </span>
+        </button>
+
+        {isQualificationOpen && (
+          <div className="border-t border-zinc-800 p-4">
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">
+                  Character
+                </p>
+                <p className="mt-2 text-sm font-medium text-white">
+                  NFT #{gameplayProfile.progression.profile.subjectId}
+                </p>
+              </div>
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">
+                  Level
+                </p>
+                <p className="mt-2 text-sm font-medium text-white">
+                  {gameplayProfile.progression.profile.level.currentLevel}
+                </p>
+              </div>
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">
+                  Certifications
+                </p>
+                <p className="mt-2 text-sm font-medium text-white">
+                  {completedCertificationIds.size > 0
+                    ? Array.from(completedCertificationIds).map(formatValue).join(", ")
+                    : "None completed"}
+                </p>
+              </div>
             </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">
-                Level
-              </p>
-              <p className="mt-2 text-sm font-medium text-white">
-                {gameplayProfile.progression.profile.level.currentLevel}
-              </p>
-            </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">
-                Certifications
-              </p>
-              <p className="mt-2 text-sm font-medium text-white">
-                {completedCertificationIds.size > 0
-                  ? Array.from(completedCertificationIds).map(formatValue).join(", ")
-                  : "None completed"}
-              </p>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {qualificationSummaries.map((summary) => (
+                <div
+                  key={summary.definition.id}
+                  className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-white">{summary.definition.name}</p>
+                      <p className="mt-1 text-xs text-neutral-500">
+                        {formatValue(summary.definition.sector)} • Suggested district:{" "}
+                        {formatValue(summary.suggestedDistrict)}
+                      </p>
+                    </div>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] ${
+                        summary.qualified
+                          ? "bg-emerald-950/80 text-emerald-300"
+                          : "bg-zinc-800 text-neutral-300"
+                      }`}
+                    >
+                      {summary.qualified ? "Qualified" : "Needs Qualification"}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 space-y-1.5">
+                    {summary.missingChecks.length > 0 ? (
+                      summary.missingChecks.map((check) => (
+                        <p key={check.type} className="text-xs text-amber-200">
+                          {check.message}
+                        </p>
+                      ))
+                    ) : (
+                      <p className="text-xs text-emerald-200">
+                        Character-level and certification gates are currently satisfied.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
-
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {qualificationSummaries.map((summary) => (
-            <div
-              key={summary.definition.id}
-              className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-white">{summary.definition.name}</p>
-                  <p className="mt-1 text-xs text-neutral-500">
-                    {formatValue(summary.definition.sector)} • Suggested district:{" "}
-                    {formatValue(summary.suggestedDistrict)}
-                  </p>
-                </div>
-                <span
-                  className={`rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] ${
-                    summary.qualified
-                      ? "bg-emerald-950/80 text-emerald-300"
-                      : "bg-zinc-800 text-neutral-300"
-                  }`}
-                >
-                  {summary.qualified ? "Qualified" : "Needs Qualification"}
-                </span>
-              </div>
-
-              <div className="mt-3 space-y-1.5">
-                {summary.missingChecks.length > 0 ? (
-                  summary.missingChecks.map((check) => (
-                    <p key={check.type} className="text-xs text-amber-200">
-                      {check.message}
-                    </p>
-                  ))
-                ) : (
-                  <p className="text-xs text-emerald-200">
-                    Character-level and certification gates are currently satisfied.
-                  </p>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+        )}
       </div>
+      <div className="mt-4 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50">
+        <button
+          type="button"
+          onClick={() => setIsBusinessSetupOpen((current) => !current)}
+          className="flex w-full items-start justify-between gap-4 px-4 py-4 text-left transition hover:bg-zinc-900/40"
+        >
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">
+              Ownership / Setup
+            </p>
+            <p className="mt-2 max-w-2xl text-sm text-neutral-300">
+              The Business NFT sector/class is the ownership source. The actual in-game business
+              variant is the primary setup choice below, where placement, staffing, certification,
+              staking, trust, and defense expectations are shown from the domain model.
+            </p>
+          </div>
+          <span className="rounded-full border border-zinc-700 bg-zinc-950 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-neutral-300">
+            {isBusinessSetupOpen ? "Collapse" : "Expand"}
+          </span>
+        </button>
 
-      <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+        {isBusinessSetupOpen && (
+          <div className="border-t border-zinc-800 p-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
             <p className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">
@@ -223,30 +265,80 @@ export default function BusinessEligibilityPreviewPanel({
               staking, trust, and defense expectations are shown from the domain model.
             </p>
           </div>
-          <label className="flex flex-col gap-2 text-xs text-neutral-500">
-            Business NFT sector / class
-            <select
-              value={selectedBusinessNftClassId ?? "missing"}
-              onChange={(event) =>
-                onMissionStateChange({
-                  ...missionState,
-                  ownedBusinessNftCount: event.target.value === "missing" ? 0 : 1,
-                  ownedBusinessNftClasses:
-                    event.target.value === "missing"
-                      ? []
-                      : [event.target.value as BusinessNftClassId],
-                })
-              }
-              className="rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white"
-            >
-              <option value="missing">No Business NFT Owned</option>
-              {businessNftClassOptions.map((businessNftClass) => (
-                <option key={businessNftClass.id} value={businessNftClass.id}>
-                  {businessNftClass.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="max-w-md">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">
+              Ownership Source
+            </p>
+            <p className="mt-2 text-sm text-neutral-300">
+              Sector/class stays visible here as the ownership lane, but the actual setup choice is
+              the business variant below.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <button
+            type="button"
+            onClick={() =>
+              onMissionStateChange({
+                ...missionState,
+                ownedBusinessNftCount: 0,
+                ownedBusinessNftClasses: [],
+              })
+            }
+            className={`rounded-xl border p-4 text-left transition ${
+              !selectedBusinessNftClassId
+                ? "border-red-700 bg-red-950/30"
+                : "border-zinc-800 bg-zinc-950/50 hover:border-zinc-700"
+            }`}
+          >
+            <p className="text-sm font-semibold text-white">No Business NFT Owned</p>
+            <p className="mt-1 text-xs text-neutral-500">
+              Clear the ownership source and review qualification without enabling setup.
+            </p>
+          </button>
+          {allClassFlowSummaries.map((summary) => {
+            const isSelected = summary.businessNftClass.id === selectedBusinessNftClassId;
+
+            return (
+              <button
+                key={summary.businessNftClass.id}
+                type="button"
+                onClick={() =>
+                  onMissionStateChange({
+                    ...missionState,
+                    ownedBusinessNftCount: 1,
+                    ownedBusinessNftClasses: [summary.businessNftClass.id as BusinessNftClassId],
+                  })
+                }
+                className={`rounded-xl border p-4 text-left transition ${
+                  isSelected
+                    ? "border-red-700 bg-red-950/30"
+                    : "border-zinc-800 bg-zinc-950/50 hover:border-zinc-700"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-white">
+                      {summary.businessNftClass.name}
+                    </p>
+                    <p className="mt-1 text-xs text-neutral-500">
+                      Token #{summary.businessNftClass.tokenId} • {summary.variantSummaries.length} variants
+                    </p>
+                  </div>
+                  {isSelected && (
+                    <span className="rounded-full bg-red-950/80 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-red-100">
+                      Selected
+                    </span>
+                  )}
+                </div>
+                <p className="mt-2 text-xs text-neutral-400">
+                  {summary.totalPlacementLotsAcrossCity} lots across{" "}
+                  {summary.variantSummaries.length} in-game businesses.
+                </p>
+              </button>
+            );
+          })}
         </div>
 
         {selectedBusinessNftClass ? (
@@ -623,6 +715,8 @@ export default function BusinessEligibilityPreviewPanel({
             );
           })}
         </div>
+          </div>
+        )}
       </div>
     </div>
   );

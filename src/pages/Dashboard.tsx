@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ethers } from 'ethers';
 import { useAccount, useChainId } from 'wagmi';
@@ -243,6 +243,39 @@ function formatDashboardLabel(value: string) {
     .join(' ');
 }
 
+function CollapsibleDashboardSection({
+  title,
+  subtitle,
+  isOpen,
+  onToggle,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  isOpen: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="mb-6 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-start justify-between gap-4 px-5 py-4 text-left transition hover:bg-zinc-900/40"
+      >
+        <div>
+          <h2 className="text-2xl font-bold text-white">{title}</h2>
+          <p className="mt-1 text-sm text-neutral-500">{subtitle}</p>
+        </div>
+        <span className="rounded-full border border-zinc-700 bg-zinc-950 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-neutral-300">
+          {isOpen ? 'Collapse' : 'Expand'}
+        </span>
+      </button>
+      {isOpen ? <div className="border-t border-zinc-800 px-5 py-5">{children}</div> : null}
+    </div>
+  );
+}
+
 // ─── Main Dashboard (NFT holder view) ───
 function DashboardContent({ address }: { address: string | null }) {
   const chainId = useChainId();
@@ -253,6 +286,10 @@ function DashboardContent({ address }: { address: string | null }) {
   const [missionStateByTokenId, setMissionStateByTokenId] = useState<Record<number, LocalMissionSubjectState>>({});
   const [verticalSliceSnapshotDraft, setVerticalSliceSnapshotDraft] = useState('');
   const [verticalSliceStatus, setVerticalSliceStatus] = useState<string | null>(null);
+  const [assetSectionsOpen, setAssetSectionsOpen] = useState({
+    businessCollection: false,
+    businessStaking: false,
+  });
   const { nfts, balance, loading: nftsLoading, error: nftsError, debug, refetch } = useNFTs(address);
   const tokenIds = nfts.map((n) => n.tokenId);
   const { tbas, loading: tbaLoading } = useTBA(tokenIds);
@@ -308,6 +345,11 @@ function DashboardContent({ address }: { address: string | null }) {
     district,
     count: openedBusinesses.filter((business) => business.district === district).length,
   }));
+  const toggleAssetSection = (section: keyof typeof assetSectionsOpen) =>
+    setAssetSectionsOpen((current) => ({
+      ...current,
+      [section]: !current[section],
+    }));
 
   useEffect(() => {
     if (tokenIds.length === 0) {
@@ -620,14 +662,28 @@ function DashboardContent({ address }: { address: string | null }) {
                     </div>
                   </div>
 
-                  <BusinessCollectionTab
-                    walletAddress={address}
-                    actionGuidance={assetActionGuidance}
-                  />
-                  <BusinessStakingTab
-                    walletAddress={address}
-                    actionGuidance={assetActionGuidance}
-                  />
+                  <CollapsibleDashboardSection
+                    title="Business Collection"
+                    subtitle="Browse the ERC-1155 business collection and expand when you want to inspect balances or mint."
+                    isOpen={assetSectionsOpen.businessCollection}
+                    onToggle={() => toggleAssetSection('businessCollection')}
+                  >
+                    <BusinessCollectionTab
+                      walletAddress={address}
+                      actionGuidance={assetActionGuidance}
+                    />
+                  </CollapsibleDashboardSection>
+                  <CollapsibleDashboardSection
+                    title="Business Staking"
+                    subtitle="Open this section when you want to review approvals, staking balances, or reward actions."
+                    isOpen={assetSectionsOpen.businessStaking}
+                    onToggle={() => toggleAssetSection('businessStaking')}
+                  >
+                    <BusinessStakingTab
+                      walletAddress={address}
+                      actionGuidance={assetActionGuidance}
+                    />
+                  </CollapsibleDashboardSection>
                 </>
               )}
               {tbaLoading && nfts.length > 0 && (
