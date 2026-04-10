@@ -7,6 +7,8 @@ import { useNFTs } from '../hooks/useNFTs';
 import { useTBA } from '../hooks/useTBA';
 import NFTCard from '../components/NFTCard';
 import NFTDetailModal from '../components/NFTDetailModal';
+import MissionHarnessPanel from '../components/MissionHarnessPanel';
+import VerticalSliceStatePanel from '../components/VerticalSliceStatePanel';
 import BusinessCollectionTab from '../components/BusinessCollectionTab';
 import BusinessStakingTab from '../components/BusinessStakingTab';
 import SignalsBoard from '../components/signals/SignalsBoard';
@@ -15,7 +17,15 @@ import discord from '../images/discord.png';
 import telegram from '../images/telegram.png';
 import instagram from '../images/instagram.png';
 import { CONTRACTS, BASE_CHAIN_ID } from '../lib/contracts';
+import { createLocalMissionSubjectState } from '../lib/missionHarness';
+import { buildBusinessSurfaceActionGuidance } from '../lib/businessActionGuidance';
+import {
+  restoreLocalMissionStateByTokenIdFromJson,
+  serializeLocalVerticalSliceSnapshot,
+} from '../lib/verticalSlicePersistence';
 import { useTokenMetadata } from '../lib/tokenMetadata';
+import { resolveNFTGameplayProfile } from '../lib/nftGameplayProfile';
+import type { LocalMissionSubjectState } from '../lib/missionHarness';
 
 // ─── State: No wallet connected ───
 function NoWalletState() {
@@ -123,10 +133,11 @@ function LoadingState() {
 
 // ─── Dashboard tabs ───
 const TABS = [
-  { id: 'nfts', label: 'My NFTs', disabled: false },
+  { id: 'player', label: 'Player', disabled: false },
+  { id: 'assets', label: 'Assets', disabled: false },
+  { id: 'operations', label: 'Operations', disabled: false },
+  { id: 'city', label: 'City', disabled: false },
   { id: 'signals', label: 'Signals', disabled: false },
-  { id: 'businesses', label: 'Businesses', disabled: false },
-  { id: 'staking', label: 'Staking', disabled: false },
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
@@ -225,20 +236,91 @@ function WalletDiagnostics({
   );
 }
 
+function formatDashboardLabel(value: string) {
+  return value
+    .split('_')
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ');
+}
+
 // ─── Main Dashboard (NFT holder view) ───
 function DashboardContent({ address }: { address: string | null }) {
   const chainId = useChainId();
-  const [activeTab, setActiveTab] = useState<TabId>('signals');
+  const [activeTab, setActiveTab] = useState<TabId>('player');
   const [signalsRefreshKey, setSignalsRefreshKey] = useState(0);
   const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null);
+  const [missionSubjectTokenId, setMissionSubjectTokenId] = useState<number | null>(null);
+  const [missionStateByTokenId, setMissionStateByTokenId] = useState<Record<number, LocalMissionSubjectState>>({});
+  const [verticalSliceSnapshotDraft, setVerticalSliceSnapshotDraft] = useState('');
+  const [verticalSliceStatus, setVerticalSliceStatus] = useState<string | null>(null);
   const { nfts, balance, loading: nftsLoading, error: nftsError, debug, refetch } = useNFTs(address);
   const tokenIds = nfts.map((n) => n.tokenId);
   const { tbas, loading: tbaLoading } = useTBA(tokenIds);
   const nerdieTokenMetadata = useTokenMetadata(BASE_CHAIN_ID, CONTRACTS.NERDIE_TOKEN);
+  const tokenIdSignature = tokenIds.join(',');
 
   const tbaMap = new Map(tbas.map((t) => [t.tokenId, t]));
-  const selectedNft = nfts.find((n) => n.tokenId === selectedTokenId);
-  const selectedTba = selectedTokenId != null ? tbaMap.get(selectedTokenId) : undefined;
+  const nftCards = nfts.map((nft) => ({
+    nft,
+    gameplayProfile: resolveNFTGameplayProfile(
+      nft.tokenId,
+      nft.attributes,
+      missionStateByTokenId[nft.tokenId]
+        ? {
+            totalXP: missionStateByTokenId[nft.tokenId].totalXP,
+            reputationScore: missionStateByTokenId[nft.tokenId].reputationScore,
+            heatScore: missionStateByTokenId[nft.tokenId].heatScore,
+            rankPoints: missionStateByTokenId[nft.tokenId].rankPoints,
+            lastSource: missionStateByTokenId[nft.tokenId].lastSource,
+          }
+        : undefined
+    ),
+    tba: tbaMap.get(nft.tokenId),
+  }));
+  const selectedCard = nftCards.find(({ nft }) => nft.tokenId === selectedTokenId);
+  const activePlayerCard =
+    nftCards.find(({ nft }) => nft.tokenId === missionSubjectTokenId) ?? nftCards[0] ?? null;
+  const botSlotSummary = nftCards.reduce(
+    (summary, nft) => {
+      const slotStatus = nft.gameplayProfile.progression.botSlots;
+      summary.unlockedSlots += slotStatus.unlockedSlots;
+      summary.maxSlots += slotStatus.maxSlots;
+      return summary;
+    },
+    { unlockedSlots: 0, maxSlots: 0 }
+  );
+  const openedBusinesses = Object.values(missionStateByTokenId).flatMap(
+    (subjectState) => subjectState.openedStarterBusinesses
+  );
+  const activeMissionState =
+    activePlayerCard != null
+      ? missionStateByTokenId[activePlayerCard.nft.tokenId] ??
+        createLocalMissionSubjectState(activePlayerCard.gameplayProfile)
+      : null;
+  const assetActionGuidance =
+    activePlayerCard && activeMissionState
+      ? buildBusinessSurfaceActionGuidance(
+          activePlayerCard.gameplayProfile,
+          activeMissionState
+        )
+      : null;
+  const districtOccupancy = (['neon_market', 'dark_alley', 'cyber_hq'] as const).map((district) => ({
+    district,
+    count: openedBusinesses.filter((business) => business.district === district).length,
+  }));
+
+  useEffect(() => {
+    if (tokenIds.length === 0) {
+      setMissionSubjectTokenId(null);
+      return;
+    }
+
+    setMissionSubjectTokenId((current) =>
+      current != null && tokenIds.includes(current)
+        ? current
+        : tokenIds[0]
+    );
+  }, [tokenIdSignature]);
 
   if (!address) {
     return <NoWalletState />;
@@ -346,34 +428,132 @@ function DashboardContent({ address }: { address: string | null }) {
       {/* Tab Content */}
       <section className="py-10 px-4 min-h-[50vh]">
         <div className="max-w-5xl mx-auto">
-          {activeTab === 'nfts' && (
+          {activeTab === 'player' && (
             <>
-              {nfts.length === 0 ? (
+              {!activePlayerCard ? (
                 <div className="text-center py-20">
                   <p className="text-neutral-500">No NFTs found in this wallet.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                  {nfts.map((nft) => {
-                    const tba = tbaMap.get(nft.tokenId);
-                    return (
-                      <NFTCard
-                        key={nft.tokenId}
-                        tokenId={nft.tokenId}
-                        image={nft.image}
-                        name={nft.name}
-                        attributes={nft.attributes}
-                        tbaAddress={tba?.tbaAddress}
-                        ethBalance={tba?.ethBalance}
-                        nerdieBalance={tba?.nerdieBalance}
-                        nerdieName={nerdieTokenMetadata?.name}
-                        nerdieSymbol={nerdieTokenMetadata?.symbol ?? tba?.nerdieSymbol}
-                        nerdieLogoUri={nerdieTokenMetadata?.logoURI}
-                        onClick={() => setSelectedTokenId(nft.tokenId)}
-                      />
-                    );
-                  })}
-                </div>
+                <>
+                  <div className="mb-6 grid gap-4 md:grid-cols-4">
+                    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.22em] text-neutral-500">Active Character</p>
+                      <p className="mt-2 text-lg font-black text-white">
+                        {activePlayerCard.nft.name}
+                      </p>
+                      <p className="mt-1 text-xs text-neutral-500">
+                        #{activePlayerCard.nft.tokenId}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.22em] text-neutral-500">Level</p>
+                      <p className="mt-2 text-2xl font-black text-white">
+                        {activePlayerCard.gameplayProfile.progression.profile.level.currentLevel}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.22em] text-neutral-500">Reputation</p>
+                      <p className="mt-2 text-2xl font-black text-white">
+                        {activePlayerCard.gameplayProfile.progression.profile.reputation?.score ?? 0}
+                      </p>
+                      <p className="mt-1 text-xs text-neutral-500">
+                        {activePlayerCard.gameplayProfile.progression.profile.reputation?.band ?? 'unknown'}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.22em] text-neutral-500">Heat</p>
+                      <p className="mt-2 text-2xl font-black text-white">
+                        {activePlayerCard.gameplayProfile.progression.profile.heat?.score ?? 0}
+                      </p>
+                      <p className="mt-1 text-xs text-neutral-500">
+                        {activePlayerCard.gameplayProfile.progression.profile.heat?.band ?? 'cold'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mb-6 grid gap-6 lg:grid-cols-[minmax(0,320px)_1fr]">
+                    <NFTCard
+                      tokenId={activePlayerCard.nft.tokenId}
+                      image={activePlayerCard.nft.image}
+                      name={activePlayerCard.nft.name}
+                      attributes={activePlayerCard.nft.attributes}
+                      gameplayProfile={activePlayerCard.gameplayProfile}
+                      tbaAddress={activePlayerCard.tba?.tbaAddress}
+                      ethBalance={activePlayerCard.tba?.ethBalance}
+                      nerdieBalance={activePlayerCard.tba?.nerdieBalance}
+                      nerdieName={nerdieTokenMetadata?.name}
+                      nerdieSymbol={nerdieTokenMetadata?.symbol ?? activePlayerCard.tba?.nerdieSymbol}
+                      nerdieLogoUri={nerdieTokenMetadata?.logoURI}
+                      onClick={() => setSelectedTokenId(activePlayerCard.nft.tokenId)}
+                    />
+
+                    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-5">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.22em] text-neutral-500">
+                            Player Identity
+                          </p>
+                          <p className="mt-2 text-lg font-bold text-white">
+                            {activePlayerCard.nft.name} is the current active character identity for the playable slice.
+                          </p>
+                        </div>
+                        <select
+                          value={activePlayerCard.nft.tokenId}
+                          onChange={(event) => setMissionSubjectTokenId(Number(event.target.value))}
+                          className="rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white"
+                        >
+                          {nftCards.map(({ nft }) => (
+                            <option key={nft.tokenId} value={nft.tokenId}>
+                              {nft.name} #{nft.tokenId}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 md:grid-cols-2">
+                        <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-neutral-500">
+                            Progression
+                          </p>
+                          <p className="mt-2 text-sm text-white">
+                            XP {activePlayerCard.gameplayProfile.progression.profile.xp.lifetimeXP}
+                          </p>
+                          <p className="mt-1 text-sm text-neutral-300">
+                            Rank {activePlayerCard.gameplayProfile.progression.profile.rank?.visibleRank ?? 'unranked'}
+                          </p>
+                          <p className="mt-1 text-sm text-neutral-300">
+                            Bot slots {activePlayerCard.gameplayProfile.progression.botSlots.unlockedSlots} / {activePlayerCard.gameplayProfile.progression.botSlots.maxSlots}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-neutral-500">
+                            Character Fit
+                          </p>
+                          <p className="mt-2 text-sm text-white">
+                            District {formatDashboardLabel(activePlayerCard.gameplayProfile.metadata.normalizedTraits.location ?? 'unassigned')}
+                          </p>
+                          <p className="mt-1 text-sm text-neutral-300">
+                            Role {formatDashboardLabel(activePlayerCard.gameplayProfile.metadata.normalizedTraits.roleInNerdieCity ?? 'unassigned')}
+                          </p>
+                          <p className="mt-1 text-sm text-neutral-300">
+                            Starter tool {formatDashboardLabel(activePlayerCard.gameplayProfile.metadata.starterTool.id)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+                        <p className="text-[10px] uppercase tracking-[0.18em] text-neutral-500">
+                          Player View Purpose
+                        </p>
+                        <p className="mt-2 text-sm leading-relaxed text-neutral-300">
+                          This section is now focused on character identity and progression only. Asset inventory,
+                          business operations, and future city placement have been separated into their own views.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </>
               )}
               {tbaLoading && nfts.length > 0 && (
                 <p className="text-neutral-600 text-xs text-center mt-6">Loading token-bound account data...</p>
@@ -381,27 +561,227 @@ function DashboardContent({ address }: { address: string | null }) {
             </>
           )}
 
+          {activeTab === 'assets' && (
+            <>
+              {nfts.length === 0 ? (
+                <div className="text-center py-20">
+                  <p className="text-neutral-500">No NFTs found in this wallet.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="mb-6 grid gap-4 md:grid-cols-3">
+                    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.22em] text-neutral-500">Character NFTs</p>
+                      <p className="mt-2 text-2xl font-black text-white">{nfts.length}</p>
+                    </div>
+                    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.22em] text-neutral-500">Active Bot Slots</p>
+                      <p className="mt-2 text-2xl font-black text-white">
+                        {botSlotSummary.unlockedSlots}
+                        <span className="text-base font-semibold text-neutral-500"> / {botSlotSummary.maxSlots}</span>
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.22em] text-neutral-500">Assets View</p>
+                      <p className="mt-2 text-sm font-medium leading-relaxed text-neutral-300">
+                        Character NFTs, Business NFTs, and staking tools are grouped here as owned assets.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mb-6">
+                    <div className="mb-4 flex items-end justify-between gap-4">
+                      <div>
+                        <p className="text-[11px] uppercase tracking-[0.22em] text-neutral-500">Character Assets</p>
+                        <p className="mt-2 text-sm text-neutral-300">
+                          Owned character NFTs remain visible here as the player’s core owned roster.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                      {nftCards.map(({ nft, gameplayProfile, tba }) => {
+                        return (
+                          <NFTCard
+                            key={nft.tokenId}
+                            tokenId={nft.tokenId}
+                            image={nft.image}
+                            name={nft.name}
+                            attributes={nft.attributes}
+                            gameplayProfile={gameplayProfile}
+                            tbaAddress={tba?.tbaAddress}
+                            ethBalance={tba?.ethBalance}
+                            nerdieBalance={tba?.nerdieBalance}
+                            nerdieName={nerdieTokenMetadata?.name}
+                            nerdieSymbol={nerdieTokenMetadata?.symbol ?? tba?.nerdieSymbol}
+                            nerdieLogoUri={nerdieTokenMetadata?.logoURI}
+                            onClick={() => setSelectedTokenId(nft.tokenId)}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <BusinessCollectionTab
+                    walletAddress={address}
+                    actionGuidance={assetActionGuidance}
+                  />
+                  <BusinessStakingTab
+                    walletAddress={address}
+                    actionGuidance={assetActionGuidance}
+                  />
+                </>
+              )}
+              {tbaLoading && nfts.length > 0 && (
+                <p className="text-neutral-600 text-xs text-center mt-6">Loading token-bound account data...</p>
+              )}
+            </>
+          )}
+
+          {activeTab === 'operations' && (
+            <>
+              <div className="mb-6 grid gap-4 md:grid-cols-3">
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-neutral-500">Active Operator</p>
+                  <p className="mt-2 text-lg font-black text-white">
+                    {activePlayerCard?.nft.name ?? 'No character selected'}
+                  </p>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    {activePlayerCard ? `#${activePlayerCard.nft.tokenId}` : 'Select a character'}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-neutral-500">Opened Businesses</p>
+                  <p className="mt-2 text-2xl font-black text-white">{openedBusinesses.length}</p>
+                </div>
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-neutral-500">Operations Focus</p>
+                  <p className="mt-2 text-sm font-medium leading-relaxed text-neutral-300">
+                    Missions, certifications, starter-business setup, and active business operations now live together here.
+                  </p>
+                </div>
+              </div>
+
+              <MissionHarnessPanel
+                subjects={nftCards.map(({ nft, gameplayProfile }) => ({
+                  tokenId: nft.tokenId,
+                  name: nft.name,
+                  gameplayProfile,
+                }))}
+                selectedTokenId={missionSubjectTokenId}
+                onSelectTokenId={setMissionSubjectTokenId}
+                missionStateByTokenId={missionStateByTokenId}
+                onMissionStateChange={(tokenId, nextState) =>
+                  setMissionStateByTokenId((current) => ({
+                    ...current,
+                    [tokenId]: nextState,
+                  }))
+                }
+                onResetSubject={(tokenId) =>
+                  setMissionStateByTokenId((current) => {
+                    const nextState = { ...current };
+                    delete nextState[tokenId];
+                    return nextState;
+                  })
+                }
+              />
+
+              <VerticalSliceStatePanel
+                snapshotDraft={verticalSliceSnapshotDraft}
+                statusMessage={verticalSliceStatus}
+                onSnapshotDraftChange={setVerticalSliceSnapshotDraft}
+                onExportSnapshot={() => {
+                  const snapshot = serializeLocalVerticalSliceSnapshot({
+                    subjects: nftCards.map(({ nft, gameplayProfile }) => ({
+                      tokenId: nft.tokenId,
+                      gameplayProfile,
+                      localState:
+                        missionStateByTokenId[nft.tokenId] ??
+                        createLocalMissionSubjectState(gameplayProfile),
+                      ownerAddress: address,
+                    })),
+                  });
+
+                  setVerticalSliceSnapshotDraft(snapshot);
+                  setVerticalSliceStatus('Exported current playable slice state to JSON.');
+                }}
+                onRestoreSnapshot={() => {
+                  try {
+                    const restoredState =
+                      restoreLocalMissionStateByTokenIdFromJson(verticalSliceSnapshotDraft);
+                    setMissionStateByTokenId(restoredState);
+                    setVerticalSliceStatus('Restored local playable slice state from JSON.');
+                  } catch (error) {
+                    setVerticalSliceStatus(
+                      error instanceof Error ? error.message : 'Failed to restore slice state.'
+                    );
+                  }
+                }}
+              />
+            </>
+          )}
+
+          {activeTab === 'city' && (
+            <div className="space-y-6">
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-5">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-neutral-500">City Layer</p>
+                <p className="mt-2 max-w-3xl text-sm leading-relaxed text-neutral-300">
+                  This view is the placeholder home for district fit, lot placement, and future world occupancy.
+                  It reflects the current architecture direction without adding the lot-registry system yet.
+                </p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                {districtOccupancy.map((entry) => (
+                  <div key={entry.district} className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.22em] text-neutral-500">
+                      {formatDashboardLabel(entry.district)}
+                    </p>
+                    <p className="mt-2 text-2xl font-black text-white">{entry.count}</p>
+                    <p className="mt-1 text-xs text-neutral-500">
+                      Local opened businesses currently mapped to this district.
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-5">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-neutral-500">Current Role</p>
+                  <p className="mt-2 text-sm leading-relaxed text-neutral-300">
+                    The City section is where district summaries, lot validity, physical placement, and occupancy rules
+                    should surface once the metaverse lot registry is implemented.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-5">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-neutral-500">What Comes Here Later</p>
+                  <ul className="mt-2 space-y-2 text-sm text-neutral-300">
+                    <li>Available lots by district and variant</li>
+                    <li>Occupied versus inactive placements</li>
+                    <li>World capacity versus ownership capacity</li>
+                    <li>Defense and contest pressure once those systems are live</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'signals' && <SignalsBoard refreshKey={signalsRefreshKey} />}
-
-          {activeTab === 'businesses' && <BusinessCollectionTab walletAddress={address} />}
-
-          {activeTab === 'staking' && <BusinessStakingTab walletAddress={address} />}
         </div>
       </section>
 
       {/* Detail Modal */}
-      {selectedNft && (
+      {selectedCard && (
         <NFTDetailModal
-          tokenId={selectedNft.tokenId}
-          image={selectedNft.image}
-          name={selectedNft.name}
-          description={selectedNft.description}
-          attributes={selectedNft.attributes}
-          tbaAddress={selectedTba?.tbaAddress}
-          ethBalance={selectedTba?.ethBalance}
-          nerdieBalance={selectedTba?.nerdieBalance}
+          tokenId={selectedCard.nft.tokenId}
+          image={selectedCard.nft.image}
+          name={selectedCard.nft.name}
+          description={selectedCard.nft.description}
+          attributes={selectedCard.nft.attributes}
+          gameplayProfile={selectedCard.gameplayProfile}
+          tbaAddress={selectedCard.tba?.tbaAddress}
+          ethBalance={selectedCard.tba?.ethBalance}
+          nerdieBalance={selectedCard.tba?.nerdieBalance}
           nerdieName={nerdieTokenMetadata?.name}
-          nerdieSymbol={nerdieTokenMetadata?.symbol ?? selectedTba?.nerdieSymbol}
+          nerdieSymbol={nerdieTokenMetadata?.symbol ?? selectedCard.tba?.nerdieSymbol}
           nerdieLogoUri={nerdieTokenMetadata?.logoURI}
           onClose={() => setSelectedTokenId(null)}
         />

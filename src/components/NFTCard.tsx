@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import type { NFTAttribute } from '../hooks/useNFTs';
+import type { NFTGameplayProfile } from '../lib/nftGameplayProfile';
 
 interface NFTCardProps {
   tokenId: number;
   image: string;
   name: string;
   attributes: NFTAttribute[];
+  gameplayProfile: NFTGameplayProfile;
   tbaAddress?: string;
   ethBalance?: string;
   nerdieBalance?: string;
@@ -81,11 +83,20 @@ function formatCompactBalance(value: string | undefined, digits: number) {
   return parsed.toFixed(digits);
 }
 
+function formatToolLabel(value: string) {
+  return value
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ');
+}
+
 export default function NFTCard({
   tokenId,
   image,
   name,
   attributes,
+  gameplayProfile,
   tbaAddress,
   ethBalance,
   nerdieBalance,
@@ -103,6 +114,8 @@ export default function NFTCard({
     (trait): trait is NFTAttribute => Boolean(trait)
   ).slice(0, 3);
   const rarityTone = getRarityTone(rarity?.value);
+  const slotStatus = gameplayProfile.progression.botSlots;
+  const starterTool = gameplayProfile.metadata.starterTool;
   const compactEthBalance = formatCompactBalance(ethBalance, 4);
   const compactNerdieBalance = formatCompactBalance(nerdieBalance, 2);
 
@@ -195,6 +208,39 @@ export default function NFTCard({
           ) : (
             <p className="text-neutral-500 text-xs">No metadata traits available.</p>
           )}
+        </div>
+
+        <div className="mb-3 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">Bot Slots</p>
+              <p className="mt-1 text-sm font-semibold text-white">
+                {slotStatus.unlockedSlots} / {slotStatus.maxSlots} unlocked
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">Level</p>
+              <p className="mt-1 text-sm font-semibold text-neutral-300">{slotStatus.currentLevel}</p>
+            </div>
+          </div>
+          <div className="mt-2 flex gap-1.5">
+            {Array.from({ length: slotStatus.maxSlots }, (_, index) => (
+              <span
+                key={index}
+                className={`h-2 flex-1 rounded-full ${
+                  index < slotStatus.unlockedSlots ? 'bg-red-600' : 'bg-zinc-800'
+                }`}
+              />
+            ))}
+          </div>
+          <p className="mt-2 text-[10px] text-neutral-500">
+            {slotStatus.nextUnlockLevel
+              ? `Next slot unlocks at level ${slotStatus.nextUnlockLevel}.`
+              : 'All rarity-based bot slots are unlocked.'}
+          </p>
+          <p className="mt-1 text-[10px] text-neutral-500">
+            Starter tool: {formatToolLabel(starterTool.id)}.
+          </p>
         </div>
 
         {/* TBA info */}

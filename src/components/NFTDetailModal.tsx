@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { NFTAttribute } from '../hooks/useNFTs';
+import type { NFTGameplayProfile } from '../lib/nftGameplayProfile';
 
 interface NFTDetailModalProps {
   tokenId: number;
@@ -7,6 +8,7 @@ interface NFTDetailModalProps {
   name: string;
   description?: string;
   attributes: NFTAttribute[];
+  gameplayProfile: NFTGameplayProfile;
   tbaAddress?: string;
   ethBalance?: string;
   nerdieBalance?: string;
@@ -97,12 +99,21 @@ function getRarityTone(value: string | number | undefined) {
   };
 }
 
+function formatToolLabel(value: string) {
+  return value
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ');
+}
+
 export default function NFTDetailModal({
   tokenId,
   image,
   name,
   description,
   attributes,
+  gameplayProfile,
   tbaAddress,
   ethBalance,
   nerdieBalance,
@@ -115,6 +126,10 @@ export default function NFTDetailModal({
   const rarity = pickTrait(attributes, 'Rarity');
   const faction = pickTrait(attributes, 'Faction');
   const rarityTone = getRarityTone(rarity?.value);
+  const slotStatus = gameplayProfile.progression.botSlots;
+  const progressionProfile = gameplayProfile.progression.profile;
+  const starterTool = gameplayProfile.metadata.starterTool;
+  const derivedStats = Object.entries(gameplayProfile.metadata.stats);
 
   // Close on Escape
   useEffect(() => {
@@ -251,6 +266,41 @@ export default function NFTDetailModal({
               )}
             </div>
 
+            <div className="mb-5">
+              <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">Bot Slot Capacity</h3>
+              <div className="rounded-xl border border-zinc-800 bg-zinc-800/40 p-3.5">
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <span className="block text-[10px] uppercase tracking-[0.18em] text-neutral-500">Unlocked</span>
+                    <span className="mt-1 block text-lg font-bold text-white">{slotStatus.unlockedSlots}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] uppercase tracking-[0.18em] text-neutral-500">Max</span>
+                    <span className="mt-1 block text-lg font-bold text-white">{slotStatus.maxSlots}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] uppercase tracking-[0.18em] text-neutral-500">Level</span>
+                    <span className="mt-1 block text-lg font-bold text-white">{slotStatus.currentLevel}</span>
+                  </div>
+                </div>
+                <div className="mt-3 flex gap-2">
+                  {Array.from({ length: slotStatus.maxSlots }, (_, index) => (
+                    <span
+                      key={index}
+                      className={`h-2 flex-1 rounded-full ${
+                        index < slotStatus.unlockedSlots ? 'bg-red-600' : 'bg-zinc-700'
+                      }`}
+                    />
+                  ))}
+                </div>
+                <p className="mt-3 text-xs text-neutral-400">
+                  {slotStatus.nextUnlockLevel
+                    ? `This NFT can unlock another bot slot at level ${slotStatus.nextUnlockLevel}.`
+                    : 'This NFT has reached its rarity-based bot slot cap.'}
+                </p>
+              </div>
+            </div>
+
             {/* TBA Section */}
             <div className="mb-5">
               <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">Token-Bound Account</h3>
@@ -315,6 +365,45 @@ export default function NFTDetailModal({
                 </svg>
                 Send from TBA (Coming Soon)
               </button>
+            </div>
+          </div>
+
+          <div className="border-t border-zinc-800/80 p-6 md:col-span-2">
+            <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">Gameplay Profile</h3>
+            <div className="rounded-xl border border-zinc-800 bg-zinc-800/40 p-3.5">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <span className="block text-[10px] uppercase tracking-[0.18em] text-neutral-500">Starter Tool</span>
+                  <span className="mt-1 block text-sm font-semibold text-white">
+                    {formatToolLabel(starterTool.id)}
+                  </span>
+                  <span className="mt-1 block text-xs text-neutral-400">
+                    {starterTool.family} • scales with {starterTool.scalingStats.join(', ')}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-[10px] uppercase tracking-[0.18em] text-neutral-500">Progression</span>
+                  <span className="mt-1 block text-sm font-semibold text-white">
+                    Level {progressionProfile.level.currentLevel}
+                  </span>
+                  <span className="mt-1 block text-xs text-neutral-400">
+                    XP {progressionProfile.xp.levelXP}
+                    {progressionProfile.xp.nextLevelXP > 0
+                      ? ` / ${progressionProfile.xp.nextLevelXP} to next level`
+                      : ' / max level reached'}
+                  </span>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
+                {derivedStats.map(([key, value]) => (
+                  <div key={key} className="rounded-lg border border-zinc-700 bg-zinc-950/60 p-2.5">
+                    <span className="block text-[10px] uppercase tracking-[0.08em] text-neutral-500 break-words">
+                      {key.replace(/([a-z])([A-Z])/g, '$1 $2')}
+                    </span>
+                    <span className="mt-1 block text-sm font-semibold text-white">{value}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>

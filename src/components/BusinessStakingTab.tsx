@@ -1,9 +1,14 @@
 import { useMemo, useState } from 'react';
 import { useBusinessCollection } from '../hooks/useBusinessCollection';
 import { useBusinessStaking } from '../hooks/useBusinessStaking';
+import {
+  getBusinessClassActionGuidanceByTokenId,
+  type BusinessSurfaceActionGuidance,
+} from '../lib/businessActionGuidance';
 
 interface BusinessStakingTabProps {
   walletAddress: string | null;
+  actionGuidance?: BusinessSurfaceActionGuidance | null;
 }
 
 function formatValue(value: number | null, walletAddress: string | null) {
@@ -12,7 +17,10 @@ function formatValue(value: number | null, walletAddress: string | null) {
   return String(value);
 }
 
-export default function BusinessStakingTab({ walletAddress }: BusinessStakingTabProps) {
+export default function BusinessStakingTab({
+  walletAddress,
+  actionGuidance,
+}: BusinessStakingTabProps) {
   const { businesses, loading, error, refetch } = useBusinessCollection(walletAddress);
   const [stakeAmounts, setStakeAmounts] = useState<Record<number, number>>({});
   const [unstakeAmounts, setUnstakeAmounts] = useState<Record<number, number>>({});
@@ -145,6 +153,21 @@ export default function BusinessStakingTab({ walletAddress }: BusinessStakingTab
         </div>
       </div>
 
+      {actionGuidance && (
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 px-4 py-3">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-neutral-500">
+            Activation Guidance
+          </p>
+          <p className="mt-2 text-sm text-neutral-300">
+            On-chain balances and rewards remain visible here. Gameplay-sensitive activation actions
+            now reflect the active operator’s current setup and qualification state.
+          </p>
+          <p className="mt-2 text-xs text-neutral-400">
+            Current operator: <span className="text-white">{actionGuidance.activeOperatorLabel}</span>
+          </p>
+        </div>
+      )}
+
       {stakingStatus.message && (
         <div
           className={`rounded-2xl border px-4 py-3 text-sm ${
@@ -160,22 +183,42 @@ export default function BusinessStakingTab({ walletAddress }: BusinessStakingTab
       )}
 
       {!approvalStatus && (
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
+        <div
+          className={`rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5 ${
+            actionGuidance?.approval.locked ? 'opacity-80' : ''
+          }`}
+        >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="text-white font-semibold">Approve Staking Contract</h3>
               <p className="text-sm text-neutral-500 mt-1">
                 The staking contract needs operator approval before it can move your Business NFTs.
               </p>
+              {actionGuidance?.approval.locked && (
+                <>
+                  <p className="mt-2 text-xs text-amber-200">
+                    {actionGuidance.approval.missingRequirements[0]}
+                  </p>
+                  <p className="mt-1 text-xs text-neutral-300">
+                    Next action: <span className="text-white">{actionGuidance.approval.nextAction}</span>
+                  </p>
+                </>
+              )}
             </div>
             <button
               type="button"
               onClick={handleApprove}
-              disabled={!walletAddress || stakingStatus.status === 'pending'}
+              disabled={
+                !walletAddress ||
+                stakingStatus.status === 'pending' ||
+                actionGuidance?.approval.locked
+              }
               className="rounded-xl border border-red-700/60 bg-red-950/40 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-900/40 disabled:cursor-not-allowed disabled:border-zinc-800 disabled:bg-zinc-900 disabled:text-neutral-500"
             >
               {stakingStatus.status === 'pending' && stakingStatus.action === 'approve'
                 ? 'Approving...'
+                : actionGuidance?.approval.locked
+                ? 'Setup Required'
                 : 'Approve Staking'}
             </button>
           </div>
@@ -186,6 +229,9 @@ export default function BusinessStakingTab({ walletAddress }: BusinessStakingTab
         {businesses.map((business) => {
           const stakedBalance = stakedBalances[business.tokenId] ?? (walletAddress ? null : 0);
           const pendingReward = pendingRewards[business.tokenId] ?? (walletAddress ? null : '0');
+          const classGuidance = actionGuidance
+            ? getBusinessClassActionGuidanceByTokenId(actionGuidance, business.tokenId)
+            : null;
 
           return (
             <article
@@ -209,7 +255,20 @@ export default function BusinessStakingTab({ walletAddress }: BusinessStakingTab
 
               <div className="p-5 space-y-4">
                 <div>
-                  <h3 className="text-lg font-bold text-white">{business.businessName}</h3>
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="text-lg font-bold text-white">{business.businessName}</h3>
+                    {classGuidance && (
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] ${
+                          classGuidance.stake.locked
+                            ? 'bg-amber-950/80 text-amber-300'
+                            : 'bg-emerald-950/80 text-emerald-300'
+                        }`}
+                      >
+                        {classGuidance.stake.label}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-neutral-500 text-sm">Token ID #{business.tokenId}</p>
                 </div>
 
@@ -258,8 +317,42 @@ export default function BusinessStakingTab({ walletAddress }: BusinessStakingTab
                     : `Claim ${rewardSymbol}`}
                 </button>
 
+                {classGuidance && (
+                  <div
+                    className={`rounded-xl border px-4 py-3 ${
+                      classGuidance.stake.locked
+                        ? 'border-amber-900/40 bg-amber-950/20'
+                        : 'border-emerald-900/40 bg-emerald-950/20'
+                    }`}
+                  >
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">
+                      Gameplay Gate
+                    </p>
+                    {classGuidance.stake.missingRequirements.length > 0 ? (
+                      <div className="mt-2 space-y-1.5">
+                        {classGuidance.stake.missingRequirements.slice(0, 3).map((message) => (
+                          <p key={message} className="text-xs text-amber-200">
+                            {message}
+                          </p>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-xs text-emerald-200">
+                        This business class has an opened gameplay path that is ready for staking-backed activation.
+                      </p>
+                    )}
+                    <p className="mt-2 text-xs text-neutral-300">
+                      Next action: <span className="text-white">{classGuidance.stake.nextAction}</span>
+                    </p>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-xl bg-zinc-950/80 p-3 space-y-2">
+                  <div
+                    className={`rounded-xl bg-zinc-950/80 p-3 space-y-2 ${
+                      classGuidance?.stake.locked ? 'opacity-75' : ''
+                    }`}
+                  >
                     <label
                       className="block text-neutral-500 text-sm"
                       htmlFor={`staking-stake-${business.tokenId}`}
@@ -282,12 +375,17 @@ export default function BusinessStakingTab({ walletAddress }: BusinessStakingTab
                         }))
                       }
                       className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white"
-                      disabled={!walletAddress || stakingStatus.status === 'pending'}
+                      disabled={
+                        !walletAddress ||
+                        stakingStatus.status === 'pending' ||
+                        classGuidance?.stake.locked
+                      }
                     />
                     <button
                       type="button"
                       onClick={() => handleStake(business.tokenId, business.ownedBalance)}
                       disabled={
+                        classGuidance?.stake.locked ||
                         !walletAddress ||
                         !approvalStatus ||
                         stakingStatus.status === 'pending' ||
@@ -301,6 +399,8 @@ export default function BusinessStakingTab({ walletAddress }: BusinessStakingTab
                       stakingStatus.action === 'stake' &&
                       stakingStatus.tokenId === business.tokenId
                         ? 'Staking...'
+                        : classGuidance?.stake.locked
+                        ? 'Setup Required'
                         : 'Stake'}
                     </button>
                   </div>

@@ -3,9 +3,14 @@ import { ethers } from 'ethers';
 import { useBusinessCollection } from '../hooks/useBusinessCollection';
 import { BASE_CHAIN_ID, CONTRACTS, ABIS, getSignerContract } from '../lib/contracts';
 import { getWalletProvider } from '../lib/providers';
+import {
+  getBusinessClassActionGuidanceByTokenId,
+  type BusinessSurfaceActionGuidance,
+} from '../lib/businessActionGuidance';
 
 interface BusinessCollectionTabProps {
   walletAddress: string | null;
+  actionGuidance?: BusinessSurfaceActionGuidance | null;
 }
 
 function formatOwnedBalance(value: number | null, walletAddress: string | null) {
@@ -46,7 +51,10 @@ function getReadableError(error: unknown) {
   return 'Mint failed.';
 }
 
-export default function BusinessCollectionTab({ walletAddress }: BusinessCollectionTabProps) {
+export default function BusinessCollectionTab({
+  walletAddress,
+  actionGuidance,
+}: BusinessCollectionTabProps) {
   const { businesses, loading, error, refetch } = useBusinessCollection(walletAddress);
   const [quantities, setQuantities] = useState<Record<number, number>>({});
   const [pendingTokenId, setPendingTokenId] = useState<number | null>(null);
@@ -170,6 +178,18 @@ export default function BusinessCollectionTab({ walletAddress }: BusinessCollect
         </p>
       </div>
 
+      {actionGuidance && (
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 px-4 py-3">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-neutral-500">
+            Gameplay Qualification Guidance
+          </p>
+          <p className="mt-2 text-sm text-neutral-300">
+            Assets stay visible here, but business acquisition now reflects the active operator’s
+            gameplay path. Current operator: <span className="text-white">{actionGuidance.activeOperatorLabel}</span>
+          </p>
+        </div>
+      )}
+
       {mintMessage && (
         <div className="rounded-2xl border border-red-900/20 bg-zinc-900/80 px-4 py-3 text-sm text-neutral-300">
           {mintMessage}
@@ -177,7 +197,12 @@ export default function BusinessCollectionTab({ walletAddress }: BusinessCollect
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {businesses.map((business) => (
+        {businesses.map((business) => {
+          const classGuidance = actionGuidance
+            ? getBusinessClassActionGuidanceByTokenId(actionGuidance, business.tokenId)
+            : null;
+
+          return (
           <article key={business.tokenId} className="overflow-hidden rounded-2xl border border-red-900/20 bg-zinc-900/80">
             <div className="aspect-[4/3] bg-zinc-950 border-b border-zinc-800 flex items-center justify-center overflow-hidden">
               {business.image ? (
@@ -196,8 +221,23 @@ export default function BusinessCollectionTab({ walletAddress }: BusinessCollect
 
             <div className="p-5 space-y-4">
               <div>
-                <h3 className="text-lg font-bold text-white">{business.businessName}</h3>
-                <p className="text-neutral-500 text-sm">Token ID #{business.tokenId}</p>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">{business.businessName}</h3>
+                    <p className="text-neutral-500 text-sm">Token ID #{business.tokenId}</p>
+                  </div>
+                  {classGuidance && (
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] ${
+                        classGuidance.mint.locked
+                          ? 'bg-amber-950/80 text-amber-300'
+                          : 'bg-emerald-950/80 text-emerald-300'
+                      }`}
+                    >
+                      {classGuidance.mint.label}
+                    </span>
+                  )}
+                </div>
                 <p className="text-neutral-600 text-xs mt-1">
                   {getMintAvailabilityLabel(business.totalMinted, business.maxSupply)}
                 </p>
@@ -228,7 +268,41 @@ export default function BusinessCollectionTab({ walletAddress }: BusinessCollect
                 </div>
               </dl>
 
-              <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4 space-y-3">
+              {classGuidance && (
+                <div
+                  className={`rounded-xl border px-4 py-3 ${
+                    classGuidance.mint.locked
+                      ? 'border-amber-900/40 bg-amber-950/20'
+                      : 'border-emerald-900/40 bg-emerald-950/20'
+                  }`}
+                >
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">
+                    Gameplay Gate
+                  </p>
+                  {classGuidance.mint.missingRequirements.length > 0 ? (
+                    <div className="mt-2 space-y-1.5">
+                      {classGuidance.mint.missingRequirements.slice(0, 3).map((message) => (
+                        <p key={message} className="text-xs text-amber-200">
+                          {message}
+                        </p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-xs text-emerald-200">
+                      Current gameplay qualification is aligned for this business family.
+                    </p>
+                  )}
+                  <p className="mt-2 text-xs text-neutral-300">
+                    Next action: <span className="text-white">{classGuidance.mint.nextAction}</span>
+                  </p>
+                </div>
+              )}
+
+              <div
+                className={`rounded-xl border border-zinc-800 bg-zinc-950/70 p-4 space-y-3 ${
+                  classGuidance?.mint.locked ? 'opacity-75' : ''
+                }`}
+              >
                 <div className="flex items-center justify-between gap-3">
                   <label className="text-neutral-500 text-sm" htmlFor={`business-qty-${business.tokenId}`}>
                     Mint quantity
@@ -243,7 +317,7 @@ export default function BusinessCollectionTab({ walletAddress }: BusinessCollect
                       }))
                     }
                     className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white"
-                    disabled={pendingTokenId === business.tokenId}
+                    disabled={pendingTokenId === business.tokenId || classGuidance?.mint.locked}
                   >
                     {[1, 2, 3, 4, 5].map((value) => (
                       <option key={value} value={value}>
@@ -273,6 +347,7 @@ export default function BusinessCollectionTab({ walletAddress }: BusinessCollect
                     )
                   }
                   disabled={
+                    classGuidance?.mint.locked ||
                     pendingTokenId === business.tokenId ||
                     !walletAddress ||
                     (business.maxSupply != null &&
@@ -285,6 +360,8 @@ export default function BusinessCollectionTab({ walletAddress }: BusinessCollect
                     ? 'Minting...'
                     : !walletAddress
                     ? 'Connect Wallet to Mint'
+                    : classGuidance?.mint.locked
+                    ? 'Qualification Required'
                     : business.maxSupply != null &&
                       business.totalMinted != null &&
                       business.totalMinted >= business.maxSupply
@@ -294,7 +371,7 @@ export default function BusinessCollectionTab({ walletAddress }: BusinessCollect
               </div>
             </div>
           </article>
-        ))}
+        )})}
       </div>
     </div>
   );

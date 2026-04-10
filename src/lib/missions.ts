@@ -1,0 +1,377 @@
+import type {
+  CertificationMissionAnswerState,
+  CertificationMissionDefinition,
+  CertificationMissionEvaluation,
+  MissionDefinition,
+  MissionDistrict,
+  MissionEvaluation,
+  MissionProgress,
+  MissionProgressInput,
+  MissionRequirementType,
+} from "../types/missions";
+
+const PHASE1_MISSION_BALANCE = {
+  districtRunnerBonus: { xp: 140, reputation: 8 },
+  beginnerCertification: { xp: 110, reputation: 6 },
+  darkAlleyRiskPremium: {
+    smugglerReputation: 8,
+    smugglerHeat: 3,
+    blackoutReputation: 12,
+  },
+} as const;
+
+const MOCK_MISSIONS: MissionDefinition[] = [
+  {
+    id: "daily-first-run",
+    title: "Daily First Run",
+    description: "Complete 1 match to keep progression moving every day.",
+    missionClass: "activity",
+    category: "daily",
+    minLevel: 1,
+    requirements: [{ type: "matches_completed", target: 1 }],
+    rewards: { xp: 50, xpSource: "daily_contract" },
+  },
+  {
+    id: "objective-hustle",
+    title: "Objective Hustle",
+    description: "Complete 3 objectives to reward active contribution.",
+    missionClass: "activity",
+    category: "objective",
+    minLevel: 1,
+    requirements: [{ type: "objectives_completed", target: 3 }],
+    rewards: { xp: 120, xpSource: "objective_contribution", reputation: 5 },
+  },
+  {
+    id: "district-runner",
+    title: "District Runner",
+    description: "Finish 2 district missions to build city reputation.",
+    missionClass: "activity",
+    category: "district",
+    minLevel: 3,
+    requirements: [{ type: "district_missions_completed", target: 2 }],
+    rewards: {
+      xp: PHASE1_MISSION_BALANCE.districtRunnerBonus.xp,
+      xpSource: "district_mission",
+      reputation: PHASE1_MISSION_BALANCE.districtRunnerBonus.reputation,
+    },
+  },
+  {
+    id: "neon-market-price-scout",
+    title: "Neon Market Price Scout",
+    description: "Run 1 business operation and complete 2 objectives to map trade momentum across Neon Market.",
+    missionClass: "activity",
+    category: "business",
+    district: "neon_market",
+    minLevel: 2,
+    recommendedRoles: ["trader", "data_broker"],
+    requirements: [
+      { type: "business_operations_completed", target: 1 },
+      { type: "objectives_completed", target: 2 },
+    ],
+    rewards: { xp: 160, xpSource: "business_operation", reputation: 8 },
+  },
+  {
+    id: "neon-market-floor-control",
+    title: "Neon Market Floor Control",
+    description: "Finish 2 district contracts and 1 match win to stabilize public-facing market influence.",
+    missionClass: "activity",
+    category: "district",
+    district: "neon_market",
+    minLevel: 5,
+    recommendedRoles: ["trader"],
+    requirements: [
+      { type: "district_missions_completed", target: 2 },
+      { type: "matches_won", target: 1 },
+    ],
+    rewards: { xp: 240, xpSource: "district_mission", reputation: 14 },
+  },
+  {
+    id: "dark-alley-smuggler-route",
+    title: "Dark Alley Smuggler Route",
+    description: "Deploy bots 2 times and finish 1 district mission to test a quiet route through Dark Alley.",
+    missionClass: "activity",
+    category: "district",
+    district: "dark_alley",
+    minLevel: 2,
+    recommendedRoles: ["hacker", "data_broker"],
+    requirements: [
+      { type: "bot_deployments", target: 2 },
+      { type: "district_missions_completed", target: 1 },
+    ],
+    rewards: {
+      xp: 170,
+      xpSource: "district_mission",
+      reputation: PHASE1_MISSION_BALANCE.darkAlleyRiskPremium.smugglerReputation,
+      heat: PHASE1_MISSION_BALANCE.darkAlleyRiskPremium.smugglerHeat,
+    },
+  },
+  {
+    id: "dark-alley-blackout-job",
+    title: "Dark Alley Blackout Job",
+    description: "Complete 3 objectives and 1 match win to push a higher-risk blackout contract in the underground sector.",
+    missionClass: "activity",
+    category: "combat",
+    district: "dark_alley",
+    minLevel: 4,
+    recommendedRoles: ["hacker", "code_warrior"],
+    requirements: [
+      { type: "objectives_completed", target: 3 },
+      { type: "matches_won", target: 1 },
+    ],
+    rewards: {
+      xp: 260,
+      xpSource: "objective_contribution",
+      reputation: PHASE1_MISSION_BALANCE.darkAlleyRiskPremium.blackoutReputation,
+      heat: 4,
+    },
+  },
+  {
+    id: "cyber-hq-signal-tuning",
+    title: "Cyber HQ Signal Tuning",
+    description: "Complete 2 objectives and deploy bots 1 time to calibrate automation and city systems inside Cyber HQ.",
+    missionClass: "activity",
+    category: "objective",
+    district: "cyber_hq",
+    minLevel: 2,
+    recommendedRoles: ["data_broker", "code_warrior"],
+    requirements: [
+      { type: "objectives_completed", target: 2 },
+      { type: "bot_deployments", target: 1 },
+    ],
+    rewards: { xp: 165, xpSource: "objective_contribution", reputation: 7 },
+  },
+  {
+    id: "cyber-hq-automation-benchmark",
+    title: "Cyber HQ Automation Benchmark",
+    description: "Deploy bots 4 times and win 1 match to validate higher-load automation from the engineering district.",
+    missionClass: "activity",
+    category: "combat",
+    district: "cyber_hq",
+    minLevel: 5,
+    recommendedRoles: ["code_warrior", "data_broker"],
+    requirements: [
+      { type: "bot_deployments", target: 4 },
+      { type: "matches_won", target: 1 },
+    ],
+    rewards: { xp: 250, xpSource: "bot_usage", reputation: 10 },
+  },
+  {
+    id: "bot-field-test",
+    title: "Bot Field Test",
+    description: "Deploy bots 4 times to encourage roster usage.",
+    missionClass: "activity",
+    category: "combat",
+    minLevel: 2,
+    requirements: [{ type: "bot_deployments", target: 4 }],
+    rewards: { xp: 140, xpSource: "bot_usage" },
+  },
+  {
+    id: "business-operator",
+    title: "Business Operator",
+    description: "Complete 2 business operations to strengthen owner loops.",
+    missionClass: "activity",
+    category: "business",
+    minLevel: 5,
+    requirements: [{ type: "business_operations_completed", target: 2 }],
+    rewards: { xp: 220, xpSource: "business_operation", reputation: 15, heat: 2 },
+  },
+];
+
+const MOCK_CERTIFICATION_MISSIONS: CertificationMissionDefinition[] = [
+  {
+    id: "beginner-defi-certification",
+    title: "Beginner DeFi Certification",
+    description:
+      "Pass a short DeFi knowledge quiz to prove baseline understanding before higher-trust financial and operator paths expand.",
+    missionClass: "certification",
+    category: "certification",
+    minLevel: 1,
+    rewards: {
+      xp: PHASE1_MISSION_BALANCE.beginnerCertification.xp,
+      xpSource: "objective_contribution",
+      reputation: PHASE1_MISSION_BALANCE.beginnerCertification.reputation,
+    },
+    passThreshold: 3,
+    questions: [
+      {
+        id: "wallet-custody",
+        prompt: "What is the main reason a self-custody wallet matters in DeFi?",
+        options: [
+          { id: "a", label: "It lets the game server hold your assets for you." },
+          { id: "b", label: "It gives you direct control over the wallet keys used to access assets." },
+          { id: "c", label: "It guarantees every trade will be profitable." },
+        ],
+        correctOptionId: "b",
+        explanation: "Self-custody means the user controls the wallet credentials rather than delegating them to a third party.",
+      },
+      {
+        id: "lp-risk",
+        prompt: "What risk can happen when you provide liquidity to a DeFi pool?",
+        options: [
+          { id: "a", label: "Impermanent loss if token prices move relative to each other." },
+          { id: "b", label: "The blockchain stops recording transactions forever." },
+          { id: "c", label: "Your NFT level is automatically reset." },
+        ],
+        correctOptionId: "a",
+        explanation: "Liquidity providers can face impermanent loss when paired asset prices diverge.",
+      },
+      {
+        id: "gas-fees",
+        prompt: "What are gas fees generally paying for on a blockchain network?",
+        options: [
+          { id: "a", label: "Extra in-game reputation only." },
+          { id: "b", label: "Network computation and transaction inclusion." },
+          { id: "c", label: "Guaranteed staking rewards." },
+        ],
+        correctOptionId: "b",
+        explanation: "Gas fees compensate the network for processing and including transactions.",
+      },
+      {
+        id: "slippage",
+        prompt: "What does slippage usually describe in a token swap?",
+        options: [
+          { id: "a", label: "The difference between expected and executed price." },
+          { id: "b", label: "A permanent ban from using DeFi apps." },
+          { id: "c", label: "The number of NFTs in a wallet." },
+        ],
+        correctOptionId: "a",
+        explanation: "Slippage is the price movement between quote time and execution time.",
+      },
+    ],
+  },
+];
+
+function getProgressValue(
+  input: MissionProgressInput,
+  requirementType: MissionRequirementType
+): number {
+  switch (requirementType) {
+    case "matches_completed":
+      return input.matchesCompleted ?? 0;
+    case "matches_won":
+      return input.matchesWon ?? 0;
+    case "objectives_completed":
+      return input.objectivesCompleted ?? 0;
+    case "district_missions_completed":
+      return input.districtMissionsCompleted ?? 0;
+    case "business_operations_completed":
+      return input.businessOperationsCompleted ?? 0;
+    case "bot_deployments":
+      return input.botDeployments ?? 0;
+    default:
+      return 0;
+  }
+}
+
+function evaluateMissionRequirements(
+  mission: MissionDefinition,
+  input: MissionProgressInput
+): MissionProgress[] {
+  return mission.requirements.map((requirement) => {
+    const current = getProgressValue(input, requirement.type);
+    return {
+      requirementType: requirement.type,
+      current,
+      target: requirement.target,
+      complete: current >= requirement.target,
+    };
+  });
+}
+
+export function getMockMissions(): MissionDefinition[] {
+  return MOCK_MISSIONS;
+}
+
+export function getMockCertificationMissions(): CertificationMissionDefinition[] {
+  return MOCK_CERTIFICATION_MISSIONS;
+}
+
+export function getMockMissionDistricts(): MissionDistrict[] {
+  return ["neon_market", "dark_alley", "cyber_hq"];
+}
+
+export function getAvailableMockMissions(level: number): MissionDefinition[] {
+  return MOCK_MISSIONS.filter((mission) => level >= (mission.minLevel ?? 1));
+}
+
+export function getAvailableMockCertificationMissions(
+  level: number
+): CertificationMissionDefinition[] {
+  return MOCK_CERTIFICATION_MISSIONS.filter((mission) => level >= (mission.minLevel ?? 1));
+}
+
+export function evaluateMissionCompletion(
+  mission: MissionDefinition,
+  input: MissionProgressInput,
+  level = 1
+): MissionEvaluation {
+  const progress = evaluateMissionRequirements(mission, input);
+  const levelEligible = level >= (mission.minLevel ?? 1);
+  const completionEligible = levelEligible && progress.every((entry) => entry.complete);
+
+  return {
+    missionId: mission.id,
+    status: completionEligible ? "completed" : "available",
+    progress,
+    completionEligible,
+    rewards: mission.rewards,
+  };
+}
+
+export function evaluateAllMockMissions(
+  input: MissionProgressInput,
+  level = 1
+): MissionEvaluation[] {
+  return getAvailableMockMissions(level).map((mission) =>
+    evaluateMissionCompletion(mission, input, level)
+  );
+}
+
+export function evaluateCertificationMission(
+  mission: CertificationMissionDefinition,
+  answers: Record<string, string> = {},
+  level = 1
+): CertificationMissionEvaluation {
+  const levelEligible = level >= (mission.minLevel ?? 1);
+  const questionResults = mission.questions.map((question) => {
+    const selectedOptionId = answers[question.id];
+    const answered = Boolean(selectedOptionId);
+    const correct = answered && selectedOptionId === question.correctOptionId;
+
+    return {
+      questionId: question.id,
+      selectedOptionId,
+      correctOptionId: question.correctOptionId,
+      answered,
+      correct,
+      explanation: question.explanation,
+    };
+  });
+  const answeredQuestions = questionResults.filter((result) => result.answered).length;
+  const correctAnswers = questionResults.filter((result) => result.correct).length;
+  const completionEligible =
+    levelEligible &&
+    answeredQuestions === mission.questions.length &&
+    correctAnswers >= mission.passThreshold;
+
+  return {
+    missionId: mission.id,
+    status: completionEligible ? "completed" : "available",
+    completionEligible,
+    rewards: mission.rewards,
+    answeredQuestions,
+    correctAnswers,
+    totalQuestions: mission.questions.length,
+    passThreshold: mission.passThreshold,
+    questionResults,
+  };
+}
+
+export function evaluateAllMockCertificationMissions(
+  answerState: CertificationMissionAnswerState,
+  level = 1
+): CertificationMissionEvaluation[] {
+  return getAvailableMockCertificationMissions(level).map((mission) =>
+    evaluateCertificationMission(mission, answerState[mission.id] ?? {}, level)
+  );
+}
