@@ -1,4 +1,9 @@
 import {
+  buildCertificationRequirementStatusSummary,
+  buildOperatorCertificationProofSummary,
+  type OperatorCertificationProofSummary,
+} from "./certificationProofs";
+import {
   buildBusinessEligibilitySubject,
   evaluateBusinessEligibility,
   getPhase1BusinessEligibilityDefinitions,
@@ -26,6 +31,7 @@ import type {
   BusinessDefenseStatusSummary,
   BusinessTrustPermissionSummary,
   BusinessTeamStatusSummary,
+  CertificationProofSource,
   LocalStarterBusinessRecord,
 } from "../types/business";
 
@@ -49,6 +55,7 @@ export interface OpenedBusinessOperationSummary {
     requiredLabels: string[];
     missingLabels: string[];
     proofLabels: string[];
+    proofSources: CertificationProofSource[];
     satisfied: boolean;
   };
   operatorStatus: BusinessRoleFit;
@@ -230,16 +237,16 @@ function getActivationStatus(
 
 function buildActivationCertificationChecks(
   definition: BusinessEligibilityDefinition,
-  completedMissionIds: string[],
+  certificationProofs: OperatorCertificationProofSummary,
   certificationLabelLookup: Map<string, { title: string; proofLabel: string | null }>
 ) {
-  const requiredMissionIds = definition.requiredActivationCertificationMissionIds;
-  const completedForRequirement = requiredMissionIds.filter((missionId) =>
-    completedMissionIds.includes(missionId)
+  const requirementStatus = buildCertificationRequirementStatusSummary(
+    definition.requiredActivationCertificationMissionIds,
+    certificationProofs
   );
-  const missingMissionIds = requiredMissionIds.filter(
-    (missionId) => !completedMissionIds.includes(missionId)
-  );
+  const requiredMissionIds = requirementStatus.requiredMissionIds;
+  const completedForRequirement = requirementStatus.completedMissionIds;
+  const missingMissionIds = requirementStatus.missingMissionIds;
   const requiredLabels = requiredMissionIds.map(
     (missionId) => certificationLabelLookup.get(missionId)?.title ?? formatMissionIdLabel(missionId)
   );
@@ -258,7 +265,8 @@ function buildActivationCertificationChecks(
       requiredLabels,
       missingLabels,
       proofLabels,
-      satisfied: missingMissionIds.length === 0,
+      proofSources: requirementStatus.proofSources,
+      satisfied: requirementStatus.satisfied,
     },
     checks: missingMissionIds.map((missionId) => {
       const label =
@@ -278,20 +286,23 @@ function buildActivationCertificationChecks(
 
 export function buildOpenedBusinessOperationSummaries(
   gameplayProfile: NFTGameplayProfile,
-  missionState: LocalMissionSubjectState
+  missionState: LocalMissionSubjectState,
+  certificationProofSummary?: OperatorCertificationProofSummary
 ): OpenedBusinessOperationSummary[] {
   const districtAffinity = gameplayProfile.metadata.normalizedTraits.location;
   const role = gameplayProfile.metadata.normalizedTraits.roleInNerdieCity;
-  const completedCertificationMissionIds = getMockCertificationMissions()
-    .map((mission) => mission.id)
-    .filter((missionId) => missionState.completedMissionIds.includes(missionId));
+  const certificationProofs =
+    certificationProofSummary ??
+    buildOperatorCertificationProofSummary({
+      missionState,
+    });
   const certificationLabelLookup = buildCertificationLabelLookup();
   const subject = buildBusinessEligibilitySubject({
     progression: gameplayProfile.progression,
     stakingTier: missionState.stakingTier,
     ownedBusinessNftCount: missionState.ownedBusinessNftCount,
     ownedBusinessNftClasses: missionState.ownedBusinessNftClasses,
-    completedCertificationMissionIds,
+    completedCertificationMissionIds: certificationProofs.certifiedMissionIds,
     districtAffinity,
     role,
   });
@@ -305,7 +316,7 @@ export function buildOpenedBusinessOperationSummaries(
     });
     const activationCertification = buildActivationCertificationChecks(
       definition,
-      completedCertificationMissionIds,
+      certificationProofs,
       certificationLabelLookup
     );
     const activationEvaluation: BusinessEligibilityResult = {
@@ -364,7 +375,8 @@ export function buildOpenedBusinessOperationSummaries(
       definition,
       subject,
       missionState,
-      openedBusiness.district
+      openedBusiness.district,
+      certificationProofs
     );
     const operationalState = buildBusinessOperationalStateSummary({
       ownershipStatus,

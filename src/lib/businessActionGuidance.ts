@@ -1,3 +1,4 @@
+import type { OperatorCertificationProofSummary } from "./certificationProofs";
 import { buildBusinessQualificationSummaries } from "./businessJourney";
 import { buildOpenedBusinessOperationSummaries } from "./businessOperationsStatus";
 import {
@@ -68,15 +69,18 @@ function getNextActionForCheck(
 
 export function buildBusinessSurfaceActionGuidance(
   gameplayProfile: NFTGameplayProfile,
-  missionState: LocalMissionSubjectState
+  missionState: LocalMissionSubjectState,
+  certificationProofSummary?: OperatorCertificationProofSummary
 ): BusinessSurfaceActionGuidance {
   const qualificationSummaries = buildBusinessQualificationSummaries(
     gameplayProfile,
-    missionState
+    missionState,
+    certificationProofSummary
   );
   const openedBusinessSummaries = buildOpenedBusinessOperationSummaries(
     gameplayProfile,
-    missionState
+    missionState,
+    certificationProofSummary
   );
 
   const byTokenId = Object.fromEntries(

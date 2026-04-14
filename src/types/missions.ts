@@ -75,6 +75,7 @@ export interface CertificationMissionDefinition {
   missionClass: "certification";
   category: "certification";
   minLevel?: number;
+  prerequisiteCertificationMissionIds?: string[];
   rewards: MissionReward;
   passThreshold: number;
   questions: CertificationQuestionDefinition[];
@@ -117,9 +118,22 @@ export interface CertificationQuestionResult {
   explanation: string;
 }
 
+export interface CertificationMissionPassEvaluation {
+  answeredQuestions: number;
+  correctAnswers: number;
+  totalQuestions: number;
+  passed: boolean;
+  questionResults: CertificationQuestionResult[];
+}
+
 export interface CertificationMissionEvaluation {
   missionId: string;
   status: MissionStatus;
+  levelEligible: boolean;
+  locked: boolean;
+  lockReason: string | null;
+  missingPrerequisiteMissionIds: string[];
+  hasExistingProof: boolean;
   completionEligible: boolean;
   rewards: MissionReward;
   answeredQuestions: number;

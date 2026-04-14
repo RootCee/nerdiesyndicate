@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { BUSINESS_STAKING_TIER_ORDER } from "../config/gameplay";
 import { buildOpenedBusinessOperationSummaries } from "../lib/businessOperationsStatus";
+import type { OperatorCertificationProofSummary } from "../lib/certificationProofs";
 import { getPhase1BusinessStakingTierDefinition } from "../lib/businessEligibility";
 import {
   updateLocalBusinessDefenseAssignment,
@@ -13,6 +14,7 @@ import { getLocalStarterBusinessKey } from "../lib/localStarterBusinesses";
 interface BusinessOperationsPanelProps {
   gameplayProfile: NFTGameplayProfile;
   missionState: LocalMissionSubjectState;
+  certificationProofSummary: OperatorCertificationProofSummary;
   onMissionStateChange: (nextState: LocalMissionSubjectState) => void;
 }
 
@@ -80,12 +82,18 @@ function getTrustClasses(unlocked: boolean) {
 export default function BusinessOperationsPanel({
   gameplayProfile,
   missionState,
+  certificationProofSummary,
   onMissionStateChange,
 }: BusinessOperationsPanelProps) {
   const [expandedBusinessKeys, setExpandedBusinessKeys] = useState<Record<string, boolean>>({});
   const businessSummaries = useMemo(
-    () => buildOpenedBusinessOperationSummaries(gameplayProfile, missionState),
-    [gameplayProfile, missionState]
+    () =>
+      buildOpenedBusinessOperationSummaries(
+        gameplayProfile,
+        missionState,
+        certificationProofSummary
+      ),
+    [certificationProofSummary, gameplayProfile, missionState]
   );
 
   if (businessSummaries.length === 0) {

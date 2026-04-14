@@ -1,11 +1,14 @@
 import { getMockMissions } from "./missions";
+import {
+  buildCertificationRequirementStatusSummary,
+  buildOperatorCertificationProofSummary,
+  type OperatorCertificationProofSummary,
+} from "./certificationProofs";
 import type {
   BusinessEligibilityDefinition,
   BusinessEligibilitySubject,
   BusinessPermissionId,
   BusinessTrustPermissionSummary,
-  CertificationProofSource,
-  CertificationRequirementStatusSummary,
   DistrictTrustBand,
 } from "../types/business";
 import type { LocalMissionSubjectState } from "./missionHarness";
@@ -42,28 +45,6 @@ function compareDistrictTrustBands(
     DISTRICT_TRUST_BAND_ORDER.indexOf(current) >=
     DISTRICT_TRUST_BAND_ORDER.indexOf(required)
   );
-}
-
-function buildCertificationRequirementStatus(
-  requiredMissionIds: BusinessEligibilityDefinition["requiredCertificationMissionIds"],
-  completedMissionIds: string[]
-): CertificationRequirementStatusSummary {
-  const completed = requiredMissionIds.filter((missionId) =>
-    completedMissionIds.includes(missionId)
-  );
-  const missingMissionIds = requiredMissionIds.filter(
-    (missionId) => !completedMissionIds.includes(missionId)
-  );
-  const proofSources: CertificationProofSource[] =
-    completed.length > 0 ? ["local_mission_completion"] : [];
-
-  return {
-    requiredMissionIds,
-    completedMissionIds: completed,
-    missingMissionIds,
-    proofSources,
-    satisfied: missingMissionIds.length === 0,
-  };
 }
 
 function getCompletedDistrictMissionCount(
@@ -163,8 +144,14 @@ export function buildBusinessTrustPermissionSummary(
   definition: BusinessEligibilityDefinition,
   subject: BusinessEligibilitySubject,
   missionState: LocalMissionSubjectState,
-  district: NerdieCityDistrict
+  district: NerdieCityDistrict,
+  certificationProofSummary?: OperatorCertificationProofSummary
 ): BusinessTrustPermissionSummary {
+  const certificationProofs =
+    certificationProofSummary ??
+    buildOperatorCertificationProofSummary({
+      missionState,
+    });
   const completedDistrictMissionCount = getCompletedDistrictMissionCount(
     missionState,
     district
@@ -176,17 +163,17 @@ export function buildBusinessTrustPermissionSummary(
     district
   );
   const trustBand = getDistrictTrustBand(districtReputationScore);
-  const higherTrustCerts = buildCertificationRequirementStatus(
+  const higherTrustCerts = buildCertificationRequirementStatusSummary(
     definition.trustPolicy.certificationMissionIdsForHigherTrustOps,
-    missionState.completedMissionIds
+    certificationProofs
   );
-  const defenseCerts = buildCertificationRequirementStatus(
+  const defenseCerts = buildCertificationRequirementStatusSummary(
     definition.trustPolicy.certificationMissionIdsForDefensePermissions,
-    missionState.completedMissionIds
+    certificationProofs
   );
-  const advancedOperatorCerts = buildCertificationRequirementStatus(
+  const advancedOperatorCerts = buildCertificationRequirementStatusSummary(
     definition.trustPolicy.certificationMissionIdsForAdvancedOperatorAccess,
-    missionState.completedMissionIds
+    certificationProofs
   );
   const permissionLabels = getAdvancedPermissionLabels(definition);
 
@@ -261,7 +248,7 @@ export function buildBusinessTrustPermissionSummary(
     blockedPermissionLabels,
     nextAction,
     futureProofingNotes: [
-      "Current certification proof sources come from local mission completion only.",
+      "Current certification proof checks flow through a dedicated adapter and currently resolve from local mission completion only.",
       "The trust model is ready for future soulbound certification NFT proofs without changing the business-permission layer.",
       "District reputation currently derives from local district mission completions plus district affinity, not from a shared world reputation service yet.",
     ],

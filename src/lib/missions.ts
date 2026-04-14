@@ -2,6 +2,7 @@ import type {
   CertificationMissionAnswerState,
   CertificationMissionDefinition,
   CertificationMissionEvaluation,
+  CertificationMissionPassEvaluation,
   MissionDefinition,
   MissionDistrict,
   MissionEvaluation,
@@ -9,6 +10,7 @@ import type {
   MissionProgressInput,
   MissionRequirementType,
 } from "../types/missions";
+import type { OperatorCertificationProofSummary } from "./certificationProofs";
 
 const PHASE1_MISSION_BALANCE = {
   districtRunnerBonus: { xp: 140, reputation: 8 },
@@ -255,6 +257,7 @@ const MOCK_CERTIFICATION_MISSIONS: CertificationMissionDefinition[] = [
     missionClass: "certification",
     category: "certification",
     minLevel: 5,
+    prerequisiteCertificationMissionIds: ["beginner-defi-certification"],
     rewards: {
       xp: PHASE1_MISSION_BALANCE.operatorStakingCertification.xp,
       xpSource: "business_operation",
@@ -380,6 +383,22 @@ export function getAvailableMockCertificationMissions(
   return MOCK_CERTIFICATION_MISSIONS.filter((mission) => level >= (mission.minLevel ?? 1));
 }
 
+function hasCertificationProof(
+  proofSummary: OperatorCertificationProofSummary | undefined,
+  missionId: string
+): boolean {
+  return proofSummary?.proofsByMissionId[missionId]?.hasProof ?? false;
+}
+
+function getMissingPrerequisiteMissionIds(
+  mission: CertificationMissionDefinition,
+  proofSummary?: OperatorCertificationProofSummary
+): string[] {
+  return (mission.prerequisiteCertificationMissionIds ?? []).filter(
+    (missionId) => !hasCertificationProof(proofSummary, missionId)
+  );
+}
+
 export function evaluateMissionCompletion(
   mission: MissionDefinition,
   input: MissionProgressInput,
@@ -410,9 +429,52 @@ export function evaluateAllMockMissions(
 export function evaluateCertificationMission(
   mission: CertificationMissionDefinition,
   answers: Record<string, string> = {},
-  level = 1
+  level = 1,
+  proofSummary?: OperatorCertificationProofSummary
 ): CertificationMissionEvaluation {
   const levelEligible = level >= (mission.minLevel ?? 1);
+  const hasExistingProof = hasCertificationProof(proofSummary, mission.id);
+  const missingPrerequisiteMissionIds = getMissingPrerequisiteMissionIds(
+    mission,
+    proofSummary
+  );
+  const prerequisiteEligible = missingPrerequisiteMissionIds.length === 0;
+  const passEvaluation = evaluateCertificationMissionPass(mission, answers);
+  const { answeredQuestions, correctAnswers, questionResults } = passEvaluation;
+  const completionEligible =
+    !hasExistingProof &&
+    levelEligible &&
+    prerequisiteEligible &&
+    passEvaluation.passed;
+  const locked = !levelEligible || !prerequisiteEligible;
+  const lockReason = !prerequisiteEligible
+    ? "Requires Beginner DeFi Certification"
+    : !levelEligible
+    ? `Requires Level ${mission.minLevel ?? 1}`
+    : null;
+
+  return {
+    missionId: mission.id,
+    status: hasExistingProof || completionEligible ? "completed" : "available",
+    levelEligible,
+    locked,
+    lockReason,
+    missingPrerequisiteMissionIds,
+    hasExistingProof,
+    completionEligible,
+    rewards: mission.rewards,
+    answeredQuestions,
+    correctAnswers,
+    totalQuestions: mission.questions.length,
+    passThreshold: mission.passThreshold,
+    questionResults,
+  };
+}
+
+export function evaluateCertificationMissionPass(
+  mission: CertificationMissionDefinition,
+  answers: Record<string, string> = {}
+): CertificationMissionPassEvaluation {
   const questionResults = mission.questions.map((question) => {
     const selectedOptionId = answers[question.id];
     const answered = Boolean(selectedOptionId);
@@ -429,29 +491,29 @@ export function evaluateCertificationMission(
   });
   const answeredQuestions = questionResults.filter((result) => result.answered).length;
   const correctAnswers = questionResults.filter((result) => result.correct).length;
-  const completionEligible =
-    levelEligible &&
-    answeredQuestions === mission.questions.length &&
-    correctAnswers >= mission.passThreshold;
 
   return {
-    missionId: mission.id,
-    status: completionEligible ? "completed" : "available",
-    completionEligible,
-    rewards: mission.rewards,
     answeredQuestions,
     correctAnswers,
     totalQuestions: mission.questions.length,
-    passThreshold: mission.passThreshold,
+    passed:
+      answeredQuestions === mission.questions.length &&
+      correctAnswers >= mission.passThreshold,
     questionResults,
   };
 }
 
 export function evaluateAllMockCertificationMissions(
   answerState: CertificationMissionAnswerState,
-  level = 1
+  level = 1,
+  proofSummary?: OperatorCertificationProofSummary
 ): CertificationMissionEvaluation[] {
-  return getAvailableMockCertificationMissions(level).map((mission) =>
-    evaluateCertificationMission(mission, answerState[mission.id] ?? {}, level)
+  return getMockCertificationMissions().map((mission) =>
+    evaluateCertificationMission(
+      mission,
+      answerState[mission.id] ?? {},
+      level,
+      proofSummary
+    )
   );
 }

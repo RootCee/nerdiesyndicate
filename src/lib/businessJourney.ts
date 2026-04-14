@@ -1,4 +1,7 @@
-import { getMockCertificationMissions } from "./missions";
+import {
+  buildOperatorCertificationProofSummary,
+  type OperatorCertificationProofSummary,
+} from "./certificationProofs";
 import {
   buildBusinessEligibilitySubject,
   evaluateAllBusinessEligibilityOptions,
@@ -77,18 +80,21 @@ export interface BusinessClassFlowSummary {
 
 function buildSubject(
   gameplayProfile: NFTGameplayProfile,
-  missionState: LocalMissionSubjectState
+  missionState: LocalMissionSubjectState,
+  certificationProofSummary?: OperatorCertificationProofSummary
 ) {
-  const completedCertificationMissionIds = getMockCertificationMissions()
-    .map((mission) => mission.id)
-    .filter((missionId) => missionState.completedMissionIds.includes(missionId));
+  const certificationProofs =
+    certificationProofSummary ??
+    buildOperatorCertificationProofSummary({
+      missionState,
+    });
 
   return buildBusinessEligibilitySubject({
     progression: gameplayProfile.progression,
     stakingTier: missionState.stakingTier,
     ownedBusinessNftCount: missionState.ownedBusinessNftCount,
     ownedBusinessNftClasses: missionState.ownedBusinessNftClasses,
-    completedCertificationMissionIds,
+    completedCertificationMissionIds: certificationProofs.certifiedMissionIds,
     districtAffinity: gameplayProfile.metadata.normalizedTraits.location,
     role: gameplayProfile.metadata.normalizedTraits.roleInNerdieCity,
   });
@@ -111,9 +117,14 @@ function isSetupBlockingCheck(check: BusinessEligibilityCheck): boolean {
 
 export function buildBusinessQualificationSummaries(
   gameplayProfile: NFTGameplayProfile,
-  missionState: LocalMissionSubjectState
+  missionState: LocalMissionSubjectState,
+  certificationProofSummary?: OperatorCertificationProofSummary
 ): BusinessQualificationSummary[] {
-  const subject = buildSubject(gameplayProfile, missionState);
+  const subject = buildSubject(
+    gameplayProfile,
+    missionState,
+    certificationProofSummary
+  );
 
   return evaluateAllBusinessEligibilityOptions(subject).map((evaluation) => {
     const qualificationChecks = evaluation.checks.filter(isQualificationCheck);
@@ -133,13 +144,18 @@ export function buildBusinessSetupSummaries(
   gameplayProfile: NFTGameplayProfile,
   missionState: LocalMissionSubjectState,
   selectedBusinessNftClassId: BusinessNftClassId | null,
-  districtSelections: Record<string, NerdieCityDistrict>
+  districtSelections: Record<string, NerdieCityDistrict>,
+  certificationProofSummary?: OperatorCertificationProofSummary
 ): BusinessSetupSummary[] {
   if (!selectedBusinessNftClassId) {
     return [];
   }
 
-  const subject = buildSubject(gameplayProfile, missionState);
+  const subject = buildSubject(
+    gameplayProfile,
+    missionState,
+    certificationProofSummary
+  );
   const businessNftClass = getBusinessNftClassDefinition(selectedBusinessNftClassId);
   const districtCapacities = buildBusinessDistrictCapacitySummaries(missionState);
 

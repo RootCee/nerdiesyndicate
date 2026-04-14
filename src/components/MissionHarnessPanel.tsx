@@ -1,6 +1,8 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { ethers } from "ethers";
 import BusinessEligibilityPreviewPanel from "./BusinessEligibilityPreviewPanel";
 import BusinessOperationsPanel from "./BusinessOperationsPanel";
+import type { OperatorCertificationProofSummary } from "../lib/certificationProofs";
 import {
   applyGeneralContractUtility,
   buildGeneralContractUtilitySummary,
@@ -13,6 +15,10 @@ import {
   getMockMissions,
 } from "../lib/missions";
 import {
+  buildCertificationMintApprovalMessage,
+  requestCertificationMint,
+} from "../lib/certificationMinting";
+import {
   answerCertificationQuestion,
   applyMissionRewards,
   createLocalMissionSubjectState,
@@ -20,6 +26,7 @@ import {
   type LocalMissionSubjectState,
 } from "../lib/missionHarness";
 import type { NFTGameplayProfile } from "../lib/nftGameplayProfile";
+import { getWalletProvider } from "../lib/providers";
 import type {
   CertificationMissionDefinition,
   MissionDefinition,
@@ -34,9 +41,12 @@ interface MissionHarnessSubject {
 
 interface MissionHarnessPanelProps {
   subjects: MissionHarnessSubject[];
+  walletAddress: string | null;
   selectedTokenId: number | null;
   onSelectTokenId: (tokenId: number) => void;
   missionStateByTokenId: Record<number, LocalMissionSubjectState>;
+  certificationProofSummary: OperatorCertificationProofSummary;
+  onCertificationProofRefresh?: () => Promise<void> | void;
   onMissionStateChange: (tokenId: number, nextState: LocalMissionSubjectState) => void;
   onResetSubject: (tokenId: number) => void;
 }
@@ -61,6 +71,13 @@ function formatRoleLabel(value: string) {
 
 function formatCertificationQuestionLabel(index: number) {
   return `Q${index + 1}`;
+}
+
+function formatCertificationMissionTitle(missionId: string) {
+  return missionId
+    .split("-")
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
 }
 
 function groupMissionsByDistrict(missions: MissionDefinition[]) {
@@ -117,9 +134,12 @@ function CollapsibleSection({
 
 export default function MissionHarnessPanel({
   subjects,
+  walletAddress,
   selectedTokenId,
   onSelectTokenId,
   missionStateByTokenId,
+  certificationProofSummary,
+  onCertificationProofRefresh,
   onMissionStateChange,
   onResetSubject,
 }: MissionHarnessPanelProps) {
@@ -129,6 +149,9 @@ export default function MissionHarnessPanel({
     ownershipSetup: false,
     activationOperations: false,
   });
+  const [certificationActionByMissionId, setCertificationActionByMissionId] = useState<
+    Record<string, { pending: boolean; message: string | null; tone: "neutral" | "success" | "error" }>
+  >({});
   const selectedSubject =
     subjects.find((subject) => subject.tokenId === selectedTokenId) ?? subjects[0] ?? null;
 
@@ -161,9 +184,10 @@ export default function MissionHarnessPanel({
 
     return evaluateAllMockCertificationMissions(
       selectedState.certificationAnswers,
-      selectedSubject.gameplayProfile.progression.profile.level.currentLevel
+      selectedSubject.gameplayProfile.progression.profile.level.currentLevel,
+      certificationProofSummary
     );
-  }, [selectedState, selectedSubject]);
+  }, [certificationProofSummary, selectedState, selectedSubject]);
 
   if (!selectedSubject || !selectedState) {
     return null;
@@ -176,9 +200,7 @@ export default function MissionHarnessPanel({
   const availableMissionIds = new Set(evaluations.map((evaluation) => evaluation.missionId));
   const missionCatalog = getMockMissions().filter((mission) => availableMissionIds.has(mission.id));
   const { grouped, generalMissions } = groupMissionsByDistrict(missionCatalog);
-  const certificationCatalog = getMockCertificationMissions().filter((mission) =>
-    certificationEvaluations.some((evaluation) => evaluation.missionId === mission.id)
-  );
+  const certificationCatalog = getMockCertificationMissions();
   const subjectDistrict = selectedSubject.gameplayProfile.metadata.normalizedTraits.location;
   const subjectRole = selectedSubject.gameplayProfile.metadata.normalizedTraits.roleInNerdieCity;
   const setSectionOpen = (sectionId: string) =>
@@ -186,6 +208,94 @@ export default function MissionHarnessPanel({
       ...current,
       [sectionId]: !current[sectionId],
     }));
+  const setCertificationActionState = (
+    missionId: string,
+    nextState: { pending: boolean; message: string | null; tone: "neutral" | "success" | "error" }
+  ) =>
+    setCertificationActionByMissionId((current) => ({
+      ...current,
+      [missionId]: nextState,
+    }));
+
+  const handleCertificationCompletion = async (
+    mission: CertificationMissionDefinition,
+    evaluation: NonNullable<typeof certificationEvaluations[number]>,
+    answers: Record<string, string>,
+    completedLocally: boolean,
+    hasExistingProof: boolean
+  ) => {
+    if (hasExistingProof || completedLocally || !evaluation.completionEligible) {
+      return;
+    }
+
+    if (!walletAddress) {
+      setCertificationActionState(mission.id, {
+        pending: false,
+        message: "Connect the wallet that should receive this certification first.",
+        tone: "error",
+      });
+      return;
+    }
+
+    if (mission.proof == null) {
+      onMissionStateChange(
+        selectedSubject.tokenId,
+        applyMissionRewards(selectedState, evaluation)
+      );
+      return;
+    }
+
+    try {
+      setCertificationActionState(mission.id, {
+        pending: true,
+        message: "Waiting for wallet signature, then minting certification proof on Base.",
+        tone: "neutral",
+      });
+
+      const walletProvider = getWalletProvider();
+
+      if (!walletProvider) {
+        throw new Error("No wallet provider found for certification mint.");
+      }
+
+      const signer = walletProvider.getSigner();
+      const signature = await signer.signMessage(
+        buildCertificationMintApprovalMessage({
+          walletAddress,
+          missionId: mission.id,
+        })
+      );
+      const mintResult = await requestCertificationMint({
+        missionId: mission.id,
+        walletAddress,
+        answers,
+        signature,
+      });
+
+      onMissionStateChange(
+        selectedSubject.tokenId,
+        applyMissionRewards(selectedState, evaluation)
+      );
+      await onCertificationProofRefresh?.();
+
+      setCertificationActionState(mission.id, {
+        pending: false,
+        message: mintResult.alreadyOwned
+          ? "Wallet proof already existed. Certification ownership was refreshed."
+          : `Certification minted on Base${mintResult.transactionHash ? `: ${mintResult.transactionHash.slice(0, 10)}...` : "."}`,
+        tone: "success",
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to mint certification proof.";
+
+      setCertificationActionState(mission.id, {
+        pending: false,
+        message,
+        tone: "error",
+      });
+    }
+  };
 
   const renderMissionCard = (mission: MissionDefinition) => {
     const evaluation = evaluations.find((entry) => entry.missionId === mission.id);
@@ -323,7 +433,23 @@ export default function MissionHarnessPanel({
     }
 
     const completedLocally = selectedState.completedMissionIds.includes(mission.id);
+    const proofRecord = certificationProofSummary.proofsByMissionId[mission.id];
     const answerMap = selectedState.certificationAnswers[mission.id] ?? {};
+    const isLocked = evaluation.locked;
+    const hasWalletProof =
+      proofRecord?.hasProof === true &&
+      proofRecord.proofSources.includes("future_soulbound_nft");
+    const hasExistingProof = evaluation.hasExistingProof;
+    const certificationActionState = certificationActionByMissionId[mission.id] ?? {
+      pending: false,
+      message: null,
+      tone: "neutral" as const,
+    };
+    const missingPrerequisiteLabels = evaluation.missingPrerequisiteMissionIds.map(
+      (missionId) =>
+        getMockCertificationMissions().find((entry) => entry.id === missionId)?.title ??
+        formatCertificationMissionTitle(missionId)
+    );
 
     return (
       <div key={mission.id} className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
@@ -334,6 +460,16 @@ export default function MissionHarnessPanel({
               <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-neutral-400">
                 certification
               </span>
+              {isLocked && (
+                <span className="rounded-full border border-amber-800/70 bg-amber-950/70 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-amber-200">
+                  Locked
+                </span>
+              )}
+              {hasWalletProof && !completedLocally && (
+                <span className="rounded-full border border-sky-800/70 bg-sky-950/70 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-sky-200">
+                  Wallet Proof
+                </span>
+              )}
               {completedLocally && (
                 <span className="rounded-full bg-emerald-950/80 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-emerald-300">
                   Applied
@@ -348,6 +484,57 @@ export default function MissionHarnessPanel({
               Rewards: +{mission.rewards.xp} XP
               {mission.rewards.reputation ? `, +${mission.rewards.reputation} reputation` : ""}
             </p>
+            {hasWalletProof && !completedLocally && (
+              <div className="mt-3 rounded-lg border border-sky-900/70 bg-sky-950/40 p-3">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-sky-300">
+                  On-Chain Proof
+                </p>
+                <p className="mt-2 text-xs text-sky-100">
+                  This certification is already verified by the connected wallet.
+                </p>
+                <p className="mt-1 text-xs text-sky-200/80">
+                  Contract proof is being used as the current source of truth for this requirement.
+                </p>
+              </div>
+            )}
+            {isLocked && (
+              <div className="mt-3 rounded-lg border border-amber-900/70 bg-amber-950/40 p-3">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-amber-300">Locked</p>
+                <p className="mt-2 text-xs text-amber-100">
+                  {evaluation.lockReason ?? `Requires Level ${mission.minLevel ?? 1}`}
+                </p>
+                <p className="mt-1 text-xs text-amber-200/80">
+                  {!evaluation.levelEligible
+                    ? `Reach Level ${mission.minLevel ?? 1} with the active operator first.`
+                    : missingPrerequisiteLabels.length > 0
+                    ? `Complete ${missingPrerequisiteLabels.join(", ")} first.`
+                    : "Complete Beginner DeFi Certification first."}
+                </p>
+              </div>
+            )}
+            {certificationActionState.message && (
+              <div
+                className={`mt-3 rounded-lg border p-3 ${
+                  certificationActionState.tone === "success"
+                    ? "border-emerald-900/70 bg-emerald-950/40"
+                    : certificationActionState.tone === "error"
+                    ? "border-red-900/70 bg-red-950/40"
+                    : "border-zinc-800 bg-zinc-900/60"
+                }`}
+              >
+                <p
+                  className={`text-xs ${
+                    certificationActionState.tone === "success"
+                      ? "text-emerald-100"
+                      : certificationActionState.tone === "error"
+                      ? "text-red-100"
+                      : "text-neutral-300"
+                  }`}
+                >
+                  {certificationActionState.message}
+                </p>
+              </div>
+            )}
           </div>
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-xs text-neutral-300">
             Score: {evaluation.correctAnswers} / {evaluation.totalQuestions}
@@ -375,6 +562,7 @@ export default function MissionHarnessPanel({
                       <button
                         key={option.id}
                         type="button"
+                        disabled={isLocked}
                         onClick={() =>
                           onMissionStateChange(
                             selectedSubject.tokenId,
@@ -390,7 +578,7 @@ export default function MissionHarnessPanel({
                           isSelected
                             ? "border-red-700 bg-red-950/40 text-red-100"
                             : "border-zinc-700 bg-zinc-950 text-neutral-300 hover:border-zinc-600 hover:text-white"
-                        }`}
+                        } disabled:cursor-not-allowed disabled:opacity-40`}
                       >
                         {option.label}
                       </button>
@@ -407,7 +595,13 @@ export default function MissionHarnessPanel({
 
         <div className="mt-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <p className="text-xs text-neutral-400">
-            {evaluation.answeredQuestions < evaluation.totalQuestions
+            {hasExistingProof
+              ? "Certification already verified for this wallet."
+              : isLocked
+              ? !evaluation.levelEligible
+                ? `Reach Level ${mission.minLevel ?? 1} with the active operator first.`
+                : "Complete Beginner DeFi Certification first."
+              : evaluation.answeredQuestions < evaluation.totalQuestions
               ? `Answer ${evaluation.totalQuestions - evaluation.answeredQuestions} more question(s) to finish the quiz.`
               : evaluation.completionEligible
               ? "Passing score reached. Certification rewards are ready to apply."
@@ -415,16 +609,33 @@ export default function MissionHarnessPanel({
           </p>
           <button
             type="button"
-            disabled={!evaluation.completionEligible || completedLocally}
+            disabled={
+              certificationActionState.pending ||
+              hasExistingProof ||
+              isLocked ||
+              !evaluation.completionEligible ||
+              completedLocally
+            }
             onClick={() =>
-              onMissionStateChange(
-                selectedSubject.tokenId,
-                applyMissionRewards(selectedState, evaluation)
+              void handleCertificationCompletion(
+                mission,
+                evaluation,
+                answerMap,
+                completedLocally,
+                hasExistingProof
               )
             }
             className="rounded-xl border border-red-800/50 bg-red-950/40 px-3 py-2 text-xs font-medium text-red-200 transition enabled:hover:border-red-700 enabled:hover:bg-red-900/50 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {completedLocally ? "Certification Applied" : "Apply Certification Rewards"}
+            {certificationActionState.pending
+              ? "Minting Certification..."
+              : hasExistingProof
+              ? "Certification Verified"
+              : completedLocally
+              ? "Certification Applied"
+              : mission.proof
+              ? "Mint Certification + Apply Rewards"
+              : "Apply Certification Rewards"}
           </button>
         </div>
       </div>
@@ -554,6 +765,7 @@ export default function MissionHarnessPanel({
         <BusinessEligibilityPreviewPanel
           gameplayProfile={selectedSubject.gameplayProfile}
           missionState={selectedState}
+          certificationProofSummary={certificationProofSummary}
           onMissionStateChange={(nextState) =>
             onMissionStateChange(selectedSubject.tokenId, nextState)
           }
@@ -569,6 +781,7 @@ export default function MissionHarnessPanel({
         <BusinessOperationsPanel
           gameplayProfile={selectedSubject.gameplayProfile}
           missionState={selectedState}
+          certificationProofSummary={certificationProofSummary}
           onMissionStateChange={(nextState) =>
             onMissionStateChange(selectedSubject.tokenId, nextState)
           }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import type { OperatorCertificationProofSummary } from "../lib/certificationProofs";
 import {
   buildBusinessClassFlowSummary,
   buildBusinessQualificationSummaries,
@@ -12,7 +13,6 @@ import {
   claimLocalStarterBusiness,
   hasLocalStarterBusinessClaim,
 } from "../lib/localStarterBusinesses";
-import { getMockCertificationMissions } from "../lib/missions";
 import type { LocalMissionSubjectState } from "../lib/missionHarness";
 import type { NFTGameplayProfile } from "../lib/nftGameplayProfile";
 import type {
@@ -25,6 +25,7 @@ import type { NerdieCityDistrict } from "../config/gameplay";
 interface BusinessEligibilityPreviewPanelProps {
   gameplayProfile: NFTGameplayProfile;
   missionState: LocalMissionSubjectState;
+  certificationProofSummary: OperatorCertificationProofSummary;
   onMissionStateChange: (nextState: LocalMissionSubjectState) => void;
 }
 
@@ -42,6 +43,7 @@ function formatTimestamp(value: string) {
 export default function BusinessEligibilityPreviewPanel({
   gameplayProfile,
   missionState,
+  certificationProofSummary,
   onMissionStateChange,
 }: BusinessEligibilityPreviewPanelProps) {
   const [isQualificationOpen, setIsQualificationOpen] = useState(false);
@@ -60,8 +62,13 @@ export default function BusinessEligibilityPreviewPanel({
     ? getBusinessNftClassDefinition(selectedBusinessNftClassId)
     : null;
   const qualificationSummaries = useMemo(
-    () => buildBusinessQualificationSummaries(gameplayProfile, missionState),
-    [gameplayProfile, missionState]
+    () =>
+      buildBusinessQualificationSummaries(
+        gameplayProfile,
+        missionState,
+        certificationProofSummary
+      ),
+    [certificationProofSummary, gameplayProfile, missionState]
   );
   const setupSummaries = useMemo(
     () =>
@@ -69,9 +76,16 @@ export default function BusinessEligibilityPreviewPanel({
         gameplayProfile,
         missionState,
         selectedBusinessNftClassId,
-        districtSelections
+        districtSelections,
+        certificationProofSummary
       ),
-    [districtSelections, gameplayProfile, missionState, selectedBusinessNftClassId]
+    [
+      certificationProofSummary,
+      districtSelections,
+      gameplayProfile,
+      missionState,
+      selectedBusinessNftClassId,
+    ]
   );
   const classFlowSummary = useMemo(
     () => buildBusinessClassFlowSummary(selectedBusinessNftClassId),
@@ -85,9 +99,7 @@ export default function BusinessEligibilityPreviewPanel({
     [businessNftClassOptions]
   );
   const completedCertificationIds = new Set(
-    getMockCertificationMissions()
-      .map((mission) => mission.id)
-      .filter((missionId) => missionState.completedMissionIds.includes(missionId))
+    certificationProofSummary.certifiedMissionIds
   );
   const openedBusinessLookup = new Map(
     missionState.openedStarterBusinesses.map((business) => [business.businessTypeId, business])

@@ -4,6 +4,7 @@ import ERC6551RegistryABI from '../abis/ERC6551Registry.json';
 import BusinessesABI from '../abis/NerdieBlaqSyndicateBusinesses.json';
 import StakingABI from '../abis/BusinessStakingWithBurn.json';
 import ERC20ABI from '../abis/ERC20.json';
+import { DEFAULT_CERTIFICATION_CONTRACT_ADDRESS } from './certificationContractConfig';
 
 // Contract addresses (Base chain)
 export const CONTRACTS = {
@@ -12,6 +13,9 @@ export const CONTRACTS = {
   TBA_IMPLEMENTATION: import.meta.env.VITE_TBA_IMPLEMENTATION as string,
   BUSINESS_NFT: import.meta.env.VITE_BUSINESS_NFT as string,
   STAKING: import.meta.env.VITE_STAKING_CONTRACT as string,
+  CERTIFICATION_SBT:
+    (import.meta.env.VITE_CERTIFICATION_SBT as string | undefined) ||
+    DEFAULT_CERTIFICATION_CONTRACT_ADDRESS,
   NERDIE_TOKEN:
     (import.meta.env.VITE_NERDIE_TOKEN as string | undefined) ||
     '0x4b138bd7e18a3a725a4672814f84b00711c1939d',
@@ -27,13 +31,16 @@ export const ABIS = {
   Businesses: BusinessesABI,
   Staking: StakingABI,
   ERC20: ERC20ABI,
+  CertificationSoulbound: [
+    'function balanceOf(address account, uint256 id) view returns (uint256)',
+  ],
 } as const;
 
 /** Get a read-only contract instance using a JsonRpcProvider */
 export function getReadContract(
   address: string,
   abi: ethers.ContractInterface,
-  provider: ethers.providers.JsonRpcProvider
+  provider: ethers.providers.Provider
 ): ethers.Contract {
   return new ethers.Contract(address, abi, provider);
 }

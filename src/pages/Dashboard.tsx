@@ -19,6 +19,7 @@ import instagram from '../images/instagram.png';
 import { CONTRACTS, BASE_CHAIN_ID } from '../lib/contracts';
 import { createLocalMissionSubjectState } from '../lib/missionHarness';
 import { buildBusinessSurfaceActionGuidance } from '../lib/businessActionGuidance';
+import { useOperatorCertificationProofSummary } from '../hooks/useOperatorCertificationProofSummary';
 import {
   restoreLocalMissionStateByTokenIdFromJson,
   serializeLocalVerticalSliceSnapshot,
@@ -334,11 +335,16 @@ function DashboardContent({ address }: { address: string | null }) {
       ? missionStateByTokenId[activePlayerCard.nft.tokenId] ??
         createLocalMissionSubjectState(activePlayerCard.gameplayProfile)
       : null;
+  const {
+    proofSummary: activeCertificationProofSummary,
+    refreshProofSummary: refreshActiveCertificationProofSummary,
+  } = useOperatorCertificationProofSummary(address, activeMissionState);
   const assetActionGuidance =
     activePlayerCard && activeMissionState
       ? buildBusinessSurfaceActionGuidance(
           activePlayerCard.gameplayProfile,
-          activeMissionState
+          activeMissionState,
+          activeCertificationProofSummary
         )
       : null;
   const districtOccupancy = (['neon_market', 'dark_alley', 'cyber_hq'] as const).map((district) => ({
@@ -722,9 +728,12 @@ function DashboardContent({ address }: { address: string | null }) {
                   name: nft.name,
                   gameplayProfile,
                 }))}
+                walletAddress={address}
                 selectedTokenId={missionSubjectTokenId}
                 onSelectTokenId={setMissionSubjectTokenId}
                 missionStateByTokenId={missionStateByTokenId}
+                certificationProofSummary={activeCertificationProofSummary}
+                onCertificationProofRefresh={refreshActiveCertificationProofSummary}
                 onMissionStateChange={(tokenId, nextState) =>
                   setMissionStateByTokenId((current) => ({
                     ...current,
