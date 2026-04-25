@@ -17,6 +17,7 @@ import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 import Disclaimer from './pages/Disclaimer';
 import Contact from './pages/Contact';
+import Fit from './pages/Fit';
 
 function ScrollToTop() {
   const location = useLocation();
@@ -71,6 +72,13 @@ function Navbar() {
       href: '/music',
       external: false,
       active: location.pathname === '/music',
+    },
+    {
+      key: 'fit',
+      label: 'Fit',
+      href: '/fit',
+      external: false,
+      active: location.pathname === '/fit',
     },
     {
       key: 'merch',
@@ -205,6 +213,7 @@ function AppRoutes() {
       <Route path="/academy" element={<Academy />} />
       <Route path="/businesses" element={<Businesses />} />
       <Route path="/music" element={<Music />} />
+      <Route path="/fit" element={<Fit />} />
       <Route path="/music/thank-you" element={<MusicThankYou />} />
       <Route path="/music/checkout-cancelled" element={<MusicCheckoutCancelled />} />
       <Route path="/merch" element={<Merch />} />
