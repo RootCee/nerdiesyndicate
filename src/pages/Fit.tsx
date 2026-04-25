@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom';
 import Seo from '../components/Seo';
 import PublicSiteFooter from '../components/PublicSiteFooter';
 
@@ -226,12 +225,20 @@ export default function Fit() {
                 help users stay locked in, build momentum, and look stronger every week.
               </p>
               <div className="mt-8 flex flex-col gap-4 sm:flex-row">
-                <Link
-                  to="/contact"
+                <a
+                  href="https://testflight.apple.com/join/tTVXfskc"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="site-primary-btn inline-flex items-center justify-center rounded-full px-7 py-3.5 text-base font-semibold transition"
                 >
-                  Download on TestFlight / Join Beta
-                </Link>
+                  Test the App on TestFlight
+                </a>
+                <a
+                  href="mailto:rootcee@nerdieblaq.xyz"
+                  className="site-secondary-btn inline-flex items-center justify-center rounded-full px-7 py-3.5 text-base font-semibold transition"
+                >
+                  Email for Access
+                </a>
                 <a
                   href="#screenshots"
                   className="site-secondary-btn inline-flex items-center justify-center rounded-full px-7 py-3.5 text-base font-semibold transition"
@@ -429,13 +436,21 @@ export default function Fit() {
               The first release direction is clear: a branded fitness landing page that feels premium, mobile-ready,
               and ready for future product screenshots, TestFlight links, and beta onboarding when the app is ready.
             </p>
-            <div className="mt-8">
-              <Link
-                to="/contact"
+            <div className="mt-8 flex flex-col justify-center gap-4 sm:flex-row">
+              <a
+                href="https://testflight.apple.com/join/tTVXfskc"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="site-primary-btn inline-flex items-center justify-center rounded-full px-8 py-3.5 text-base font-semibold transition"
               >
-                Download on TestFlight / Join Beta
-              </Link>
+                Test the App on TestFlight
+              </a>
+              <a
+                href="mailto:rootcee@nerdieblaq.xyz"
+                className="site-secondary-btn inline-flex items-center justify-center rounded-full px-8 py-3.5 text-base font-semibold transition"
+              >
+                Email for Access
+              </a>
             </div>
           </div>
         </div>
