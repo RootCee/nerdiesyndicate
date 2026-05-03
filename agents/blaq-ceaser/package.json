@@ -16,11 +16,11 @@
     "start:telegram:test": "node ./dist/telegram-test.js",
     "start:local": "node ./dist/local-dev.js",
     "dev:local": "node --import tsx ./src/local-dev.ts",
-    "dev:local:env": "node --env-file=.env.local --import tsx ./src/local-dev.ts",
+    "dev:local:env": "node --import tsx ./src/dev-local-env.ts",
     "dev:telegram:test": "node --import tsx ./src/telegram-test.ts",
-    "dev:telegram:test:env": "node --env-file=.env.local --import tsx ./src/telegram-test.ts",
+    "dev:telegram:test:env": "node --import tsx ./src/dev-telegram-test-env.ts",
     "test:router": "node --import tsx ./src/router-regression.ts",
-    "test:e2e:local": "node --env-file=.env.local --import tsx ./src/local-e2e-regression.ts"
+    "test:e2e:local": "node --import tsx ./src/local-e2e-regression-env.ts"
   },
   "dependencies": {
     "@elizaos/core": "^1.5.7",
