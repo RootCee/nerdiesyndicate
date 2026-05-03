@@ -86,7 +86,7 @@ function readAndParseEnvFile(envPath: string) {
   const parsed = parseEnv(envFile);
 
   return Object.fromEntries(
-    Object.entries(parsed).map(([key, value]) => [key, normalizeEnvValue(value)])
+    Object.entries(parsed).map(([key, value]) => [key, normalizeEnvValue(value ?? '')])
   );
 }
 
