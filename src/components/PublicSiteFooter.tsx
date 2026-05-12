@@ -59,6 +59,12 @@ export default function PublicSiteFooter() {
             Terms of Service
           </Link>
           <Link
+            to="/support"
+            className="inline-flex items-center justify-center rounded-full border border-zinc-700 bg-zinc-950/80 px-5 py-2.5 text-sm font-semibold text-neutral-100 transition hover:border-zinc-500 hover:text-white"
+          >
+            Support
+          </Link>
+          <Link
             to="/disclaimer"
             className="inline-flex items-center justify-center rounded-full border border-zinc-700 bg-zinc-950/80 px-5 py-2.5 text-sm font-semibold text-neutral-100 transition hover:border-zinc-500 hover:text-white"
           >

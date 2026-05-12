@@ -1,8 +1,8 @@
 export const SITE_NAME = 'Nerdie Blaq';
 export const CLUBHOUSE_NAME = 'Nerdie Blaq Clubhouse';
-export const LEGAL_ENTITY_NAME = 'Nerdie Blaq LLC';
+export const LEGAL_ENTITY_NAME = 'Nerdie Blaq Clubhouse LLC';
 export const FARCASTER_URL = 'https://farcaster.xyz/rootcee';
-export const BUSINESS_CONTACT_EMAIL_PLACEHOLDER = 'rootcee@nerdieblaq.xyz';
+export const BUSINESS_CONTACT_EMAIL_PLACEHOLDER = 'support@nerdieblaq.xyz';
 export const SITE_BASE_URL =
   (import.meta.env.VITE_CANONICAL_SITE_URL as string | undefined)?.replace(/\/+$/, '') ||
   'https://nerdieblaq.xyz';

@@ -22,18 +22,18 @@ export default function Terms() {
   return (
     <>
       <Seo
-        title="Terms of Service | Nerdie Blaq Clubhouse"
-        description="Read the Terms of Service for Nerdie Blaq Clubhouse and Nerdie Blaq LLC, including site use rules, disclaimers, third-party links, digital products, and limitation of liability."
+        title="Terms of Service | Nerdie Blaq Fit"
+        description="Read the Nerdie Blaq Fit Terms of Service covering fitness and nutrition disclaimers, App Store subscriptions, auto-renewal, cancellation, content rights, and support contact details."
         path="/terms"
         canonicalPath="/terms"
         jsonLd={[
           {
             '@context': 'https://schema.org',
             '@type': 'WebPage',
-            name: 'Terms of Service',
+            name: 'Nerdie Blaq Fit Terms of Service',
             url: 'https://nerdieblaq.xyz/terms',
             description:
-              'Terms of Service for Nerdie Blaq Clubhouse and Nerdie Blaq LLC.',
+              'Terms of Service for Nerdie Blaq Fit and Nerdie Blaq Clubhouse LLC.',
           },
         ]}
       />
@@ -49,10 +49,10 @@ export default function Terms() {
             <p className="mx-auto mt-6 max-w-3xl text-base leading-relaxed text-neutral-300 md:text-lg">
               Welcome to Nerdie Blaq Clubhouse, operated by {LEGAL_ENTITY_NAME} (&ldquo;we,&rdquo;
               &ldquo;our,&rdquo; or &ldquo;us&rdquo;). By accessing or using this platform, you
-              agree to the following terms.
+              agree to the following terms, including the terms that apply to Nerdie Blaq Fit.
             </p>
             <p className="mx-auto mt-3 max-w-2xl text-sm text-neutral-500">
-              Effective Date: April 8, 2026
+              Effective Date: May 12, 2026
             </p>
           </div>
 
@@ -75,7 +75,37 @@ export default function Terms() {
               </p>
             </TermsSection>
 
-            <TermsSection title="3. Digital Products and Services">
+            <TermsSection title="3. Fitness and Nutrition Guidance">
+              <p>
+                Nerdie Blaq Fit may provide workout, fitness, nutrition, meal, progress, and wellness
+                guidance. This content is for informational and educational purposes only and is not
+                medical advice, diagnosis, or treatment.
+              </p>
+              <p>
+                Consult a qualified medical professional before starting a workout program, changing
+                your nutrition, or making health-related decisions, especially if you have any medical
+                condition, injury, or concern.
+              </p>
+              <p>
+                You are responsible for exercising safely, using proper form, stopping if you feel
+                pain, dizziness, or distress, and choosing activity levels appropriate for your body.
+              </p>
+            </TermsSection>
+
+            <TermsSection title="4. Subscriptions and App Store Billing">
+              <p>
+                Nerdie Blaq Fit subscriptions are handled through Apple App Store billing. Subscription
+                purchases, renewals, cancellations, refunds, and payment methods are managed by Apple
+                under Apple&apos;s applicable terms and policies.
+              </p>
+              <p>
+                Subscriptions may auto-renew unless canceled through your Apple ID settings before the
+                renewal date. You can manage or cancel subscriptions in your Apple ID subscription
+                settings.
+              </p>
+            </TermsSection>
+
+            <TermsSection title="5. Digital Products and Services">
               <p>
                 We may offer digital products, music, NFTs, or merchandise.
               </p>
@@ -85,7 +115,7 @@ export default function Terms() {
               </p>
             </TermsSection>
 
-            <TermsSection title="4. Third-Party Platforms">
+            <TermsSection title="6. Third-Party Platforms">
               <p>
                 The site may link to third-party platforms for payments, music streaming, storefronts,
                 social channels, wallet providers, and community access. Those services are outside
@@ -97,7 +127,7 @@ export default function Terms() {
               </p>
             </TermsSection>
 
-            <TermsSection title="5. Wallets and Blockchain">
+            <TermsSection title="7. Wallets and Blockchain">
               <p>
                 Use of Web3 features requires a compatible wallet.
               </p>
@@ -110,37 +140,42 @@ export default function Terms() {
               <p>We do not control blockchain networks or transactions.</p>
             </TermsSection>
 
-            <TermsSection title="6. Intellectual Property">
+            <TermsSection title="8. Intellectual Property">
               <p>
                 All content, branding, and materials on this platform are owned by or licensed to{' '}
                 {LEGAL_ENTITY_NAME} and may not be used without permission.
               </p>
+              <p>
+                Nerdie Blaq Fit app content, training systems, images, text, designs, branding,
+                workout names, and related materials belong to {LEGAL_ENTITY_NAME} or its licensors.
+              </p>
             </TermsSection>
 
-            <TermsSection title="7. Limitation of Liability">
+            <TermsSection title="9. Limitation of Liability">
               <p>
                 The platform is provided &ldquo;as is&rdquo; without warranties of any kind.
               </p>
               <p>
                 We are not liable for any losses, damages, or outcomes resulting from use of the
-                platform, including trading decisions or third-party interactions.
+                platform, including trading decisions, fitness activity, nutrition choices,
+                subscription management, or third-party interactions.
               </p>
             </TermsSection>
 
-            <TermsSection title="8. Changes to the Platform">
+            <TermsSection title="10. Changes to the Platform">
               <p>
                 We may modify, update, or discontinue features at any time without notice.
               </p>
             </TermsSection>
 
-            <TermsSection title="9. Updates to Terms">
+            <TermsSection title="11. Updates to Terms">
               <p>
                 We may update these Terms at any time. Continued use of the platform indicates
                 acceptance.
               </p>
             </TermsSection>
 
-            <TermsSection title="10. Contact">
+            <TermsSection title="12. Contact">
               <p>
                 For questions, contact{' '}
                 <a

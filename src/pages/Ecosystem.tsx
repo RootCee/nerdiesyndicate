@@ -15,12 +15,17 @@ const pillars = [
     title: 'Ownership Layers',
     description: 'Tokens, NFTs, business assets, and supporter products each create different ways to participate in the platform.',
   },
+  {
+    title: 'Health and Discipline',
+    description: 'Nerdie Blaq Fit brings health, fitness, wellness, discipline, and progress tracking into the ecosystem through Music. Money. Muscle.',
+  },
 ];
 
 const roadmapItems = [
   'Expand public educational content and deeper written explainers around the ecosystem.',
   'Continue refining Clubhouse access, trading intelligence, and token-gated experiences.',
   'Grow the business NFT and staking layer into a more visible ownership pathway.',
+  'Launch Nerdie Blaq Fit as the health and wellness pillar connecting music, money, muscle, discipline, and progress tracking.',
   'Develop Nerdie City as the metaverse layer where music, NFTs, business ownership, staking, learning, community, and digital identity can converge in one immersive world.',
   'Connect music, collectibles, and supporter products more tightly across releases and campaigns.',
 ];
@@ -37,6 +42,12 @@ const buildStatusItems = [
     title: 'Token-Gated Utility',
     description: 'The ecosystem already includes holder-gated dashboard access, NFT-linked experiences, and a working structure for deeper member utility inside the product.',
     accent: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
+  },
+  {
+    label: 'In Progress',
+    title: 'Nerdie Blaq Fit',
+    description: 'Nerdie Blaq Fit is the health, fitness, and wellness pillar connecting music, money, muscle, discipline, Apple Health sync, workout structure, and progress tracking.',
+    accent: 'border-amber-500/30 bg-amber-500/10 text-amber-200',
   },
   {
     label: 'In Progress',
@@ -103,12 +114,12 @@ export default function Ecosystem() {
           </h1>
           <p className="mt-6 max-w-4xl text-lg leading-relaxed text-neutral-300 md:text-xl">
             Nerdie Blaq Clubhouse is a growing Web3 ecosystem that connects music, trading intelligence,
-            NFTs, education, business ownership, and supporter commerce into one story. This page is a
+            NFTs, education, health and fitness, business ownership, and supporter commerce into one story. This page is a
             deeper public-facing guide to what the project is, what it is building on Base, and why the
             ecosystem is designed to create value both culturally and on-chain.
           </p>
 
-          <div className="mt-10 grid gap-4 md:grid-cols-3">
+          <div className="mt-10 grid gap-4 md:grid-cols-4">
             {pillars.map((pillar) => (
               <div key={pillar.title} className="rounded-2xl border border-red-900/20 bg-zinc-900/85 p-6 shadow-[0_0_35px_rgba(127,29,29,0.1)]">
                 <h2 className="text-xl font-bold text-white">{pillar.title}</h2>
@@ -138,6 +149,9 @@ export default function Ecosystem() {
             </Link>
             <Link to="/music" className="rounded-full border border-zinc-700 px-5 py-2.5 text-sm font-semibold text-neutral-200 transition hover:border-zinc-500 hover:text-white">
               Explore Music
+            </Link>
+            <Link to="/fit" className="rounded-full border border-zinc-700 px-5 py-2.5 text-sm font-semibold text-neutral-200 transition hover:border-zinc-500 hover:text-white">
+              Explore Fit
             </Link>
           </div>
         </div>
@@ -203,6 +217,22 @@ export default function Ecosystem() {
         </p>
         <p>
           Public entry point: <Link to="/businesses" className="text-red-400 hover:text-red-300">Businesses</Link>.
+        </p>
+      </Section>
+
+      <Section id="nerdie-blaq-fit" title="Nerdie Blaq Fit">
+        <p>
+          Nerdie Blaq Fit is the ecosystem&apos;s health, fitness, and wellness pillar. It connects the
+          brand&apos;s Music. Money. Muscle. mindset to structured workouts, meal tracking, Apple Health
+          sync, weekly discipline, and progress tracking.
+        </p>
+        <p>
+          The Fit app gives the public ecosystem a real-world self-improvement lane: train the body,
+          sharpen the routine, and keep the same discipline that supports creative, financial, and
+          on-chain progress.
+        </p>
+        <p>
+          Public entry point: <Link to="/fit" className="text-red-400 hover:text-red-300">Nerdie Blaq Fit</Link>.
         </p>
       </Section>
 
@@ -312,6 +342,7 @@ export default function Ecosystem() {
             {[
               { label: 'Clubhouse', href: '/clubhouse' },
               { label: 'Music', href: '/music' },
+              { label: 'Fit', href: '/fit' },
               { label: 'Merch', href: '/merch' },
               { label: 'Academy', href: '/academy' },
               { label: 'Businesses', href: '/businesses' },

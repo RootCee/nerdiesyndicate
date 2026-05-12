@@ -8,7 +8,7 @@ const distDir = path.join(projectRoot, 'dist');
 const templatePath = path.join(distDir, 'index.html');
 const serverEntryPath = path.join(distDir, 'server', 'entry-prerender.mjs');
 
-const publicRoutes = ['/', '/clubhouse', '/ecosystem', '/music', '/merch', '/academy', '/businesses', '/privacy', '/terms', '/disclaimer', '/contact'];
+const publicRoutes = ['/', '/clubhouse', '/ecosystem', '/music', '/fit', '/merch', '/academy', '/businesses', '/privacy', '/terms', '/support', '/disclaimer', '/contact'];
 
 function injectPrerenderedMarkup(template, appHtml, headHtml) {
   return template

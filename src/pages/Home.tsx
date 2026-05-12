@@ -353,6 +353,38 @@ function EcosystemSection() {
   );
 }
 
+function FitSpotlightSection() {
+  return (
+    <section id="nerdie-blaq-fit" className="px-4 py-16">
+      <div className="mx-auto max-w-5xl">
+        <div className="site-card-premium rounded-[30px] p-7 md:p-10">
+          <div className="grid gap-8 md:grid-cols-[1.2fr_0.8fr] md:items-center">
+            <div>
+              <span className="site-accent-pill inline-flex rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.28em]">
+                Music. Money. Muscle.
+              </span>
+              <h2 className="mt-5 text-3xl font-bold text-white md:text-5xl">Nerdie Blaq Fit</h2>
+              <p className="mt-4 max-w-3xl text-base leading-relaxed text-neutral-300 md:text-lg">
+                Train with Nerdie Blaq Fit — workouts, nutrition, progress tracking, Apple Health sync,
+                and the Blaq Mass System.
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 md:items-end">
+              <Link
+                to="/fit"
+                className="site-primary-btn inline-flex items-center justify-center rounded-full px-7 py-3.5 text-base font-semibold transition"
+              >
+                Explore Nerdie Blaq Fit
+              </Link>
+              <p className="text-sm text-neutral-500">App Store coming soon</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function AccessTiersSection() {
   const tiers = [
     {
@@ -652,6 +684,7 @@ export default function Home({
       <HeroSection />
       <BotProofSection />
       <EcosystemSection />
+      <FitSpotlightSection />
       <AccessTiersSection />
       <TokenSection />
       <NftPreviewSection />

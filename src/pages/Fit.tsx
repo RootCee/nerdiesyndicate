@@ -1,5 +1,6 @@
 import Seo from '../components/Seo';
 import PublicSiteFooter from '../components/PublicSiteFooter';
+import { BUSINESS_CONTACT_EMAIL_PLACEHOLDER, LEGAL_ENTITY_NAME } from '../lib/site';
 
 const features = [
   {
@@ -27,16 +28,22 @@ const features = [
     eyebrow: 'Visual Training',
   },
   {
-    title: 'Progress tracking',
+    title: 'Apple Health sync',
     description:
-      'Track training momentum, session completion, and physique progress with a cleaner accountability loop built for daily use.',
+      'Optional Apple Health sync helps connect activity context to the training experience while keeping Health data focused on app functionality.',
+    eyebrow: 'Health Sync',
+  },
+  {
+    title: 'Meal and progress tracking',
+    description:
+      'Track meals, training momentum, session completion, and physique progress with a cleaner accountability loop built for daily use.',
     eyebrow: 'Stay Locked In',
   },
   {
-    title: 'Meal guidance',
+    title: 'Pro subscription',
     description:
-      'Simple nutrition guidance helps users support muscle growth, recovery, and consistency without turning the app into a food spreadsheet.',
-    eyebrow: 'Fuel Up',
+      'Nerdie Blaq Fit Pro is planned at $9.99/month with a 3-day free trial through Apple App Store billing.',
+    eyebrow: '$9.99/mo',
   },
 ] as const;
 
@@ -189,7 +196,7 @@ export default function Fit() {
     <>
       <Seo
         title="Nerdie Blaq Fit | Music. Money. Muscle."
-        description="Discover Nerdie Blaq Fit, a mobile-first training concept from Nerdie Blaq featuring Blaq Mass System v1, Blaq Core System, workout planning, progress tracking, and meal guidance."
+        description="Discover Nerdie Blaq Fit, a mobile-first fitness app featuring Blaq Mass System v1, Blaq Core System, weekly workouts, exercise image cards, Apple Health sync, meal tracking, progress tracking, and Pro subscription."
         path="/fit"
         jsonLd={[
           {
@@ -221,8 +228,9 @@ export default function Fit() {
               </p>
               <p className="mt-6 max-w-2xl text-base text-neutral-300 md:text-lg">
                 Nerdie Blaq Fit is a disciplined training experience built around muscle-focused programming,
-                core development, visual exercise guidance, and weekly accountability. The goal is simple:
-                help users stay locked in, build momentum, and look stronger every week.
+                core development, visual exercise guidance, Apple Health sync, meal tracking, and weekly
+                accountability. The goal is simple: help users stay locked in, build momentum, and look
+                stronger every week.
               </p>
               <div className="mt-8 flex flex-col gap-4 sm:flex-row">
                 <a
@@ -231,13 +239,13 @@ export default function Fit() {
                   rel="noopener noreferrer"
                   className="site-primary-btn inline-flex items-center justify-center rounded-full px-7 py-3.5 text-base font-semibold transition"
                 >
-                  Test the App on TestFlight
+                  Join Beta on TestFlight
                 </a>
                 <a
-                  href="mailto:rootcee@nerdieblaq.xyz"
+                  href={`mailto:${BUSINESS_CONTACT_EMAIL_PLACEHOLDER}`}
                   className="site-secondary-btn inline-flex items-center justify-center rounded-full px-7 py-3.5 text-base font-semibold transition"
                 >
-                  Email for Access
+                  App Store Coming Soon
                 </a>
                 <a
                   href="#screenshots"
@@ -250,7 +258,7 @@ export default function Fit() {
                 {[
                   { label: 'Focus', value: 'Mass + Core' },
                   { label: 'Format', value: 'Mobile-first' },
-                  { label: 'Status', value: 'Beta concept' },
+                  { label: 'Status', value: 'App Store soon' },
                 ].map((item) => (
                   <div key={item.label} className="site-card rounded-[24px] p-5">
                     <p className="text-xs uppercase tracking-[0.24em] text-neutral-500">{item.label}</p>
@@ -411,7 +419,8 @@ export default function Fit() {
             <h2 className="mt-5 text-4xl font-bold text-white">Simple food guidance that supports the mission.</h2>
             <p className="mt-4 text-sm text-neutral-300">
               Nutrition is framed as a support system for training, recovery, and lean muscle development rather
-              than a complex tracker-heavy experience.
+              than a complex tracker-heavy experience. Meal tracking helps users connect food, training,
+              recovery, and progress into one weekly rhythm.
             </p>
             <div className="mt-6 space-y-3">
               {mealGuidance.map((item) => (
@@ -436,6 +445,10 @@ export default function Fit() {
               The first release direction is clear: a branded fitness landing page that feels premium, mobile-ready,
               and ready for future product screenshots, TestFlight links, and beta onboarding when the app is ready.
             </p>
+            <p className="mx-auto mt-4 max-w-2xl text-sm text-neutral-400">
+              Pro subscription: $9.99/month with a 3-day free trial. Subscriptions are handled by
+              Apple App Store billing.
+            </p>
             <div className="mt-8 flex flex-col justify-center gap-4 sm:flex-row">
               <a
                 href="https://testflight.apple.com/join/tTVXfskc"
@@ -443,15 +456,16 @@ export default function Fit() {
                 rel="noopener noreferrer"
                 className="site-primary-btn inline-flex items-center justify-center rounded-full px-8 py-3.5 text-base font-semibold transition"
               >
-                Test the App on TestFlight
+                Join Beta on TestFlight
               </a>
               <a
-                href="mailto:rootcee@nerdieblaq.xyz"
+                href={`mailto:${BUSINESS_CONTACT_EMAIL_PLACEHOLDER}`}
                 className="site-secondary-btn inline-flex items-center justify-center rounded-full px-8 py-3.5 text-base font-semibold transition"
               >
-                Email for Access
+                App Store Coming Soon
               </a>
             </div>
+            <p className="mt-8 text-xs text-neutral-500">© 2026 {LEGAL_ENTITY_NAME}</p>
           </div>
         </div>
       </section>

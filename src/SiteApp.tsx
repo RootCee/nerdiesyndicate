@@ -15,6 +15,7 @@ import MusicThankYou from './pages/MusicThankYou';
 import MusicCheckoutCancelled from './pages/MusicCheckoutCancelled';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
+import Support from './pages/Support';
 import Disclaimer from './pages/Disclaimer';
 import Contact from './pages/Contact';
 import Fit from './pages/Fit';
@@ -219,6 +220,7 @@ function AppRoutes() {
       <Route path="/merch" element={<Merch />} />
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />
+      <Route path="/support" element={<Support />} />
       <Route path="/disclaimer" element={<Disclaimer />} />
       <Route path="/contact" element={<Contact />} />
       <Route path="/mint" element={<Mint />} />

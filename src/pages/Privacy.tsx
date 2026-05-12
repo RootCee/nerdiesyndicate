@@ -26,18 +26,18 @@ export default function Privacy() {
   return (
     <>
       <Seo
-        title="Privacy Policy | Nerdie Blaq Clubhouse"
-        description="Read the Privacy Policy for Nerdie Blaq Clubhouse and Nerdie Blaq LLC, including how the site handles analytics, contact submissions, third-party services, and external links."
+        title="Privacy Policy | Nerdie Blaq Fit"
+        description="Read the Nerdie Blaq Fit Privacy Policy covering account data, workout, nutrition, progress data, optional Apple Health data, App Store subscriptions, and support contact details."
         path="/privacy"
         canonicalPath="/privacy"
         jsonLd={[
           {
             '@context': 'https://schema.org',
             '@type': 'WebPage',
-            name: 'Privacy Policy',
+            name: 'Nerdie Blaq Fit Privacy Policy',
             url: 'https://nerdieblaq.xyz/privacy',
             description:
-              'Privacy Policy for Nerdie Blaq Clubhouse and Nerdie Blaq LLC.',
+              'Privacy Policy for Nerdie Blaq Fit and Nerdie Blaq Clubhouse LLC.',
           },
         ]}
       />
@@ -53,10 +53,11 @@ export default function Privacy() {
             <p className="mx-auto mt-6 max-w-3xl text-base leading-relaxed text-neutral-300 md:text-lg">
               {LEGAL_ENTITY_NAME} (&ldquo;we,&rdquo; &ldquo;our,&rdquo; or &ldquo;us&rdquo;)
               operates the Nerdie Blaq Clubhouse platform. This Privacy Policy explains how we
-              collect, use, and protect your information when you use our website and services.
+              collect, use, and protect your information when you use our website, Nerdie Blaq Fit,
+              and related services.
             </p>
             <p className="mx-auto mt-3 max-w-2xl text-sm text-neutral-500">
-              Effective Date: April 8, 2026
+              Effective Date: May 12, 2026
             </p>
           </div>
 
@@ -67,11 +68,17 @@ export default function Privacy() {
               </p>
               <ul className="list-disc space-y-2 pl-5">
                 <li>Basic information you provide, such as name or email if submitted.</li>
+                <li>Account and profile data used to create or manage Nerdie Blaq Fit access.</li>
                 <li>Wallet addresses when connecting a Web3 wallet.</li>
+                <li>Workout, nutrition, progress, check-in, and training history data entered in Nerdie Blaq Fit.</li>
+                <li>Optional Apple Health data, if you choose to connect Apple Health sync.</li>
                 <li>Usage data such as pages visited and interactions.</li>
                 <li>Analytics data collected through third-party services.</li>
               </ul>
-              <p>We do not collect sensitive personal information unless voluntarily provided.</p>
+              <p>
+                We do not collect sensitive personal information unless voluntarily provided or
+                authorized by you through app permissions.
+              </p>
             </PolicySection>
 
             <PolicySection title="2. How We Use Information">
@@ -81,15 +88,38 @@ export default function Privacy() {
               <ul className="list-disc space-y-2 pl-5">
                 <li>Improve the website and user experience.</li>
                 <li>Provide access to features and services.</li>
+                <li>Deliver Nerdie Blaq Fit app functionality, including workout planning, exercise tracking, meal guidance, progress tracking, and Apple Health sync.</li>
                 <li>Process transactions through third-party platforms.</li>
                 <li>Communicate updates or relevant information.</li>
               </ul>
             </PolicySection>
 
-            <PolicySection title="3. Third-Party Services">
+            <PolicySection title="3. Apple Health Data">
+              <p>
+                Apple Health data is optional and is used only when you grant permission through
+                Apple Health. Nerdie Blaq Fit may use authorized Health data to support app
+                functionality such as activity context, workout tracking, progress views, and sync
+                features.
+              </p>
+              <p>
+                Health data is only used for app functionality and is never sold. We do not use
+                Apple Health data for advertising or share it with data brokers.
+              </p>
+            </PolicySection>
+
+            <PolicySection title="4. Subscriptions and Payments">
+              <p>
+                Nerdie Blaq Fit subscriptions and payments are handled by Apple through App Store
+                billing. We do not receive or store full payment card details for App Store
+                subscriptions.
+              </p>
+            </PolicySection>
+
+            <PolicySection title="5. Third-Party Services">
               <p>
                 We may use third-party services such as payment processors, analytics providers, and
-                external platforms, including storefronts and streaming services.
+                external platforms, including Apple App Store billing, Apple Health, storefronts, and
+                streaming services.
               </p>
               <p>
                 These services operate under their own privacy policies, and we are not responsible
@@ -97,42 +127,46 @@ export default function Privacy() {
               </p>
             </PolicySection>
 
-            <PolicySection title="4. Cookies and Tracking">
+            <PolicySection title="6. Cookies and Tracking">
               <p>
                 We may use cookies or similar technologies to understand usage and improve
                 performance.
               </p>
             </PolicySection>
 
-            <PolicySection title="5. Data Security">
+            <PolicySection title="7. Data Security">
               <p>
                 We take reasonable measures to protect information but cannot guarantee absolute
                 security.
               </p>
             </PolicySection>
 
-            <PolicySection title="6. External Links">
+            <PolicySection title="8. External Links">
               <p>
                 Our platform may contain links to external websites. We are not responsible for
                 their content or privacy practices.
               </p>
             </PolicySection>
 
-            <PolicySection title="7. Your Choices">
+            <PolicySection title="9. Your Choices">
               <p>
                 You may choose not to provide certain information or disconnect your wallet at any
                 time.
               </p>
+              <p>
+                You can manage Apple Health permissions in the Health app or iOS Settings. You can
+                manage App Store subscriptions through your Apple ID settings.
+              </p>
             </PolicySection>
 
-            <PolicySection title="8. Updates">
+            <PolicySection title="10. Updates">
               <p>
                 We may update this Privacy Policy from time to time. Continued use of the site
                 indicates acceptance of updates.
               </p>
             </PolicySection>
 
-            <PolicySection title="9. Contact">
+            <PolicySection title="11. Contact">
               <p>
                 For questions, contact {LEGAL_ENTITY_NAME} at{' '}
                 <a

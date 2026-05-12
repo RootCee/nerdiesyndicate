@@ -32,7 +32,7 @@ export default function Disclaimer() {
             '@type': 'WebPage',
             name: 'Disclaimer',
             url: 'https://nerdieblaq.xyz/disclaimer',
-            description: 'Disclaimer for Nerdie Blaq Clubhouse and Nerdie Blaq LLC.',
+            description: `Disclaimer for Nerdie Blaq Clubhouse and ${LEGAL_ENTITY_NAME}.`,
           },
         ]}
       />
