@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { ethers } from 'ethers';
 import { useAccount, useChainId } from 'wagmi';
 import Seo from '../components/Seo';
@@ -279,6 +279,7 @@ function CollapsibleDashboardSection({
 
 // ─── Main Dashboard (NFT holder view) ───
 function DashboardContent({ address }: { address: string | null }) {
+  const location = useLocation();
   const chainId = useChainId();
   const [activeTab, setActiveTab] = useState<TabId>('player');
   const [signalsRefreshKey, setSignalsRefreshKey] = useState(0);
@@ -356,6 +357,25 @@ function DashboardContent({ address }: { address: string | null }) {
       ...current,
       [section]: !current[section],
     }));
+
+  useEffect(() => {
+    if (location.hash === '#certification-missions') {
+      setActiveTab('operations');
+    }
+  }, [location.hash]);
+
+  useEffect(() => {
+    if (activeTab !== 'operations' || location.hash !== '#certification-missions') {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      document.getElementById('certification-missions')?.scrollIntoView({
+        block: 'start',
+        behavior: 'smooth',
+      });
+    });
+  }, [activeTab, location.hash]);
 
   useEffect(() => {
     if (tokenIds.length === 0) {

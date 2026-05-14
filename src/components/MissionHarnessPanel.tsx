@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ethers } from "ethers";
 import BusinessEligibilityPreviewPanel from "./BusinessEligibilityPreviewPanel";
 import BusinessOperationsPanel from "./BusinessOperationsPanel";
@@ -152,6 +152,18 @@ export default function MissionHarnessPanel({
   const [certificationActionByMissionId, setCertificationActionByMissionId] = useState<
     Record<string, { pending: boolean; message: string | null; tone: "neutral" | "success" | "error" }>
   >({});
+
+  useEffect(() => {
+    if (window.location.hash !== "#certification-missions") {
+      return;
+    }
+
+    setOpenSections((current) => ({
+      ...current,
+      qualification: true,
+      certifications: true,
+    }));
+  }, []);
   const selectedSubject =
     subjects.find((subject) => subject.tokenId === selectedTokenId) ?? subjects[0] ?? null;
 
@@ -716,14 +728,16 @@ export default function MissionHarnessPanel({
         onToggle={() => setSectionOpen("qualification")}
       >
         {certificationCatalog.length > 0 && (
-          <CollapsibleSection
-            title="Certification Missions"
-            subtitle={`${certificationCatalog.length} certification mission${certificationCatalog.length === 1 ? "" : "s"}`}
-            isOpen={openSections.certifications ?? false}
-            onToggle={() => setSectionOpen("certifications")}
-          >
-            <div className="space-y-3">{certificationCatalog.map(renderCertificationCard)}</div>
-          </CollapsibleSection>
+          <div id="certification-missions" className="scroll-mt-28">
+            <CollapsibleSection
+              title="Certification Missions"
+              subtitle={`${certificationCatalog.length} certification mission${certificationCatalog.length === 1 ? "" : "s"}`}
+              isOpen={openSections.certifications ?? false}
+              onToggle={() => setSectionOpen("certifications")}
+            >
+              <div className="space-y-3">{certificationCatalog.map(renderCertificationCard)}</div>
+            </CollapsibleSection>
+          </div>
         )}
 
         <div className="space-y-3">

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import LearningCard from '../components/LearningCard';
 import PublicSiteFooter from '../components/PublicSiteFooter';
 import Seo from '../components/Seo';
@@ -5,6 +6,22 @@ import Seo from '../components/Seo';
 const coursePlaylistUrl = 'https://youtube.com/playlist?list=PLAX8YWrl6eTQsXS3R_onp5efHoLGWjxoC&si=Vgd0nalewfGigNki';
 const courseEmbedUrl = 'https://www.youtube.com/embed/videoseries?list=PLAX8YWrl6eTQsXS3R_onp5efHoLGWjxoC';
 const ebookUrl = 'https://chatgpt.com/canvas/shared/67dc6d7ba4748191a04565c279d2b21b';
+const certificationTakeUrl = '/dashboard#certification-missions';
+
+const certificationGuides = [
+  {
+    title: 'Beginner DeFi Certification',
+    description:
+      'Study the DeFi basics behind wallet safety, liquidity, staking, and protocol risk before taking the first Academy certification.',
+    guideHref: '/academy/certifications/beginner-defi-certification-guide.pdf',
+  },
+  {
+    title: 'Business Operator & Staking Certification',
+    description:
+      'Prepare for the operator-readiness path covering business activation, staking responsibilities, and proof-based progression gates.',
+    guideHref: '/academy/certifications/business-operator-staking-guide.pdf',
+  },
+];
 
 const beginnerPathResources = [
   {
@@ -227,6 +244,46 @@ export default function Academy() {
             description="A clean on-ramp into web basics and programming logic for people who want structure without overwhelm."
           />
           <ResourceGrid resources={beginnerPathResources} />
+        </div>
+      </section>
+
+      <section className="px-4 py-16">
+        <div className="mx-auto max-w-6xl">
+          <SectionHeader
+            eyebrow="Certification Guides"
+            title="Academy Certification Prep"
+            description="Use the official guide PDFs to study first, then jump into the dashboard certification missions when you are ready to take the test."
+          />
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            {certificationGuides.map((guide) => (
+              <article
+                key={guide.guideHref}
+                className="rounded-2xl border border-red-900/20 bg-zinc-900/90 p-6 shadow-[0_0_0_1px_rgba(127,29,29,0.08)]"
+              >
+                <span className="inline-block rounded-full border border-red-800/40 bg-red-900/30 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-red-400">
+                  Certification
+                </span>
+                <h3 className="mt-4 text-xl font-bold text-white">{guide.title}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-neutral-400">{guide.description}</p>
+                <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                  <a
+                    href={guide.guideHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex flex-1 items-center justify-center rounded-full border border-red-800 px-5 py-2.5 text-sm font-semibold text-red-400 transition hover:bg-red-900/30"
+                  >
+                    Open Guide
+                  </a>
+                  <Link
+                    to={certificationTakeUrl}
+                    className="inline-flex flex-1 items-center justify-center rounded-full bg-red-800 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700"
+                  >
+                    Take Certification
+                  </Link>
+                </div>
+              </article>
+            ))}
+          </div>
         </div>
       </section>
 
