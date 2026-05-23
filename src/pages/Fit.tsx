@@ -1,6 +1,18 @@
 import Seo from '../components/Seo';
 import PublicSiteFooter from '../components/PublicSiteFooter';
-import { BUSINESS_CONTACT_EMAIL_PLACEHOLDER, LEGAL_ENTITY_NAME } from '../lib/site';
+import { LEGAL_ENTITY_NAME } from '../lib/site';
+
+const APP_STORE_URL = 'https://apps.apple.com/us/app/nerdie-blaq-fit/id6763120543';
+const APP_STORE_BADGE_URL =
+  'https://developer.apple.com/app-store/marketing/guidelines/images/badge-download-on-the-app-store.svg';
+const FIT_PROMO_LOGO_URL = '/fit-discipline-excuses.png';
+const DISCIPLINE_HOODIE_URL =
+  'https://nerdie-blaq-merch.square.site/product/discipline-xccuses/NWEFH6HCXL4U5TAZD5INGCA2?cs=true&cst=popular';
+const DISCIPLINE_HOODIE_IMAGE_URL = '/discipline-hoodie-transparent.png';
+const NERDIE_BLAQ_PEARL_2_URL = 'https://www.aliveshoes.com/nerdie-blaq-pearl2';
+const NERDIE_BLAQ_PEARL_2_IMAGE_URL =
+  'https://s0.as-img.com/r/pic/1848413/1500/1500/with_box.jpg?bg=f5f5f5&u=1775143311';
+const TESTFLIGHT_ACCESS_EMAIL = 'rootcee@nerdieblaq.xyz';
 
 const features = [
   {
@@ -87,19 +99,41 @@ const weeklyCalendar = [
 
 const exerciseCards = [
   {
-    title: 'Incline Press',
+    title: 'Incline Bench Press',
     focus: 'Upper chest',
-    gradient: 'from-[#244734] via-[#15221f] to-[#241238]',
+    image: '/fit/exercises/incline-bench-press.png',
   },
   {
     title: 'Cable Crunch',
     focus: 'Core control',
-    gradient: 'from-[#241238] via-[#16111f] to-[#123126]',
+    image: '/fit/exercises/cable-crunch.png',
   },
   {
     title: 'Split Squat',
     focus: 'Leg drive',
-    gradient: 'from-[#123126] via-[#0f1714] to-[#3a1d2f]',
+    image: '/fit/exercises/split-squat.png',
+  },
+] as const;
+
+const fitExtras = [
+  {
+    title: 'Discipline Hoodie',
+    eyebrow: 'Fit Merch',
+    description: 'Wear the mindset between workouts.',
+    image: DISCIPLINE_HOODIE_IMAGE_URL,
+    href: DISCIPLINE_HOODIE_URL,
+    imageClass:
+      'bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.14),_rgba(5,7,10,0.18))] object-contain p-5',
+    cta: 'Shop Hoodie',
+  },
+  {
+    title: 'Nerdie Blaq Pearl 2s',
+    eyebrow: 'Fit Footwear',
+    description: 'Premium sneakers for the Music. Money. Muscle. lane.',
+    image: NERDIE_BLAQ_PEARL_2_IMAGE_URL,
+    href: NERDIE_BLAQ_PEARL_2_URL,
+    imageClass: 'bg-zinc-100 object-contain p-5',
+    cta: 'Shop Pearl 2s',
   },
 ] as const;
 
@@ -191,6 +225,60 @@ function PhoneMockup({
   );
 }
 
+function FitExtrasAdRail() {
+  const railItems = [...fitExtras, ...fitExtras, ...fitExtras];
+
+  return (
+    <section className="overflow-hidden px-4 py-12">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <span className="inline-flex rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-200">
+              Fit Extras
+            </span>
+            <h2 className="mt-4 text-3xl font-bold text-white md:text-4xl">Gear for the locked-in lifestyle.</h2>
+          </div>
+          <p className="max-w-xl text-sm text-neutral-400">
+            App first, extras on the side: hoodie and Pearl 2 drops that extend the Nerdie Blaq Fit look beyond
+            the training screen.
+          </p>
+        </div>
+
+        <div className="relative overflow-hidden rounded-[32px] border border-emerald-400/15 bg-black/30 py-5">
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-gradient-to-r from-[#05070a] to-transparent" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-gradient-to-l from-[#05070a] to-transparent" />
+          <div className="fit-extras-marquee flex w-max gap-5 px-5">
+            {railItems.map((item, index) => (
+              <a
+                key={`${item.title}-${index}`}
+                href={item.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group grid w-[280px] shrink-0 overflow-hidden rounded-[26px] border border-white/10 bg-zinc-950/90 shadow-[0_20px_50px_rgba(0,0,0,0.26)] sm:w-[330px]"
+              >
+                <img
+                  src={item.image}
+                  alt={item.title}
+                  className={`h-[250px] w-full transition duration-300 group-hover:scale-[1.03] ${item.imageClass}`}
+                  loading="lazy"
+                />
+                <div className="border-t border-white/10 p-5">
+                  <p className="text-[11px] uppercase tracking-[0.26em] text-emerald-200">{item.eyebrow}</p>
+                  <h3 className="mt-2 text-2xl font-bold text-white">{item.title}</h3>
+                  <p className="mt-2 text-sm text-neutral-400">{item.description}</p>
+                  <span className="mt-4 inline-flex text-sm font-semibold uppercase tracking-[0.18em] text-violet-200">
+                    {item.cta}
+                  </span>
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function Fit() {
   return (
     <>
@@ -234,18 +322,23 @@ export default function Fit() {
               </p>
               <div className="mt-8 flex flex-col gap-4 sm:flex-row">
                 <a
-                  href="https://testflight.apple.com/join/tTVXfskc"
+                  href={APP_STORE_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="site-primary-btn inline-flex items-center justify-center rounded-full px-7 py-3.5 text-base font-semibold transition"
+                  aria-label="Download Nerdie Blaq Fit on the App Store"
+                  className="inline-flex items-center"
                 >
-                  Join Beta on TestFlight
+                  <img
+                    src={APP_STORE_BADGE_URL}
+                    alt="Download on the App Store"
+                    className="h-12 w-auto"
+                  />
                 </a>
                 <a
-                  href={`mailto:${BUSINESS_CONTACT_EMAIL_PLACEHOLDER}`}
-                  className="site-secondary-btn inline-flex items-center justify-center rounded-full px-7 py-3.5 text-base font-semibold transition"
+                  href={`mailto:${TESTFLIGHT_ACCESS_EMAIL}?subject=${encodeURIComponent('Nerdie Blaq Fit TestFlight Access')}`}
+                  className="site-primary-btn inline-flex items-center justify-center rounded-full px-7 py-3.5 text-base font-semibold transition"
                 >
-                  App Store Coming Soon
+                  Email for TestFlight Access
                 </a>
                 <a
                   href="#screenshots"
@@ -258,7 +351,7 @@ export default function Fit() {
                 {[
                   { label: 'Focus', value: 'Mass + Core' },
                   { label: 'Format', value: 'Mobile-first' },
-                  { label: 'Status', value: 'App Store soon' },
+                  { label: 'Status', value: 'On App Store' },
                 ].map((item) => (
                   <div key={item.label} className="site-card rounded-[24px] p-5">
                     <p className="text-xs uppercase tracking-[0.24em] text-neutral-500">{item.label}</p>
@@ -271,6 +364,13 @@ export default function Fit() {
             <div className="relative">
               <div className="absolute inset-x-10 top-8 h-40 rounded-full bg-emerald-500/15 blur-3xl" />
               <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
+                <div className="site-card-premium overflow-hidden rounded-[30px] p-3">
+                  <img
+                    src={FIT_PROMO_LOGO_URL}
+                    alt="Discipline over excuses, Nerdie Blaq Fit"
+                    className="w-full rounded-[24px] object-cover"
+                  />
+                </div>
                 <div className="site-card-premium rounded-[30px] p-6">
                   <p className="text-xs uppercase tracking-[0.24em] text-emerald-200">Blaq Mass System v1</p>
                   <h2 className="mt-4 text-3xl font-bold text-white">Built for growth and structure.</h2>
@@ -292,6 +392,8 @@ export default function Fit() {
           </div>
         </div>
       </section>
+
+      <FitExtrasAdRail />
 
       <section className="px-4 py-16">
         <div className="mx-auto max-w-6xl">
@@ -354,17 +456,18 @@ export default function Fit() {
           <div className="mt-10 grid gap-5 md:grid-cols-3">
             {exerciseCards.map((card) => (
               <div key={card.title} className="site-card overflow-hidden rounded-[28px]">
-                <div className={`aspect-[4/5] bg-gradient-to-br ${card.gradient} p-5`}>
-                  <div className="flex h-full flex-col justify-between rounded-[22px] border border-white/10 bg-black/15 p-5">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.24em] text-neutral-200/75">Exercise Preview</p>
-                      <h3 className="mt-3 text-3xl font-bold text-white">{card.title}</h3>
-                      <p className="mt-2 text-sm uppercase tracking-[0.22em] text-emerald-200">{card.focus}</p>
-                    </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-neutral-200">
-                      Placeholder image card
-                    </div>
-                  </div>
+                <div className="bg-black p-3">
+                  <img
+                    src={card.image}
+                    alt={`${card.title} exercise preview`}
+                    className="aspect-square w-full rounded-[22px] object-contain"
+                    loading="lazy"
+                  />
+                </div>
+                <div className="border-t border-white/10 p-5">
+                  <p className="text-xs uppercase tracking-[0.24em] text-neutral-500">Exercise Preview</p>
+                  <h3 className="mt-3 text-2xl font-bold text-white">{card.title}</h3>
+                  <p className="mt-2 text-sm uppercase tracking-[0.22em] text-emerald-200">{card.focus}</p>
                 </div>
               </div>
             ))}
@@ -439,11 +542,16 @@ export default function Fit() {
       <section className="px-4 pb-10 pt-8">
         <div className="mx-auto max-w-5xl">
           <div className="site-card-premium rounded-[32px] px-6 py-10 text-center md:px-10">
+            <img
+              src={FIT_PROMO_LOGO_URL}
+              alt="Discipline over excuses, Nerdie Blaq Fit"
+              className="mx-auto mb-8 w-full max-w-[520px] rounded-[28px] border border-white/10 object-cover shadow-[0_25px_60px_rgba(0,0,0,0.38)]"
+            />
             <p className="text-xs uppercase tracking-[0.3em] text-emerald-200">Nerdie Blaq Fit Beta</p>
             <h2 className="mt-5 text-4xl text-white md:text-6xl">Built for people who want structure and results.</h2>
             <p className="mx-auto mt-5 max-w-3xl text-base text-neutral-300 md:text-lg">
               The first release direction is clear: a branded fitness landing page that feels premium, mobile-ready,
-              and ready for future product screenshots, TestFlight links, and beta onboarding when the app is ready.
+              and ready for product screenshots, App Store downloads, and TestFlight access by request.
             </p>
             <p className="mx-auto mt-4 max-w-2xl text-sm text-neutral-400">
               Pro subscription: $9.99/month with a 3-day free trial. Subscriptions are handled by
@@ -451,18 +559,23 @@ export default function Fit() {
             </p>
             <div className="mt-8 flex flex-col justify-center gap-4 sm:flex-row">
               <a
-                href="https://testflight.apple.com/join/tTVXfskc"
+                href={APP_STORE_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="site-primary-btn inline-flex items-center justify-center rounded-full px-8 py-3.5 text-base font-semibold transition"
+                aria-label="Download Nerdie Blaq Fit on the App Store"
+                className="inline-flex items-center justify-center"
               >
-                Join Beta on TestFlight
+                <img
+                  src={APP_STORE_BADGE_URL}
+                  alt="Download on the App Store"
+                  className="h-12 w-auto"
+                />
               </a>
               <a
-                href={`mailto:${BUSINESS_CONTACT_EMAIL_PLACEHOLDER}`}
+                href={`mailto:${TESTFLIGHT_ACCESS_EMAIL}?subject=${encodeURIComponent('Nerdie Blaq Fit TestFlight Access')}`}
                 className="site-secondary-btn inline-flex items-center justify-center rounded-full px-8 py-3.5 text-base font-semibold transition"
               >
-                App Store Coming Soon
+                Email for TestFlight Access
               </a>
             </div>
             <p className="mt-8 text-xs text-neutral-500">© 2026 {LEGAL_ENTITY_NAME}</p>

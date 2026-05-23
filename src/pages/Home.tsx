@@ -4,6 +4,7 @@ import Seo from '../components/Seo';
 import PublicSiteFooter from '../components/PublicSiteFooter';
 import { fetchAllSupabaseRows, fetchSupabaseRows, isSupabaseConfigured } from '../lib/supabase';
 import mainlogo from '../images/mainlogo.png';
+import syndicateCollectionImage from '../images/myImage.png';
 
 type StatsRow = Record<string, unknown>;
 
@@ -17,15 +18,19 @@ type BotPerformanceStats = {
   pnlSub: string;
 };
 
-const DEFAULT_BOT_STATS: BotPerformanceStats = {
-  winRate: '--',
-  signalsLogged: '--',
-  botStatus: 'OFFLINE',
-  pnl: '--',
-  winRateSub: 'live summary from signal_outcomes',
-  botStatusSub: 'no recent data',
-  pnlSub: 'live summary from signal_outcomes',
-};
+const APP_STORE_URL = 'https://apps.apple.com/us/app/nerdie-blaq-fit/id6763120543';
+const APP_STORE_BADGE_URL =
+  'https://developer.apple.com/app-store/marketing/guidelines/images/badge-download-on-the-app-store.svg';
+const FIT_PROMO_LOGO_URL = '/fit-discipline-excuses.png';
+const DISCIPLINE_HOODIE_URL =
+  'https://nerdie-blaq-merch.square.site/product/discipline-xccuses/NWEFH6HCXL4U5TAZD5INGCA2?cs=true&cst=popular';
+const DISCIPLINE_HOODIE_IMAGE_URL = '/discipline-hoodie-transparent.png';
+const MUSIC_ALBUM_COVER_URL = 'https://i.scdn.co/image/ab67616d0000b273fe20670781ba73ee7bac8802';
+const MUSIC_LISTEN_EVERYWHERE_URL = 'https://distrokid.com/hyperfollow/buddieroots/blaq?ref=release';
+const BOT_SYSTEM_ARTICLE_IMAGE_URL = '/bot-system-blog-preview.webp';
+const BOT_SYSTEM_ARTICLE_TITLE = 'How Nerdie Blaq’s Telegram Bot System Works with GDEX Skill';
+const BOT_SYSTEM_ARTICLE_URL =
+  'https://paragraph.com/@0xa25df7e09d6abb5b3c2ed4b12b1ef9fd46a01937/how-nerdie-blaqs-telegram-bot-system-works-with-gdex-skill';
 
 const BOT_ACTIVE_WINDOW_MS = 15 * 60 * 1000;
 const BOT_STANDBY_WINDOW_MS = 6 * 60 * 60 * 1000;
@@ -200,14 +205,14 @@ function HeroSection() {
 }
 
 function BotProofSection() {
-  const [stats, setStats] = useState<BotPerformanceStats>(DEFAULT_BOT_STATS);
+  const [stats, setStats] = useState<BotPerformanceStats | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadStats() {
       if (!isSupabaseConfigured()) {
-        setStats(DEFAULT_BOT_STATS);
+        setStats(null);
         return;
       }
 
@@ -227,6 +232,7 @@ function BotProofSection() {
         if (cancelled) return;
 
         const latestPerformance = performanceRows[0];
+        const hasPerformanceData = Boolean(latestPerformance || outcomeRows.length);
         const signals =
           getNumber(latestPerformance, ['signals', 'trade_count', 'tradeCount']) ??
           outcomeRows.length;
@@ -239,6 +245,12 @@ function BotProofSection() {
           latestPerformance ? [latestPerformance, ...outcomeRows] : outcomeRows
         );
         const botStatus = getBotStatus(latestActivity);
+
+        if (!hasPerformanceData || botStatus === 'OFFLINE') {
+          setStats(null);
+          return;
+        }
+
         const winRate =
           getNumber(latestPerformance, ['win_rate', 'winRate']) ?? fallbackWinRate;
         const pnl =
@@ -258,7 +270,7 @@ function BotProofSection() {
           pnlSub: latestPerformance || outcomeRows.length ? performanceLabel : 'no performance data',
         });
       } catch {
-        if (!cancelled) setStats(DEFAULT_BOT_STATS);
+        if (!cancelled) setStats(null);
       }
     }
 
@@ -269,12 +281,14 @@ function BotProofSection() {
     };
   }, []);
 
-  const statCards = [
-    { label: 'Win Rate', value: stats.winRate, sub: stats.winRateSub },
-    { label: 'Bot Status', value: stats.botStatus, sub: stats.botStatusSub },
-    { label: 'Signals Logged', value: stats.signalsLogged, sub: 'signal_outcomes.count' },
-    { label: 'P&L', value: stats.pnl, sub: stats.pnlSub },
-  ];
+  const statCards = stats
+    ? [
+        { label: 'Win Rate', value: stats.winRate, sub: stats.winRateSub },
+        { label: 'Bot Status', value: stats.botStatus, sub: stats.botStatusSub },
+        { label: 'Signals Logged', value: stats.signalsLogged, sub: 'signal_outcomes.count' },
+        { label: 'P&L', value: stats.pnl, sub: stats.pnlSub },
+      ]
+    : [];
 
   return (
     <section id="bot-proof" className="scroll-mt-28 py-16 md:py-20 px-4">
@@ -285,28 +299,65 @@ function BotProofSection() {
         <p className="text-neutral-500 text-center mb-12 max-w-xl mx-auto">
           The Nerdie Blaq Clubhouse trading engine runs 24/7, analyzing BTC markets and generating trade calls in real time.
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-          {statCards.map((stat) => (
-            <div
-              key={stat.label}
-              className="site-card rounded-2xl p-6 md:p-8 text-center transition"
-            >
-              <p className="text-3xl md:text-4xl font-black text-white mb-1">{stat.value}</p>
-              <p className="text-xs text-neutral-400 uppercase tracking-wider mb-1 font-semibold">{stat.label}</p>
-              <p className="text-xs text-neutral-600">{stat.sub}</p>
-              {stat.label === "Bot Status" && (
-                <span
-                  className={`inline-block mt-2 h-2.5 w-2.5 rounded-full ${
-                    stats.botStatus === 'ACTIVE'
-                      ? 'bg-green-500 animate-pulse'
-                      : stats.botStatus === 'STANDBY'
-                      ? 'bg-amber-400'
-                      : 'bg-red-500/80'
-                  }`}
-                />
-              )}
+        {stats ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+            {statCards.map((stat) => (
+              <div
+                key={stat.label}
+                className="site-card rounded-2xl p-6 md:p-8 text-center transition"
+              >
+                <p className="text-3xl md:text-4xl font-black text-white mb-1">{stat.value}</p>
+                <p className="text-xs text-neutral-400 uppercase tracking-wider mb-1 font-semibold">{stat.label}</p>
+                <p className="text-xs text-neutral-600">{stat.sub}</p>
+                {stat.label === "Bot Status" && (
+                  <span
+                    className={`inline-block mt-2 h-2.5 w-2.5 rounded-full ${
+                      stats.botStatus === 'ACTIVE'
+                        ? 'bg-green-500 animate-pulse'
+                        : stats.botStatus === 'STANDBY'
+                        ? 'bg-amber-400'
+                        : 'bg-red-500/80'
+                    }`}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="site-card rounded-2xl p-6 text-center md:p-8">
+            <p className="text-sm uppercase tracking-[0.24em] text-neutral-500">Performance Feed</p>
+            <h3 className="mt-3 text-2xl font-bold text-white">Live stats are temporarily hidden</h3>
+            <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-neutral-400 md:text-base">
+              The bot-performance cards appear here when fresh live data is connected. The system
+              overview below explains how the Telegram bot, signal flow, and GDEX runtime work.
+            </p>
+          </div>
+        )}
+        <div className="mt-8 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/70 text-left">
+          <div className="grid md:grid-cols-[0.95fr_1.05fr]">
+            <img
+              src={BOT_SYSTEM_ARTICLE_IMAGE_URL}
+              alt={BOT_SYSTEM_ARTICLE_TITLE}
+              className="h-full min-h-[240px] w-full object-cover"
+              loading="lazy"
+            />
+            <div className="p-6 md:p-8">
+              <p className="text-sm uppercase tracking-[0.24em] text-neutral-500">Bot System Explainer</p>
+              <h3 className="mt-3 text-2xl font-bold text-white md:text-3xl">{BOT_SYSTEM_ARTICLE_TITLE}</h3>
+              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-neutral-400 md:text-base">
+                Learn how Nerdie Blaq connects Telegram operations, signal delivery, trading intelligence,
+                and the GDEX SDK runtime behind the scenes.
+              </p>
+              <a
+                href={BOT_SYSTEM_ARTICLE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="site-secondary-btn mt-5 inline-flex items-center justify-center rounded-full px-6 py-3 text-sm font-semibold transition"
+              >
+                Read the Bot System Breakdown
+              </a>
             </div>
-          ))}
+          </div>
         </div>
       </div>
     </section>
@@ -353,30 +404,120 @@ function EcosystemSection() {
   );
 }
 
+function MusicSpotlightSection() {
+  return (
+    <section id="music-spotlight" className="px-4 py-16">
+      <div className="mx-auto max-w-5xl">
+        <div className="site-card-premium rounded-[30px] p-7 md:p-10">
+          <div className="grid gap-8 md:grid-cols-[0.78fr_1.22fr] md:items-center">
+            <div className="mx-auto w-full max-w-[320px]">
+              <div className="overflow-hidden rounded-[26px] border border-red-900/30 bg-zinc-950 shadow-[0_22px_60px_rgba(0,0,0,0.38)]">
+                <img
+                  src={MUSIC_ALBUM_COVER_URL}
+                  alt="BLAQ by Buddie Roots album cover"
+                  className="aspect-square w-full object-cover"
+                />
+              </div>
+            </div>
+            <div>
+              <span className="site-accent-pill inline-flex rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.28em]">
+                Album Release
+              </span>
+              <h2 className="mt-5 text-3xl font-bold text-white md:text-5xl">BLAQ by Buddie Roots</h2>
+              <p className="mt-4 max-w-3xl text-base leading-relaxed text-neutral-300 md:text-lg">
+                Stream the flagship Nerdie Blaq music release connecting sound, culture, and the
+                wider Web3 universe built on Base.
+              </p>
+              <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+                <a
+                  href={MUSIC_LISTEN_EVERYWHERE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="site-primary-btn inline-flex items-center justify-center rounded-full px-7 py-3.5 text-base font-semibold transition"
+                >
+                  Listen Everywhere
+                </a>
+                <Link
+                  to="/music"
+                  className="site-secondary-btn inline-flex items-center justify-center rounded-full px-7 py-3.5 text-base font-semibold transition"
+                >
+                  Explore Music
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function FitSpotlightSection() {
   return (
     <section id="nerdie-blaq-fit" className="px-4 py-16">
       <div className="mx-auto max-w-5xl">
         <div className="site-card-premium rounded-[30px] p-7 md:p-10">
-          <div className="grid gap-8 md:grid-cols-[1.2fr_0.8fr] md:items-center">
-            <div>
-              <span className="site-accent-pill inline-flex rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.28em]">
-                Music. Money. Muscle.
-              </span>
-              <h2 className="mt-5 text-3xl font-bold text-white md:text-5xl">Nerdie Blaq Fit</h2>
-              <p className="mt-4 max-w-3xl text-base leading-relaxed text-neutral-300 md:text-lg">
-                Train with Nerdie Blaq Fit — workouts, nutrition, progress tracking, Apple Health sync,
-                and the Blaq Mass System.
-              </p>
+          <div className="max-w-3xl">
+            <div className="mb-6 grid max-w-3xl gap-4 sm:grid-cols-2">
+              <img
+                src={FIT_PROMO_LOGO_URL}
+                alt="Discipline over excuses, Nerdie Blaq Fit"
+                className="h-full min-h-[220px] w-full rounded-2xl border border-white/10 object-cover shadow-[0_20px_50px_rgba(0,0,0,0.35)]"
+              />
+              <a
+                href={DISCIPLINE_HOODIE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group overflow-hidden rounded-2xl border border-white/10 bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.16),_rgba(9,9,11,0.94))] shadow-[0_20px_50px_rgba(0,0,0,0.35)]"
+              >
+                <img
+                  src={DISCIPLINE_HOODIE_IMAGE_URL}
+                  alt="Discipline Hoodie"
+                  className="h-[280px] w-full object-contain p-4 transition duration-300 group-hover:scale-[1.03]"
+                  loading="lazy"
+                />
+                <div className="border-t border-white/10 p-4">
+                  <p className="text-xs uppercase tracking-[0.24em] text-emerald-200">Fit Merch</p>
+                  <p className="mt-2 text-lg font-bold text-white">Discipline Hoodie</p>
+                </div>
+              </a>
             </div>
-            <div className="flex flex-col gap-3 md:items-end">
+            <span className="site-accent-pill inline-flex rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.28em]">
+              Music. Money. Muscle.
+            </span>
+            <h2 className="mt-5 text-3xl font-bold text-white md:text-5xl">Nerdie Blaq Fit</h2>
+            <p className="mt-4 max-w-3xl text-base leading-relaxed text-neutral-300 md:text-lg">
+              Train with Nerdie Blaq Fit — workouts, nutrition, progress tracking, Apple Health sync,
+              and the Blaq Mass System.
+            </p>
+            <div className="mt-7 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
               <Link
                 to="/fit"
                 className="site-primary-btn inline-flex items-center justify-center rounded-full px-7 py-3.5 text-base font-semibold transition"
               >
                 Explore Nerdie Blaq Fit
               </Link>
-              <p className="text-sm text-neutral-500">App Store coming soon</p>
+              <a
+                href={APP_STORE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Download Nerdie Blaq Fit on the App Store"
+                className="inline-flex"
+              >
+                <img
+                  src={APP_STORE_BADGE_URL}
+                  alt="Download on the App Store"
+                  className="h-10 w-auto"
+                />
+              </a>
+              <a
+                href={DISCIPLINE_HOODIE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="site-secondary-btn inline-flex items-center justify-center rounded-full px-7 py-3.5 text-base font-semibold transition"
+              >
+                Shop Hoodie
+              </a>
             </div>
           </div>
         </div>
@@ -581,7 +722,14 @@ function NftPreviewSection() {
               </div>
             </div>
             <div className="text-center">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/70 shadow-[0_24px_60px_rgba(0,0,0,0.35)]">
+                <img
+                  src={syndicateCollectionImage}
+                  alt="Nerdie Syndicate NFT collection preview"
+                  className="aspect-square w-full object-cover"
+                />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3">
                 {[
                   { label: "Supply", value: "200" },
                   { label: "Price", value: "0.01 ETH" },
@@ -684,6 +832,7 @@ export default function Home({
       <HeroSection />
       <BotProofSection />
       <EcosystemSection />
+      <MusicSpotlightSection />
       <FitSpotlightSection />
       <AccessTiersSection />
       <TokenSection />

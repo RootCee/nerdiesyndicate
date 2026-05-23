@@ -1,21 +1,15 @@
 import MerchProductCard from '../components/MerchProductCard';
 import PublicSiteFooter from '../components/PublicSiteFooter';
 import Seo from '../components/Seo';
+import squareMerchProducts from '../data/squareMerchProducts.json';
 
 const ALIVE_SHOES_LINK = 'https://www.aliveshoes.com/nerdie-blaq-pearl2';
 const SQUARE_STORE_LINK = 'https://nerdie-blaq-merch.square.site';
-const DISCIPLINE_HOODIE_LINK =
-  'https://nerdie-blaq-merch.square.site/product/discipline-xccuses/NWEFH6HCXL4U5TAZD5INGCA2?cs=true&cst=popular';
 const NERDIE_BLAQ_X1_LINK = 'https://www.aliveshoes.com/nerdie-blaq-x1';
 const SOUL_REBEL_LINK = 'https://www.aliveshoes.com/soul-rebel';
 
 const featuredShoeImage =
   'https://s0.as-img.com/r/pic/1848413/1500/1500/with_box.jpg?bg=f5f5f5&u=1775143311';
-const disciplineHoodieImage =
-  'https://152590411.cdn6.editmysite.com/uploads/1/5/2/5/152590411/EPM4ZJEQHO2XACCUJ3LU35HG.jpeg?width=2400&optimize=medium';
-const nerdieBlaqGoodieImage =
-  'https://152590411.cdn6.editmysite.com/uploads/1/5/2/5/152590411/OGYJAHWGSLKMBXUVIF5K2UP3.jpeg?width=2400&optimize=medium';
-
 const apparelProducts = [
   {
     image:
@@ -32,23 +26,6 @@ const apparelProducts = [
     price: '$219',
     href: SOUL_REBEL_LINK,
     badge: 'AliveShoes',
-  },
-];
-
-const merchProducts = [
-  {
-    image: disciplineHoodieImage,
-    title: 'Discipline Hoodie',
-    price: 'Available on Square',
-    href: DISCIPLINE_HOODIE_LINK,
-    badge: 'Square',
-  },
-  {
-    image: nerdieBlaqGoodieImage,
-    title: 'Nerdie Blaq Goodie',
-    price: 'Available on Square',
-    href: SQUARE_STORE_LINK,
-    badge: 'Square',
   },
 ];
 
@@ -180,12 +157,12 @@ export default function Merch() {
         <div className="mx-auto max-w-6xl">
           <SectionHeader
             eyebrow="Merch"
-            title="Featured Merch"
-            description="A quick look at standout apparel from the Square storefront, with a direct path into the full Nerdie Blaq merch shop."
+            title="Square Store Catalog"
+            description="Every live product pulled from the Nerdie Blaq Square storefront sitemap, with direct links into each product page."
           />
 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-            {merchProducts.map((product) => (
+            {squareMerchProducts.map((product) => (
               <MerchProductCard key={product.title} {...product} />
             ))}
           </div>

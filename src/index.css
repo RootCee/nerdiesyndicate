@@ -209,6 +209,24 @@ p.text-sm,
   color: #ecf2f5;
 }
 
+.fit-extras-marquee {
+  animation: fit-extras-scroll 34s linear infinite;
+}
+
+.fit-extras-marquee:hover {
+  animation-play-state: paused;
+}
+
+@keyframes fit-extras-scroll {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
 .clubhouse-hero-glow {
   background:
     radial-gradient(circle at 50% 0%, rgba(72, 52, 112, 0.32), transparent 38%),

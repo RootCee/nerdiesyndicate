@@ -44,10 +44,10 @@ const buildStatusItems = [
     accent: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
   },
   {
-    label: 'In Progress',
+    label: 'Live Now',
     title: 'Nerdie Blaq Fit',
     description: 'Nerdie Blaq Fit is the health, fitness, and wellness pillar connecting music, money, muscle, discipline, Apple Health sync, workout structure, and progress tracking.',
-    accent: 'border-amber-500/30 bg-amber-500/10 text-amber-200',
+    accent: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
   },
   {
     label: 'In Progress',

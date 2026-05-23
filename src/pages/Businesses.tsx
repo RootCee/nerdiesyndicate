@@ -1,22 +1,27 @@
 import Seo from '../components/Seo';
 import PublicSiteFooter from '../components/PublicSiteFooter';
+import { useBusinessCollection } from '../hooks/useBusinessCollection';
 
-const featuredBusinesses = [
-  {
-    name: 'Retail Business',
-    summary: 'A business NFT lane designed for creators and operators building consumer-facing storefronts on Base.',
-  },
-  {
-    name: 'Service Business',
-    summary: 'A path for digital services, consulting, and execution-driven ventures that can grow inside the ecosystem.',
-  },
-  {
-    name: 'Community Business',
-    summary: 'A collaborative business layer built for shared initiatives, local activations, and token-aligned projects.',
-  },
+const businessSummaries: Record<number, string> = {
+  1: 'Consumer-facing storefronts, market shops, supply lanes, and streetwear commerce inside the Nerdie Blaq economy.',
+  2: 'Bot labs, data hubs, signal centers, and technical operator businesses built for the Base ecosystem.',
+  3: 'Clubs, music lounges, event halls, and streaming studios for culture, drops, and community activations.',
+  4: 'Garages, repair shops, mod shops, and workshop-style operations tied to production and upgrades.',
+  5: 'Bank branches, exchange desks, treasury offices, and lending halls for finance-oriented city utility.',
+};
+
+const fallbackBusinessClasses = [
+  { tokenId: 1, businessName: 'Retail Business', image: null },
+  { tokenId: 2, businessName: 'Tech Startup', image: null },
+  { tokenId: 3, businessName: 'Entertainment Venue', image: null },
+  { tokenId: 4, businessName: 'Manufacturing Unit', image: null },
+  { tokenId: 5, businessName: 'Financial Institution', image: null },
 ];
 
 export default function Businesses() {
+  const { businesses, loading } = useBusinessCollection(null);
+  const featuredBusinesses = businesses.length > 0 ? businesses : fallbackBusinessClasses;
+
   return (
     <>
       <Seo
@@ -60,16 +65,47 @@ export default function Businesses() {
               </div>
             </div>
 
-            <div className="rounded-[30px] border border-red-900/20 bg-zinc-900/85 p-6 shadow-[0_0_45px_rgba(127,29,29,0.14)]">
-              <div className="grid gap-4">
-                {featuredBusinesses.map((business, index) => (
-                  <div key={business.name} className="rounded-2xl border border-zinc-800 bg-zinc-950/90 p-5">
-                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-red-800/30 bg-red-900/30 text-sm font-bold text-red-300">
-                      {index + 1}
-                    </span>
-                    <h2 className="mt-4 text-xl font-bold text-white">{business.name}</h2>
-                    <p className="mt-2 text-sm leading-relaxed text-neutral-400">{business.summary}</p>
-                  </div>
+            <div className="rounded-[30px] border border-red-900/20 bg-zinc-900/85 p-5 shadow-[0_0_45px_rgba(127,29,29,0.14)]">
+              <div className="flex items-center justify-between gap-4 px-1 pb-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-red-300">
+                    Business NFT Gallery
+                  </p>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    {loading ? 'Loading live collection images...' : 'Live token classes from the collection'}
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {featuredBusinesses.map((business) => (
+                  <article
+                    key={business.tokenId}
+                    className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/90"
+                  >
+                    {business.image ? (
+                      <img
+                        src={business.image}
+                        alt={business.businessName}
+                        className="aspect-square w-full object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="flex aspect-square w-full items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(153,27,27,0.28),_rgba(24,24,27,0.94))]">
+                        <span className="inline-flex h-14 w-14 items-center justify-center rounded-xl border border-red-800/30 bg-red-900/30 text-lg font-bold text-red-300">
+                          {business.tokenId}
+                        </span>
+                      </div>
+                    )}
+                    <div className="p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-red-300">
+                        Token #{business.tokenId}
+                      </p>
+                      <h2 className="mt-2 text-lg font-bold text-white">{business.businessName}</h2>
+                      <p className="mt-2 text-xs leading-relaxed text-neutral-400">
+                        {businessSummaries[business.tokenId]}
+                      </p>
+                    </div>
+                  </article>
                 ))}
               </div>
             </div>
