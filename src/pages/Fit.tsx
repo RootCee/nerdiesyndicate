@@ -144,21 +144,21 @@ const fitExtras = [
 const screenshotCards = [
   {
     title: 'Weekly Planner',
-    subtitle: 'Schedule workouts, recovery, and accountability in one clean lane.',
+    subtitle: 'Keep workouts, recovery, and daily accountability organized in one clear weekly view.',
     accent: 'from-emerald-500/35 to-violet-500/20',
-    metrics: ['5 workouts scheduled', '2 recovery blocks', '1 meal prep reminder'],
+    metrics: ['Structured training week', 'Recovery-day planning', 'Meal-prep reminders'],
   },
   {
     title: 'Progress Dashboard',
-    subtitle: 'See streaks, completed sessions, and body-composition checkpoints.',
+    subtitle: 'Review completed sessions, consistency trends, and physique progress over time.',
     accent: 'from-violet-500/30 to-emerald-500/20',
-    metrics: ['12 day streak', '+3.8 lb gain', '86% weekly completion'],
+    metrics: ['Workout history', 'Daily check-ins', 'Progress trends'],
   },
   {
     title: 'Exercise Library',
-    subtitle: 'Image-first movement cards make every session easier to execute.',
+    subtitle: 'Use visual movement guidance to train with more confidence and less guesswork.',
     accent: 'from-[#7c3aed]/30 to-[#14532d]/25',
-    metrics: ['Mass chest day', 'Core circuit', 'Leg power block'],
+    metrics: ['Exercise instructions', 'Coaching cues', 'Workout substitutions'],
   },
 ] as const;
 
@@ -220,7 +220,7 @@ function PhoneMockup({
               ))}
             </div>
             <div className="mt-5 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-xs uppercase tracking-[0.24em] text-emerald-200">
-              Placeholder app screen
+              Available on iOS + Android
             </div>
           </div>
         </div>
@@ -495,9 +495,9 @@ export default function Fit() {
       <section id="screenshots" className="px-4 py-16">
         <div className="mx-auto max-w-6xl">
           <SectionHeader
-            eyebrow="App Preview"
-            title="Placeholder screenshots for the first public concept."
-            description="These mock screens give the launch page a stronger product feel now, while leaving room for real UI screenshots once the beta build is ready."
+            eyebrow="Inside the App"
+            title="The tools that keep your training organized."
+            description="Explore three core Nerdie Blaq Fit workflows built to support structured training, consistent check-ins, and measurable progress."
           />
           <div className="mt-10 grid gap-6 lg:grid-cols-3">
             {screenshotCards.map((card) => (
