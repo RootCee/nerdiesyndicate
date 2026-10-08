@@ -1,8 +1,6 @@
-import { Pool } from 'pg';
+const { Pool } = require('pg');
 
-type DataRow = Record<string, unknown>;
-
-let pool: Pool | null = null;
+let pool = null;
 
 function isDatabaseConfigured() {
   return Boolean(process.env.DATABASE_URL || process.env.PG_HOST);
@@ -26,7 +24,7 @@ function getPool() {
   return pool;
 }
 
-function getNumber(row: DataRow | undefined, keys: string[]) {
+function getNumber(row, keys) {
   if (!row) return null;
 
   for (const key of keys) {
@@ -41,7 +39,7 @@ function getNumber(row: DataRow | undefined, keys: string[]) {
   return null;
 }
 
-function getTimestamp(row: DataRow | undefined, keys: string[]) {
+function getTimestamp(row, keys) {
   if (!row) return null;
 
   for (const key of keys) {
@@ -53,13 +51,13 @@ function getTimestamp(row: DataRow | undefined, keys: string[]) {
   return null;
 }
 
-function latestTimestamp(...values: Array<string | null>) {
+function latestTimestamp(...values) {
   return values
-    .filter((value): value is string => Boolean(value))
+    .filter(Boolean)
     .sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? null;
 }
 
-export default async function handler(req: any, res: any) {
+module.exports = async function handler(req, res) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ ok: false, error: 'Method not allowed' });
@@ -71,13 +69,13 @@ export default async function handler(req: any, res: any) {
 
   try {
     const db = getPool();
-    const performanceResult = await db.query<DataRow>(
+    const performanceResult = await db.query(
       'SELECT * FROM bot_performance ORDER BY created_at DESC LIMIT 1'
     );
 
     const statusResult = await db
-      .query<DataRow>('SELECT * FROM bot_status ORDER BY created_at DESC LIMIT 1')
-      .catch(() => ({ rows: [] as DataRow[] }));
+      .query('SELECT * FROM bot_status ORDER BY created_at DESC LIMIT 1')
+      .catch(() => ({ rows: [] }));
 
     const performance = performanceResult.rows[0];
     const status = statusResult.rows[0];
@@ -121,4 +119,4 @@ export default async function handler(req: any, res: any) {
     );
     return res.status(503).json({ ok: false, error: 'Performance feed is temporarily unavailable' });
   }
-}
+};
