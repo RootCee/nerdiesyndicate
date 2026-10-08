@@ -19,6 +19,7 @@ import Support from './pages/Support';
 import Disclaimer from './pages/Disclaimer';
 import Contact from './pages/Contact';
 import Fit from './pages/Fit';
+import HopeBridge from './pages/HopeBridge';
 
 function ScrollToTop() {
   const location = useLocation();
@@ -215,6 +216,7 @@ function AppRoutes() {
       <Route path="/businesses" element={<Businesses />} />
       <Route path="/music" element={<Music />} />
       <Route path="/fit" element={<Fit />} />
+      <Route path="/hope-bridge" element={<HopeBridge />} />
       <Route path="/music/thank-you" element={<MusicThankYou />} />
       <Route path="/music/checkout-cancelled" element={<MusicCheckoutCancelled />} />
       <Route path="/merch" element={<Merch />} />

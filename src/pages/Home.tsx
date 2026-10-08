@@ -584,6 +584,45 @@ function OipSpotlightSection() {
   );
 }
 
+function HopeBridgeSpotlightSection() {
+  return (
+    <section id="hope-bridge" className="px-4 py-16">
+      <div className="mx-auto max-w-5xl">
+        <div className="site-card-premium rounded-[30px] p-7 md:p-10">
+          <div className="grid gap-8 md:grid-cols-[0.72fr_1.28fr] md:items-center">
+            <div className="flex min-h-[240px] items-center justify-center rounded-[26px] border border-sky-400/20 bg-[radial-gradient(circle_at_top,_rgba(14,165,233,0.24),_rgba(5,7,10,0.96))] p-8">
+              <div className="text-center">
+                <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-[26px] border border-white/15 bg-white/10 text-4xl font-black text-white">
+                  HB
+                </div>
+                <p className="mt-4 text-xs font-semibold uppercase tracking-[0.26em] text-sky-200">
+                  Community Technology
+                </p>
+              </div>
+            </div>
+            <div>
+              <span className="inline-flex rounded-full border border-sky-400/20 bg-sky-400/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.28em] text-sky-200">
+                Community Impact
+              </span>
+              <h2 className="mt-5 text-3xl font-bold text-white md:text-5xl">Hope Bridge</h2>
+              <p className="mt-4 max-w-3xl text-base leading-relaxed text-neutral-300 md:text-lg">
+                A mobile community safety and outreach tool that helps authorized teams coordinate response,
+                track follow-ups, identify high-risk areas, and organize field work.
+              </p>
+              <Link
+                to="/hope-bridge"
+                className="site-primary-btn mt-7 inline-flex items-center justify-center rounded-full px-7 py-3.5 text-base font-semibold transition"
+              >
+                Explore Hope Bridge
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function AccessTiersSection() {
   const tiers = [
     {
@@ -893,6 +932,7 @@ export default function Home({
       <MusicSpotlightSection />
       <FitSpotlightSection />
       <OipSpotlightSection />
+      <HopeBridgeSpotlightSection />
       <AccessTiersSection />
       <TokenSection />
       <NftPreviewSection />
