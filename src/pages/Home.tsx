@@ -21,6 +21,11 @@ type BotPerformanceStats = {
 const APP_STORE_URL = 'https://apps.apple.com/us/app/nerdie-blaq-fit/id6763120543';
 const APP_STORE_BADGE_URL =
   'https://developer.apple.com/app-store/marketing/guidelines/images/badge-download-on-the-app-store.svg';
+const GOOGLE_PLAY_URL =
+  'https://play.google.com/store/apps/details?id=com.rootcee.nerdieblaq.fit';
+const GOOGLE_PLAY_BADGE_URL =
+  'https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png';
+const OIP_URL = 'https://oip.world';
 const FIT_PROMO_LOGO_URL = '/fit-discipline-excuses.png';
 const DISCIPLINE_HOODIE_URL =
   'https://nerdie-blaq-merch.square.site/product/discipline-xccuses/NWEFH6HCXL4U5TAZD5INGCA2?cs=true&cst=popular';
@@ -511,12 +516,65 @@ function FitSpotlightSection() {
                 />
               </a>
               <a
+                href={GOOGLE_PLAY_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Get Nerdie Blaq Fit on Google Play"
+                className="inline-flex"
+              >
+                <img
+                  src={GOOGLE_PLAY_BADGE_URL}
+                  alt="Get it on Google Play"
+                  className="h-12 w-auto sm:h-10"
+                />
+              </a>
+              <a
                 href={DISCIPLINE_HOODIE_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="site-secondary-btn inline-flex items-center justify-center rounded-full px-7 py-3.5 text-base font-semibold transition"
               >
                 Shop Hoodie
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function OipSpotlightSection() {
+  return (
+    <section id="opportunity-intelligence" className="px-4 py-16">
+      <div className="mx-auto max-w-5xl">
+        <div className="site-card-premium rounded-[30px] p-7 md:p-10">
+          <div className="grid gap-8 md:grid-cols-[0.72fr_1.28fr] md:items-center">
+            <div className="flex min-h-[240px] items-center justify-center rounded-[26px] border border-violet-400/15 bg-[radial-gradient(circle_at_top,_rgba(139,92,246,0.2),_rgba(9,9,11,0.96))] p-8">
+              <div className="text-center">
+                <p className="text-6xl font-black tracking-[0.12em] text-white md:text-7xl">OIP</p>
+                <p className="mt-3 text-xs font-semibold uppercase tracking-[0.26em] text-violet-200">
+                  Opportunity Intelligence
+                </p>
+              </div>
+            </div>
+            <div>
+              <span className="site-accent-pill inline-flex rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.28em]">
+                Ecosystem Product
+              </span>
+              <h2 className="mt-5 text-3xl font-bold text-white md:text-5xl">
+                Opportunity Intelligence Platform
+              </h2>
+              <p className="mt-4 max-w-3xl text-base leading-relaxed text-neutral-300 md:text-lg">
+                OIP organizes grants, contracts, funding sources, and filing opportunities into a focused intelligence platform for builders and organizations.
+              </p>
+              <a
+                href={OIP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="site-primary-btn mt-7 inline-flex items-center justify-center rounded-full px-7 py-3.5 text-base font-semibold transition"
+              >
+                Explore OIP
               </a>
             </div>
           </div>
@@ -834,6 +892,7 @@ export default function Home({
       <EcosystemSection />
       <MusicSpotlightSection />
       <FitSpotlightSection />
+      <OipSpotlightSection />
       <AccessTiersSection />
       <TokenSection />
       <NftPreviewSection />

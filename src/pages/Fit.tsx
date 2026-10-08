@@ -5,6 +5,10 @@ import { LEGAL_ENTITY_NAME } from '../lib/site';
 const APP_STORE_URL = 'https://apps.apple.com/us/app/nerdie-blaq-fit/id6763120543';
 const APP_STORE_BADGE_URL =
   'https://developer.apple.com/app-store/marketing/guidelines/images/badge-download-on-the-app-store.svg';
+const GOOGLE_PLAY_URL =
+  'https://play.google.com/store/apps/details?id=com.rootcee.nerdieblaq.fit';
+const GOOGLE_PLAY_BADGE_URL =
+  'https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png';
 const FIT_PROMO_LOGO_URL = '/fit-discipline-excuses.png';
 const DISCIPLINE_HOODIE_URL =
   'https://nerdie-blaq-merch.square.site/product/discipline-xccuses/NWEFH6HCXL4U5TAZD5INGCA2?cs=true&cst=popular';
@@ -54,7 +58,7 @@ const features = [
   {
     title: 'Pro subscription',
     description:
-      'Nerdie Blaq Fit Pro is planned at $9.99/month with a 3-day free trial through Apple App Store billing.',
+      'Nerdie Blaq Fit Pro is available at $9.99/month with a 3-day free trial through the device platform’s in-app billing.',
     eyebrow: '$9.99/mo',
   },
 ] as const;
@@ -304,7 +308,7 @@ export default function Fit() {
           <div className="grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr]">
             <div>
               <span className="site-accent-pill inline-flex rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.32em]">
-                Fitness Beta
+                Fitness App
               </span>
               <h1 className="mt-6 text-5xl text-white md:text-7xl">
                 Nerdie Blaq
@@ -335,6 +339,19 @@ export default function Fit() {
                   />
                 </a>
                 <a
+                  href={GOOGLE_PLAY_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Get Nerdie Blaq Fit on Google Play"
+                  className="inline-flex items-center"
+                >
+                  <img
+                    src={GOOGLE_PLAY_BADGE_URL}
+                    alt="Get it on Google Play"
+                    className="h-14 w-auto"
+                  />
+                </a>
+                <a
                   href={`mailto:${TESTFLIGHT_ACCESS_EMAIL}?subject=${encodeURIComponent('Nerdie Blaq Fit TestFlight Access')}`}
                   className="site-primary-btn inline-flex items-center justify-center rounded-full px-7 py-3.5 text-base font-semibold transition"
                 >
@@ -351,7 +368,7 @@ export default function Fit() {
                 {[
                   { label: 'Focus', value: 'Mass + Core' },
                   { label: 'Format', value: 'Mobile-first' },
-                  { label: 'Status', value: 'On App Store' },
+                  { label: 'Status', value: 'iOS + Android' },
                 ].map((item) => (
                   <div key={item.label} className="site-card rounded-[24px] p-5">
                     <p className="text-xs uppercase tracking-[0.24em] text-neutral-500">{item.label}</p>
@@ -550,12 +567,12 @@ export default function Fit() {
             <p className="text-xs uppercase tracking-[0.3em] text-emerald-200">Nerdie Blaq Fit Beta</p>
             <h2 className="mt-5 text-4xl text-white md:text-6xl">Built for people who want structure and results.</h2>
             <p className="mx-auto mt-5 max-w-3xl text-base text-neutral-300 md:text-lg">
-              The first release direction is clear: a branded fitness landing page that feels premium, mobile-ready,
-              and ready for product screenshots, App Store downloads, and TestFlight access by request.
+              Nerdie Blaq Fit is available for iPhone and Android with structured workouts, nutrition support,
+              progress tracking, and platform-specific subscription access.
             </p>
             <p className="mx-auto mt-4 max-w-2xl text-sm text-neutral-400">
               Pro subscription: $9.99/month with a 3-day free trial. Subscriptions are handled by
-              Apple App Store billing.
+              Apple App Store or Google Play billing, depending on the device platform.
             </p>
             <div className="mt-8 flex flex-col justify-center gap-4 sm:flex-row">
               <a
@@ -569,6 +586,19 @@ export default function Fit() {
                   src={APP_STORE_BADGE_URL}
                   alt="Download on the App Store"
                   className="h-12 w-auto"
+                />
+              </a>
+              <a
+                href={GOOGLE_PLAY_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Get Nerdie Blaq Fit on Google Play"
+                className="inline-flex items-center justify-center"
+              >
+                <img
+                  src={GOOGLE_PLAY_BADGE_URL}
+                  alt="Get it on Google Play"
+                  className="h-14 w-auto"
                 />
               </a>
               <a

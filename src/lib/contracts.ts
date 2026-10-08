@@ -8,7 +8,9 @@ import { DEFAULT_CERTIFICATION_CONTRACT_ADDRESS } from './certificationContractC
 
 // Contract addresses (Base chain)
 export const CONTRACTS = {
-  NFT: import.meta.env.VITE_NFT_CONTRACT_ADDRESS as string,
+  NFT:
+    (import.meta.env.VITE_NFT_CONTRACT_ADDRESS as `0x${string}` | undefined) ||
+    '0x4d410D24fAcd00EB9470d4261db855b57c9CDc0e',
   ERC6551_REGISTRY: import.meta.env.VITE_ERC6551_REGISTRY as string,
   TBA_IMPLEMENTATION: import.meta.env.VITE_TBA_IMPLEMENTATION as string,
   BUSINESS_NFT: import.meta.env.VITE_BUSINESS_NFT as string,

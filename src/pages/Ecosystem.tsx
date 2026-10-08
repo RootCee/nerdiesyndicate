@@ -236,6 +236,28 @@ export default function Ecosystem() {
         </p>
       </Section>
 
+      <Section id="opportunity-intelligence" title="Opportunity Intelligence Platform">
+        <div className="rounded-[28px] border border-violet-500/20 bg-[radial-gradient(circle_at_top_left,_rgba(139,92,246,0.16),_rgba(24,24,27,0.9))] p-7 md:p-9">
+          <p className="text-xs font-semibold uppercase tracking-[0.26em] text-violet-200">
+            Separate Ecosystem Product
+          </p>
+          <h3 className="mt-4 text-2xl font-bold text-white md:text-3xl">
+            OIP — The Opportunity Intelligence Platform
+          </h3>
+          <p className="mt-4 max-w-3xl text-base leading-relaxed text-neutral-300">
+            OIP gives builders and organizations a focused place to explore grants, contracts, funding sources, and filing opportunities. It remains a separate product while extending the Nerdie Blaq ecosystem into practical opportunity discovery.
+          </p>
+          <a
+            href="https://oip.world"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="site-primary-btn mt-6 inline-flex items-center justify-center rounded-full px-6 py-3 text-sm font-semibold transition"
+          >
+            Explore OIP
+          </a>
+        </div>
+      </Section>
+
       <Section id="academy-education" title="Academy and Education">
         <p>
           Nerdie Blaq Clubhouse also includes an education layer through the Academy. This matters because strong

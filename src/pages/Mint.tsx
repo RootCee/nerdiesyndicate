@@ -1,34 +1,7 @@
-import { ethers } from 'ethers';
 import { Link } from 'react-router-dom';
 import Seo from '../components/Seo';
 import MintingForm from '../MintingForm';
-import abi from '../contractABI';
 import PublicSiteFooter from '../components/PublicSiteFooter';
-
-const handleMint = async (quantity: number): Promise<ethers.ContractTransaction> => {
-  if (typeof window.ethereum === 'undefined') {
-    throw new Error("MetaMask not detected");
-  }
-
-  const provider = new ethers.providers.Web3Provider(window.ethereum);
-  await provider.send("eth_requestAccounts", []);
-  const signer = provider.getSigner();
-  const userAddress = await signer.getAddress();
-
-  const contract = new ethers.Contract('0x4d410D24fAcd00EB9470d4261db855b57c9CDc0e', abi, signer);
-  const pricePerNFT = ethers.utils.parseEther("0.01");
-  const valueToSend = pricePerNFT.mul(quantity);
-
-  try {
-    const tx = await contract.mint(userAddress, quantity, {
-      value: valueToSend,
-    });
-    return tx;
-  } catch (err) {
-    console.error('Error minting NFT:', err);
-    throw err;
-  }
-};
 
 export default function Mint() {
   return (
@@ -81,7 +54,7 @@ export default function Mint() {
 
           {/* Mint Form */}
           <div className="nft-mint-embed">
-            <MintingForm onMint={handleMint} />
+            <MintingForm />
           </div>
         </div>
       </section>

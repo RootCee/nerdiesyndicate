@@ -1,7 +1,9 @@
 const Stripe = require('stripe');
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-const DEFAULT_PRICE_CENTS = Number(process.env.BLAQ_ALBUM_PRICE_CENTS || 999);
+const {
+  ALBUM_PRODUCT_KEY,
+  ALBUM_CURRENCY,
+  getAlbumPriceCents,
+} = require('./product');
 
 function getOrigin(req) {
   const forwardedProto = req.headers['x-forwarded-proto'] || 'https';
@@ -20,6 +22,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
     const origin = getOrigin(req);
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
@@ -28,8 +31,8 @@ module.exports = async function handler(req, res) {
         {
           quantity: 1,
           price_data: {
-            currency: 'usd',
-            unit_amount: DEFAULT_PRICE_CENTS,
+            currency: ALBUM_CURRENCY,
+            unit_amount: getAlbumPriceCents(),
             product_data: {
               name: 'BLAQ - Digital Album Download',
               description: 'Digital album purchase for BLAQ by Buddie Roots',
@@ -40,7 +43,7 @@ module.exports = async function handler(req, res) {
       success_url: `${origin}/music/thank-you?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/music/checkout-cancelled`,
       metadata: {
-        product: 'blaq-digital-album',
+        product: ALBUM_PRODUCT_KEY,
       },
     });
 
