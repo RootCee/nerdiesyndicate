@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Seo from '../components/Seo';
 import PublicSiteFooter from '../components/PublicSiteFooter';
-import { fetchAllSupabaseRows, fetchSupabaseRows, isSupabaseConfigured } from '../lib/supabase';
+import { fetchSupabaseRows, isSupabaseConfigured } from '../lib/supabase';
 import mainlogo from '../images/mainlogo.png';
 import syndicateCollectionImage from '../images/myImage.png';
 
@@ -16,6 +16,21 @@ type BotPerformanceStats = {
   winRateSub: string;
   botStatusSub: string;
   pnlSub: string;
+  updatedAt: string | null;
+  isStale: boolean;
+};
+
+type BotPerformanceApiResponse = {
+  ok: boolean;
+  data?: {
+    signals: number | null;
+    wins: number | null;
+    losses: number | null;
+    winRate: number | null;
+    pnl: number | null;
+    updatedAt: string | null;
+    source: 'postgres';
+  };
 };
 
 const APP_STORE_URL = 'https://apps.apple.com/us/app/nerdie-blaq-fit/id6763120543';
@@ -96,19 +111,9 @@ function getBotStatus(latestActivity: number | undefined | null): BotPerformance
 }
 
 function getBotStatusSub(status: BotPerformanceStats['botStatus']) {
-  if (status === 'ACTIVE') return 'latest bot_performance update is fresh';
-  if (status === 'STANDBY') return 'bot data is present but not recent';
-  return 'data stale or unavailable';
-}
-
-function normalizeOutcomeStatus(value: string | null) {
-  if (!value) return null;
-
-  const upper = value.trim().toUpperCase();
-  if (upper.includes('WIN') || upper.includes('TP') || upper.includes('TAKE_PROFIT')) return 'WIN';
-  if (upper.includes('LOSS') || upper.includes('LOSE') || upper.includes('SL') || upper.includes('STOP')) return 'LOSS';
-
-  return null;
+  if (status === 'ACTIVE') return 'live performance feed is fresh';
+  if (status === 'STANDBY') return 'performance data is available but not recent';
+  return 'last-known performance data';
 }
 
 function formatMetric(value: number | string | null) {
@@ -150,13 +155,16 @@ function formatPnlMetric(value: number | string | null) {
   }).format(parsed)}%`;
 }
 
-function getLatestActivity(rows: StatsRow[]) {
-  return rows.reduce<number | null>((latest, row) => {
-    const timestamp = getTimestampValue(row);
-    if (timestamp === null) return latest;
-    if (latest === null || timestamp > latest) return timestamp;
-    return latest;
-  }, null);
+function formatUpdatedAt(value: string | null) {
+  if (!value) return 'Update time unavailable';
+
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) return 'Update time unavailable';
+
+  return `Last updated ${new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(timestamp)}`;
 }
 
 function HeroSection() {
@@ -211,71 +219,77 @@ function HeroSection() {
 
 function BotProofSection() {
   const [stats, setStats] = useState<BotPerformanceStats | null>(null);
+  const [feedState, setFeedState] = useState<'loading' | 'ready' | 'unavailable'>('loading');
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadStats() {
-      if (!isSupabaseConfigured()) {
-        setStats(null);
-        return;
-      }
-
       try {
-        const [performanceRows, outcomeRows] = await Promise.all([
-          fetchSupabaseRows<StatsRow>('bot_performance', {
-            select: '*',
-            order: 'created_at.desc',
-            limit: '1',
-          }).catch(() => []),
-          fetchAllSupabaseRows<StatsRow>('signal_outcomes', {
-            select: '*',
-            order: 'created_at.desc',
-          }).catch(() => []),
-        ]);
+        const response = await fetch('/api/bot/performance', {
+          headers: { Accept: 'application/json' },
+        });
+        const payload = (await response.json()) as BotPerformanceApiResponse;
 
         if (cancelled) return;
 
-        const latestPerformance = performanceRows[0];
-        const hasPerformanceData = Boolean(latestPerformance || outcomeRows.length);
-        const signals =
-          getNumber(latestPerformance, ['signals', 'trade_count', 'tradeCount']) ??
-          outcomeRows.length;
-        const wins = outcomeRows.filter((row) => normalizeOutcomeStatus(getString(row, ['status'])) === 'WIN').length;
-        const losses = outcomeRows.filter((row) => normalizeOutcomeStatus(getString(row, ['status'])) === 'LOSS').length;
-        const decidedTrades = wins + losses;
-        const fallbackWinRate = decidedTrades > 0 ? (wins / decidedTrades) * 100 : null;
-        const fallbackPnl = outcomeRows.reduce((total, row) => total + (getNumber(row, ['pnl']) ?? 0), 0);
-        const latestActivity = getLatestActivity(
-          latestPerformance ? [latestPerformance, ...outcomeRows] : outcomeRows
-        );
+        if (!response.ok || !payload.ok || !payload.data) {
+          throw new Error('Primary performance feed is unavailable');
+        }
+
+        const latestActivity = payload.data.updatedAt ? Date.parse(payload.data.updatedAt) : null;
         const botStatus = getBotStatus(latestActivity);
 
-        if (!hasPerformanceData || botStatus === 'OFFLINE') {
-          setStats(null);
+        setStats({
+          winRate: formatPercentMetric(payload.data.winRate),
+          signalsLogged: formatMetric(payload.data.signals),
+          botStatus,
+          pnl: formatPnlMetric(payload.data.pnl),
+          winRateSub: 'VPS performance summary',
+          botStatusSub: getBotStatusSub(botStatus),
+          pnlSub: 'VPS performance summary',
+          updatedAt: payload.data.updatedAt,
+          isStale: botStatus === 'OFFLINE',
+        });
+        setFeedState('ready');
+      } catch {
+        if (!isSupabaseConfigured()) {
+          if (!cancelled) setFeedState('unavailable');
           return;
         }
 
-        const winRate =
-          getNumber(latestPerformance, ['win_rate', 'winRate']) ?? fallbackWinRate;
-        const pnl =
-          getNumber(latestPerformance, ['pnl']) ??
-          getNumber(latestPerformance, ['realized_pnl', 'realizedPnl', 'pnl_realized']) ??
-          getNumber(latestPerformance, ['unrealized_pnl', 'unrealizedPnl', 'pnl_unrealized']) ??
-          fallbackPnl;
-        const performanceLabel = latestPerformance ? 'live summary from bot_performance' : 'live summary from signal_outcomes';
+        try {
+          const performanceRows = await fetchSupabaseRows<StatsRow>('bot_performance', {
+            select: 'signals,wins,losses,win_rate,pnl,created_at',
+            order: 'created_at.desc',
+            limit: '1',
+          });
+          const latestPerformance = performanceRows[0];
 
-        setStats({
-          winRate: formatPercentMetric(winRate),
-          signalsLogged: formatMetric(signals),
-          botStatus,
-          pnl: formatPnlMetric(pnl),
-          winRateSub: latestPerformance || outcomeRows.length ? performanceLabel : 'no performance data',
-          botStatusSub: getBotStatusSub(botStatus),
-          pnlSub: latestPerformance || outcomeRows.length ? performanceLabel : 'no performance data',
-        });
-      } catch {
-        if (!cancelled) setStats(null);
+          if (cancelled) return;
+          if (!latestPerformance) {
+            setFeedState('unavailable');
+            return;
+          }
+
+          const latestActivity = getTimestampValue(latestPerformance);
+          const botStatus = getBotStatus(latestActivity);
+
+          setStats({
+            winRate: formatPercentMetric(getNumber(latestPerformance, ['win_rate', 'winRate'])),
+            signalsLogged: formatMetric(getNumber(latestPerformance, ['signals'])),
+            botStatus,
+            pnl: formatPnlMetric(getNumber(latestPerformance, ['pnl'])),
+            winRateSub: 'last-known performance summary',
+            botStatusSub: getBotStatusSub(botStatus),
+            pnlSub: 'last-known performance summary',
+            updatedAt: latestActivity ? new Date(latestActivity).toISOString() : null,
+            isStale: true,
+          });
+          setFeedState('ready');
+        } catch {
+          if (!cancelled) setFeedState('unavailable');
+        }
       }
     }
 
@@ -290,7 +304,7 @@ function BotProofSection() {
     ? [
         { label: 'Win Rate', value: stats.winRate, sub: stats.winRateSub },
         { label: 'Bot Status', value: stats.botStatus, sub: stats.botStatusSub },
-        { label: 'Signals Logged', value: stats.signalsLogged, sub: 'signal_outcomes.count' },
+        { label: 'Signals Logged', value: stats.signalsLogged, sub: 'performance summary total' },
         { label: 'P&L', value: stats.pnl, sub: stats.pnlSub },
       ]
     : [];
@@ -304,37 +318,49 @@ function BotProofSection() {
         <p className="text-neutral-500 text-center mb-12 max-w-xl mx-auto">
           The Nerdie Blaq Clubhouse trading engine runs 24/7, analyzing BTC markets and generating trade calls in real time.
         </p>
-        {stats ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-            {statCards.map((stat) => (
-              <div
-                key={stat.label}
-                className="site-card rounded-2xl p-6 md:p-8 text-center transition"
-              >
-                <p className="text-3xl md:text-4xl font-black text-white mb-1">{stat.value}</p>
-                <p className="text-xs text-neutral-400 uppercase tracking-wider mb-1 font-semibold">{stat.label}</p>
-                <p className="text-xs text-neutral-600">{stat.sub}</p>
-                {stat.label === "Bot Status" && (
-                  <span
-                    className={`inline-block mt-2 h-2.5 w-2.5 rounded-full ${
-                      stats.botStatus === 'ACTIVE'
-                        ? 'bg-green-500 animate-pulse'
-                        : stats.botStatus === 'STANDBY'
-                        ? 'bg-amber-400'
-                        : 'bg-red-500/80'
-                    }`}
-                  />
-                )}
-              </div>
-            ))}
+        {feedState === 'loading' ? (
+          <div className="site-card rounded-2xl p-6 text-center md:p-8" role="status">
+            <p className="text-sm font-semibold text-neutral-300">Loading performance feed…</p>
           </div>
+        ) : stats ? (
+          <>
+            {stats.isStale && (
+              <div className="mb-5 rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-center text-sm text-amber-200">
+                Showing last-known results. The live feed is currently offline or delayed.
+              </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+              {statCards.map((stat) => (
+                <div
+                  key={stat.label}
+                  className="site-card rounded-2xl p-6 md:p-8 text-center transition"
+                >
+                  <p className="text-3xl md:text-4xl font-black text-white mb-1">{stat.value}</p>
+                  <p className="text-xs text-neutral-400 uppercase tracking-wider mb-1 font-semibold">{stat.label}</p>
+                  <p className="text-xs text-neutral-600">{stat.sub}</p>
+                  {stat.label === "Bot Status" && (
+                    <span
+                      className={`inline-block mt-2 h-2.5 w-2.5 rounded-full ${
+                        stats.botStatus === 'ACTIVE'
+                          ? 'bg-green-500 animate-pulse'
+                          : stats.botStatus === 'STANDBY'
+                          ? 'bg-amber-400'
+                          : 'bg-red-500/80'
+                      }`}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+            <p className="mt-4 text-center text-xs text-neutral-500">{formatUpdatedAt(stats.updatedAt)}</p>
+          </>
         ) : (
           <div className="site-card rounded-2xl p-6 text-center md:p-8">
             <p className="text-sm uppercase tracking-[0.24em] text-neutral-500">Performance Feed</p>
-            <h3 className="mt-3 text-2xl font-bold text-white">Live stats are temporarily hidden</h3>
+            <h3 className="mt-3 text-2xl font-bold text-white">Performance feed unavailable</h3>
             <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-neutral-400 md:text-base">
-              The bot-performance cards appear here when fresh live data is connected. The system
-              overview below explains how the Telegram bot, signal flow, and GDEX runtime work.
+              Current and last-known results could not be loaded. The system overview below explains
+              how the Telegram bot, signal flow, and GDEX runtime work.
             </p>
           </div>
         )}
