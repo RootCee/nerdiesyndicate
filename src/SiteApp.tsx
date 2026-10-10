@@ -234,7 +234,7 @@ export function AppShell({
       <Navbar />
 
       {showConnectButton && isHydrated ? (
-        <div className="fixed top-3 right-4 z-50">{connectButton}</div>
+        <div className="wallet-shell fixed top-3 right-4 z-50">{connectButton}</div>
       ) : null}
 
       <AppRoutes />

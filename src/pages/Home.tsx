@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import Seo from '../components/Seo';
 import PublicSiteFooter from '../components/PublicSiteFooter';
 import { fetchSupabaseRows, isSupabaseConfigured } from '../lib/supabase';
-import mainlogo from '../images/mainlogo.png';
 import syndicateCollectionImage from '../images/myImage.png';
 
 type StatsRow = Record<string, unknown>;
@@ -169,28 +168,27 @@ function formatUpdatedAt(value: string | null) {
 
 function HeroSection() {
   return (
-    <section className="world-hero relative overflow-hidden px-4 pb-16 pt-28 md:min-h-screen md:pb-20 md:pt-32">
+    <section className="world-hero relative overflow-hidden px-4 pb-14 pt-24 md:min-h-screen md:pb-16 md:pt-24">
       <div className="world-hero-grid pointer-events-none absolute inset-0" aria-hidden="true" />
       <div className="world-seed world-seed-one" aria-hidden="true" />
       <div className="world-seed world-seed-two" aria-hidden="true" />
       <div className="relative z-10 mx-auto grid max-w-7xl gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
         <div className="text-center lg:text-left">
-          <img src={mainlogo} alt="Nerdie Blaq" className="mx-auto mb-6 w-36 sm:w-44 lg:mx-0" />
-          <p className="mb-5 text-xs font-bold uppercase tracking-[0.3em] text-[#e3b94f] sm:text-sm">
+          <p className="mb-4 text-xs font-bold uppercase tracking-[0.3em] text-[#e3b94f] sm:text-sm">
             Nerdie Blaq Clubhouse LLC · Multimedia Technology
           </p>
-          <h1 className="clubhouse-text-glow text-5xl font-black leading-[0.94] text-white sm:text-6xl md:text-7xl">
+          <h1 className="clubhouse-text-glow text-4xl font-black leading-[0.94] text-white sm:text-5xl md:text-6xl">
             Welcome To The Game.
             <span className="mt-2 block world-headline-accent">Where Ideas Bloom Into Worlds.</span>
           </h1>
-          <p className="mx-auto mt-7 max-w-2xl text-base font-semibold leading-relaxed text-neutral-300 sm:text-lg lg:mx-0">
+          <p className="mx-auto mt-5 max-w-2xl text-base font-semibold leading-relaxed text-neutral-300 sm:text-lg lg:mx-0">
             Nerdie Blaq Clubhouse LLC is a multimedia technology company building digital products,
             original music, wellness experiences, and Web3-powered communities.
           </p>
           <p className="mx-auto mt-4 max-w-2xl text-sm text-neutral-400 sm:text-base lg:mx-0">
             Technology. Music. Wellness. Web3. The gems are here—use them wisely.
           </p>
-          <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row lg:justify-start">
+          <div className="mt-6 flex flex-col items-center justify-center gap-4 sm:flex-row lg:justify-start">
             <a href="#worlds" className="site-primary-btn rounded-full px-8 py-3.5 text-lg font-semibold transition">
               Explore What We Build
             </a>

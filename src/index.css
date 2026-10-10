@@ -151,6 +151,18 @@ p.text-sm,
   color: #f5f8fa;
 }
 
+.wallet-shell button {
+  border: 1px solid rgba(227, 185, 79, 0.48) !important;
+  color: #f3efe6 !important;
+  background: linear-gradient(135deg, #2a124a, #123d2b) !important;
+  box-shadow: 0 10px 30px rgba(9, 37, 26, 0.24) !important;
+}
+
+.wallet-shell button:hover {
+  border-color: rgba(227, 185, 79, 0.78) !important;
+  background: linear-gradient(135deg, #35175e, #174e37) !important;
+}
+
 .site-mobile-shell {
   border: 1px solid rgba(53, 82, 69, 0.42);
   background: linear-gradient(180deg, rgba(9, 13, 17, 0.98), rgba(12, 10, 18, 0.96));
@@ -221,7 +233,7 @@ p.text-sm,
 .world-product-constellation {
   position: relative;
   display: grid;
-  min-height: 560px;
+  min-height: 520px;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   grid-template-rows: repeat(12, minmax(0, 1fr));
   isolation: isolate;
