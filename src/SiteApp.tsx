@@ -38,35 +38,18 @@ function Navbar() {
 
   const navLinks = [
     {
-      key: 'clubhouse',
-      label: 'Nerdie Blaq Clubhouse',
-      href: '/',
+      key: 'worlds',
+      label: 'Worlds',
+      href: '/#worlds',
       external: false,
-      active:
-        location.pathname === '/' ||
-        location.pathname === '/clubhouse' ||
-        location.pathname === '/lander',
+      active: location.pathname === '/' || location.pathname === '/lander',
     },
     {
-      key: 'ecosystem',
-      label: 'Ecosystem',
-      href: '/ecosystem',
+      key: 'technology',
+      label: 'Technology',
+      href: '/#technology-platforms',
       external: false,
-      active: location.pathname === '/ecosystem',
-    },
-    {
-      key: 'academy',
-      label: 'Academy',
-      href: '/academy',
-      external: false,
-      active: location.pathname === '/academy',
-    },
-    {
-      key: 'businesses',
-      label: 'Businesses',
-      href: '/businesses',
-      external: false,
-      active: location.pathname === '/businesses',
+      active: location.pathname === '/hope-bridge',
     },
     {
       key: 'music',
@@ -83,32 +66,32 @@ function Navbar() {
       active: location.pathname === '/fit',
     },
     {
-      key: 'merch',
-      label: 'Merch',
+      key: 'clubhouse',
+      label: 'Clubhouse',
+      href: '/clubhouse',
+      external: false,
+      active:
+        location.pathname === '/clubhouse' ||
+        location.pathname === '/ecosystem' ||
+        location.pathname === '/academy' ||
+        location.pathname === '/businesses' ||
+        location.pathname === '/mint' ||
+        location.pathname === '/vip' ||
+        location.pathname === '/dashboard',
+    },
+    {
+      key: 'store',
+      label: 'Store',
       href: '/merch',
       external: false,
       active: location.pathname === '/merch',
     },
     {
-      key: 'mint',
-      label: 'NFT Mint',
-      href: '/mint',
+      key: 'about',
+      label: 'About',
+      href: '/contact',
       external: false,
-      active: location.pathname === '/mint',
-    },
-    {
-      key: 'dashboard',
-      label: 'Dashboard',
-      href: '/dashboard',
-      external: false,
-      active: location.pathname === '/dashboard',
-    },
-    {
-      key: 'blog',
-      label: 'Blog',
-      href: 'https://mirror.xyz/rootcee.eth',
-      external: true,
-      active: false,
+      active: location.pathname === '/contact',
     },
   ] as const;
 

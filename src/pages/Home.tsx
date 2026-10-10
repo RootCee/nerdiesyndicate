@@ -169,48 +169,126 @@ function formatUpdatedAt(value: string | null) {
 
 function HeroSection() {
   return (
-    <section className="min-h-[88svh] md:min-h-screen flex flex-col items-center justify-center text-center px-4 pt-24 pb-14 md:pt-20 relative overflow-hidden">
-      <div className="site-home-hero absolute inset-0 pointer-events-none" />
-      <div className="relative z-10 max-w-4xl mx-auto">
-        <img src={mainlogo} alt="Nerdie Blaq" className="w-40 sm:w-48 md:w-64 mx-auto mb-6 md:mb-8" />
-        <h1 className="clubhouse-text-glow text-4xl sm:text-5xl md:text-7xl font-black text-white mb-5 md:mb-6 tracking-[0.12em] leading-[1.02]">
-          Welcome To The
-          <br />
-          <span className="text-[#c7b2f8]">Game</span>
-        </h1>
-        <p className="text-base sm:text-lg md:text-xl text-neutral-300 max-w-2xl mx-auto mb-4 leading-relaxed font-semibold">
-          Nerdie Blaq Clubhouse is a music-powered Web3 ecosystem built on Base. It combines NFTs,
-          trading tools, creative content, and community into a unified platform for builders,
-          artists, and supporters.
-        </p>
-        <p className="text-sm sm:text-base text-neutral-400 mb-4 max-w-2xl mx-auto font-medium">
-          Discover the public Clubhouse, music releases, merch, education, and ecosystem access
-          points from one premium hub.
-        </p>
-        <p className="text-sm sm:text-base text-neutral-400 mb-8 md:mb-10 font-medium">
-          Free market access for everyone. Premium access for $NERDIE holders. Dashboard tools for NFT holders.
-        </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Link
-            to="/clubhouse"
-            className="site-primary-btn px-8 py-3.5 font-semibold rounded-full transition text-lg"
-          >
-            Enter Clubhouse
-          </Link>
-          <Link
-            to="/vip"
-            className="site-secondary-btn px-8 py-3.5 font-semibold rounded-full transition text-lg"
-          >
-            Unlock VIP
-          </Link>
-        </div>
-        <div className="mt-5 md:mt-6">
+    <section className="world-hero relative overflow-hidden px-4 pb-16 pt-28 md:min-h-screen md:pb-20 md:pt-32">
+      <div className="world-hero-grid pointer-events-none absolute inset-0" aria-hidden="true" />
+      <div className="world-seed world-seed-one" aria-hidden="true" />
+      <div className="world-seed world-seed-two" aria-hidden="true" />
+      <div className="relative z-10 mx-auto grid max-w-7xl gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
+        <div className="text-center lg:text-left">
+          <img src={mainlogo} alt="Nerdie Blaq" className="mx-auto mb-6 w-36 sm:w-44 lg:mx-0" />
+          <p className="mb-5 text-xs font-bold uppercase tracking-[0.3em] text-[#e3b94f] sm:text-sm">
+            Nerdie Blaq Clubhouse LLC · Multimedia Technology
+          </p>
+          <h1 className="clubhouse-text-glow text-5xl font-black leading-[0.94] text-white sm:text-6xl md:text-7xl">
+            Welcome To The Game.
+            <span className="mt-2 block world-headline-accent">Where Ideas Bloom Into Worlds.</span>
+          </h1>
+          <p className="mx-auto mt-7 max-w-2xl text-base font-semibold leading-relaxed text-neutral-300 sm:text-lg lg:mx-0">
+            Nerdie Blaq Clubhouse LLC is a multimedia technology company building digital products,
+            original music, wellness experiences, and Web3-powered communities.
+          </p>
+          <p className="mx-auto mt-4 max-w-2xl text-sm text-neutral-400 sm:text-base lg:mx-0">
+            Technology. Music. Wellness. Web3. The gems are here—use them wisely.
+          </p>
+          <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row lg:justify-start">
+            <a href="#worlds" className="site-primary-btn rounded-full px-8 py-3.5 text-lg font-semibold transition">
+              Explore What We Build
+            </a>
+            <Link to="/clubhouse" className="site-secondary-btn rounded-full px-8 py-3.5 text-lg font-semibold transition">
+              Enter the Clubhouse
+            </Link>
+          </div>
           <a
             href="#bot-proof"
-            className="inline-flex items-center justify-center rounded-full border border-zinc-700/80 bg-zinc-950/60 px-5 py-2.5 text-sm font-semibold text-neutral-100 transition hover:border-zinc-500 hover:text-white"
+            className="mt-6 inline-flex items-center gap-2 rounded-full border border-[#e3b94f]/25 bg-black/25 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-[#e7d29a] transition hover:border-[#e3b94f]/50 hover:text-white"
           >
-            View Live Bot Performance
+            <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+            Live Intelligence Online
           </a>
+        </div>
+
+        <div className="world-product-constellation" aria-label="Nerdie Blaq product worlds">
+          <Link to="/fit" className="world-product-card world-product-fit">
+            <span className="world-product-kicker">Health &amp; Wellness</span>
+            <strong>Nerdie Blaq Fit</strong>
+            <span>Training, nutrition, progress, and connected wellness.</span>
+          </Link>
+          <Link to="/music" className="world-product-card world-product-music">
+            <span className="world-product-kicker">Music &amp; Media</span>
+            <strong>Sound for a Higher Frequency</strong>
+            <span className="world-waveform" aria-hidden="true" />
+          </Link>
+          <a href={OIP_URL} target="_blank" rel="noopener noreferrer" className="world-product-card world-product-oip">
+            <span className="world-product-kicker">Technology Platform</span>
+            <strong>Opportunity Intelligence</strong>
+            <span>See what’s next. Build what matters.</span>
+          </a>
+          <Link to="/clubhouse" className="world-product-card world-product-clubhouse">
+            <span className="world-product-kicker">Web3 &amp; Community</span>
+            <strong>The Clubhouse</strong>
+            <span>Live intelligence, ownership, tools, and access.</span>
+          </Link>
+          <div className="world-network-core" aria-hidden="true">NB</div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+const companyWorlds = [
+  {
+    title: 'Technology Platforms',
+    description: 'Opportunity intelligence and community technology designed to turn information into action.',
+    eyebrow: 'OIP · Hope Bridge',
+    href: '#technology-platforms',
+    external: false,
+  },
+  {
+    title: 'Music & Media',
+    description: 'Original releases, Blaq Sheep Radio, storytelling, and independent creative experiences.',
+    eyebrow: 'Sound · Culture · Story',
+    href: '/music',
+    external: false,
+  },
+  {
+    title: 'Health & Wellness',
+    description: 'Nerdie Blaq Fit connects training, nutrition, progress, and disciplined daily practice.',
+    eyebrow: 'Nerdie Blaq Fit',
+    href: '/fit',
+    external: false,
+  },
+  {
+    title: 'Web3 & Community',
+    description: 'The Clubhouse, live intelligence, digital ownership, $NERDIE, and the world of Nerdie City.',
+    eyebrow: 'Clubhouse · Base',
+    href: '/ecosystem',
+    external: false,
+  },
+] as const;
+
+function CompanyWorldsSection() {
+  return (
+    <section id="worlds" className="scroll-mt-24 px-4 py-16 md:py-24">
+      <div className="mx-auto max-w-7xl">
+        <div className="mx-auto mb-10 max-w-3xl text-center">
+          <p className="text-xs font-bold uppercase tracking-[0.3em] text-[#e3b94f]">The Nerdie Blaq World</p>
+          <h2 className="mt-4 text-3xl font-bold text-white md:text-5xl">One company. Multiple worlds.</h2>
+          <p className="mt-4 text-neutral-400">
+            Explore the connected products, creative work, and communities built by Nerdie Blaq Clubhouse LLC.
+          </p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {companyWorlds.map((world, index) => (
+            <Link key={world.title} to={world.href} className="world-pillar-card group rounded-2xl p-6">
+              <div className="mb-8 flex items-center justify-between">
+                <span className="world-pillar-number">0{index + 1}</span>
+                <span className="text-xl text-[#e3b94f] transition group-hover:translate-x-1">→</span>
+              </div>
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#91c8ad]">{world.eyebrow}</p>
+              <h3 className="mt-3 text-xl font-bold text-white">{world.title}</h3>
+              <p className="mt-3 text-sm leading-relaxed text-neutral-400">{world.description}</p>
+            </Link>
+          ))}
         </div>
       </div>
     </section>
@@ -310,13 +388,17 @@ function BotProofSection() {
     : [];
 
   return (
-    <section id="bot-proof" className="scroll-mt-28 py-16 md:py-20 px-4">
+    <section id="bot-proof" className="scroll-mt-28 px-4 py-16 md:py-20">
       <div className="max-w-6xl mx-auto">
+        <p className="mb-3 text-center text-xs font-bold uppercase tracking-[0.3em] text-[#e3b94f]">
+          Clubhouse · Live Intelligence
+        </p>
         <h2 className="text-3xl md:text-4xl font-bold text-center text-white mb-3">
-          Live Bot Performance
+          Intelligence You Can Verify
         </h2>
         <p className="text-neutral-500 text-center mb-12 max-w-xl mx-auto">
-          The Nerdie Blaq Clubhouse trading engine runs 24/7, analyzing BTC markets and generating trade calls in real time.
+          A live view into one of the systems operating inside the Nerdie Blaq world. The Clubhouse
+          engine analyzes markets continuously and publishes its performance transparently.
         </p>
         {feedState === 'loading' ? (
           <div className="site-card rounded-2xl p-6 text-center md:p-8" role="status">
@@ -400,11 +482,11 @@ function EcosystemSection() {
     <section id="ecosystem" className="py-20 px-4">
       <div className="max-w-5xl mx-auto text-center">
         <h2 className="text-3xl md:text-4xl font-bold text-white mb-3">
-          The Nerdie Blaq Ecosystem
+          Web3 &amp; Digital Ownership
         </h2>
         <p className="text-neutral-400 mb-12 max-w-2xl mx-auto font-medium">
-          Clubhouse access is just the beginning. Nerdie Blaq is a full Web3 ecosystem: trading intelligence,
-          a deflationary token, NFT-gated tools, staking, gaming, and community.
+          The Web3 branch of Nerdie Blaq connects trading intelligence, a deflationary token,
+          NFT-gated tools, staking, gaming, and community on Base.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
@@ -572,7 +654,7 @@ function FitSpotlightSection() {
 
 function OipSpotlightSection() {
   return (
-    <section id="opportunity-intelligence" className="px-4 py-16">
+    <section id="technology-platforms" className="scroll-mt-24 px-4 py-16">
       <div className="mx-auto max-w-5xl">
         <div className="site-card-premium rounded-[30px] p-7 md:p-10">
           <div className="grid gap-8 md:grid-cols-[0.72fr_1.28fr] md:items-center">
@@ -586,7 +668,7 @@ function OipSpotlightSection() {
             </div>
             <div>
               <span className="site-accent-pill inline-flex rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.28em]">
-                Ecosystem Product
+                Technology Platform
               </span>
               <h2 className="mt-5 text-3xl font-bold text-white md:text-5xl">
                 Opportunity Intelligence Platform
@@ -918,7 +1000,7 @@ export default function Home({
   canonicalPath?: string;
 }) {
   const homepageDescription =
-    'Nerdie Blaq Clubhouse is a music-powered Web3 ecosystem built on Base. It combines NFTs, trading tools, creative content, and community into a unified platform for builders, artists, and supporters.';
+    'Nerdie Blaq Clubhouse LLC is a multimedia technology company building digital products, original music, wellness experiences, and Web3-powered communities.';
 
   const homepageJsonLd = [
     {
@@ -946,19 +1028,20 @@ export default function Home({
   return (
     <>
       <Seo
-        title="Nerdie Blaq | Music-Powered Web3 Ecosystem on Base"
+        title="Nerdie Blaq | Multimedia Technology, Music & Web3"
         description={homepageDescription}
         path={seoPath}
         canonicalPath={canonicalPath}
         jsonLd={homepageJsonLd}
       />
       <HeroSection />
-      <BotProofSection />
-      <EcosystemSection />
-      <MusicSpotlightSection />
-      <FitSpotlightSection />
+      <CompanyWorldsSection />
       <OipSpotlightSection />
       <HopeBridgeSpotlightSection />
+      <MusicSpotlightSection />
+      <FitSpotlightSection />
+      <BotProofSection />
+      <EcosystemSection />
       <AccessTiersSection />
       <TokenSection />
       <NftPreviewSection />
