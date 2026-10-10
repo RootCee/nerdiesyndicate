@@ -36,7 +36,7 @@ function Navbar() {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const navLinks = [
+  const primaryNavLinks = [
     {
       key: 'worlds',
       label: 'Worlds',
@@ -44,6 +44,30 @@ function Navbar() {
       external: false,
       active: location.pathname === '/' || location.pathname === '/lander',
     },
+    {
+      key: 'academy',
+      label: 'Academy',
+      href: '/academy',
+      external: false,
+      active: location.pathname === '/academy',
+    },
+    {
+      key: 'dashboard',
+      label: 'Dashboard',
+      href: '/dashboard',
+      external: false,
+      active: location.pathname === '/dashboard',
+    },
+    {
+      key: 'about',
+      label: 'About',
+      href: '/contact',
+      external: false,
+      active: location.pathname === '/contact',
+    },
+  ] as const;
+
+  const secondaryNavLinks = [
     {
       key: 'technology',
       label: 'Technology',
@@ -84,28 +108,9 @@ function Navbar() {
       external: false,
       active: location.pathname === '/merch',
     },
-    {
-      key: 'academy',
-      label: 'Academy',
-      href: '/academy',
-      external: false,
-      active: location.pathname === '/academy',
-    },
-    {
-      key: 'dashboard',
-      label: 'Dashboard',
-      href: '/dashboard',
-      external: false,
-      active: location.pathname === '/dashboard',
-    },
-    {
-      key: 'about',
-      label: 'About',
-      href: '/contact',
-      external: false,
-      active: location.pathname === '/contact',
-    },
   ] as const;
+
+  const navLinks = [...primaryNavLinks, ...secondaryNavLinks];
 
   function closeMobileMenu() {
     setMobileMenuOpen(false);
@@ -113,14 +118,14 @@ function Navbar() {
 
   return (
     <nav className="site-nav fixed top-0 left-0 right-0 z-50 backdrop-blur-md">
-      <div className="max-w-7xl mx-auto px-4 py-3">
+      <div className="relative mx-auto max-w-7xl px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <Link to="/" className="flex items-center gap-2">
             <img src={logo} alt="Logo" className="w-10 h-10" />
             <span className="hidden text-xl text-white sm:inline font-brand">Nerdie Blaq</span>
           </Link>
-          <div className="hidden items-center gap-4 text-xs font-medium md:flex xl:gap-6 xl:text-sm">
-            {navLinks.map((link) => (
+          <div className="hidden items-center gap-6 text-sm font-medium md:flex">
+            {primaryNavLinks.map((link) => (
               link.external ? (
                 <a
                   key={link.key}
@@ -141,6 +146,18 @@ function Navbar() {
                 </Link>
               )
             ))}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((value) => !value)}
+              className="site-nav-link inline-flex items-center gap-2 transition"
+              aria-label={mobileMenuOpen ? 'Close more destinations' : 'Open more destinations'}
+              aria-expanded={mobileMenuOpen}
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
+              </svg>
+              <span>More</span>
+            </button>
           </div>
           <div className="w-10 md:w-auto" />
         </div>
@@ -163,6 +180,25 @@ function Navbar() {
             <span>{mobileMenuOpen ? 'Close Menu' : 'Open Menu'}</span>
           </button>
         </div>
+
+        {mobileMenuOpen && (
+          <div className="site-mobile-shell absolute right-4 top-full mt-2 hidden min-w-52 rounded-2xl p-3 shadow-2xl md:block">
+            <div className="flex flex-col">
+              {secondaryNavLinks.map((link) => (
+                <Link
+                  key={link.key}
+                  to={link.href}
+                  onClick={closeMobileMenu}
+                  className={`rounded-xl px-3 py-3 text-sm font-semibold transition hover:bg-black/20 hover:text-white ${
+                    link.active ? 'bg-black/20 text-white' : 'text-neutral-200'
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         {mobileMenuOpen && (
           <div className="site-mobile-shell md:hidden mt-3 rounded-2xl p-3 shadow-2xl">
