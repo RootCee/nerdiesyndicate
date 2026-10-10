@@ -168,7 +168,7 @@ function formatUpdatedAt(value: string | null) {
 
 function HeroSection() {
   return (
-    <section className="world-hero relative overflow-hidden px-4 pb-14 pt-24 md:min-h-screen md:pb-16 md:pt-24">
+    <section className="world-hero relative overflow-hidden px-4 pb-14 pt-36 md:min-h-screen md:pb-16 md:pt-24">
       <div className="world-hero-grid pointer-events-none absolute inset-0" aria-hidden="true" />
       <div className="world-seed world-seed-one" aria-hidden="true" />
       <div className="world-seed world-seed-two" aria-hidden="true" />
