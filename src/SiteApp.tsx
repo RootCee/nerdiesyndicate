@@ -90,12 +90,11 @@ function Navbar() {
       active: location.pathname === '/fit',
     },
     {
-      key: 'clubhouse',
-      label: 'Clubhouse',
-      href: '/clubhouse',
+      key: 'ecosystem',
+      label: 'Ecosystem',
+      href: '/ecosystem',
       external: false,
       active:
-        location.pathname === '/clubhouse' ||
         location.pathname === '/ecosystem' ||
         location.pathname === '/businesses' ||
         location.pathname === '/mint' ||

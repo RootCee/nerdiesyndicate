@@ -192,8 +192,8 @@ function HeroSection() {
             <a href="#worlds" className="site-primary-btn rounded-full px-8 py-3.5 text-lg font-semibold transition">
               Explore What We Build
             </a>
-            <Link to="/clubhouse" className="site-secondary-btn rounded-full px-8 py-3.5 text-lg font-semibold transition">
-              Enter the Clubhouse
+            <Link to="/ecosystem" className="site-secondary-btn rounded-full px-8 py-3.5 text-lg font-semibold transition">
+              Explore the Ecosystem
             </Link>
           </div>
           <a
@@ -221,7 +221,7 @@ function HeroSection() {
             <strong>Opportunity Intelligence</strong>
             <span>See what’s next. Build what matters.</span>
           </a>
-          <Link to="/clubhouse" className="world-product-card world-product-clubhouse">
+          <Link to="/ecosystem" className="world-product-card world-product-clubhouse">
             <span className="world-product-kicker">Web3 &amp; Community</span>
             <strong>The Clubhouse</strong>
             <span>Live intelligence, ownership, tools, and access.</span>
@@ -762,8 +762,8 @@ function AccessTiersSection() {
         "Community Telegram access",
         "Basic market analysis",
       ],
-      cta: "Enter Clubhouse",
-      ctaHref: "/clubhouse",
+      cta: "Explore Ecosystem",
+      ctaHref: "/ecosystem",
       ctaType: "route" as const,
       highlight: false,
     },
