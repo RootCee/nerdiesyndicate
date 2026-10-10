@@ -257,7 +257,7 @@ const companyWorlds = [
   },
   {
     title: 'Web3 & Community',
-    description: 'The Clubhouse, live intelligence, digital ownership, $NERDIE, and the world of Nerdie City.',
+    description: 'The Clubhouse, Academy, live intelligence, digital ownership, $NERDIE, and the world of Nerdie City.',
     eyebrow: 'Clubhouse · Base',
     href: '/ecosystem',
     external: false,
@@ -287,6 +287,27 @@ function CompanyWorldsSection() {
               <p className="mt-3 text-sm leading-relaxed text-neutral-400">{world.description}</p>
             </Link>
           ))}
+        </div>
+        <div className="mt-8 flex flex-col items-center gap-4 text-center">
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-neutral-500">
+            Explore more of the Nerdie Blaq world
+          </p>
+          <nav aria-label="More Nerdie Blaq destinations" className="flex flex-wrap justify-center gap-3">
+            {[
+              { label: 'Academy', href: '/academy' },
+              { label: 'Businesses', href: '/businesses' },
+              { label: 'NFT Mint', href: '/mint' },
+              { label: 'Dashboard', href: '/dashboard' },
+            ].map((destination) => (
+              <Link
+                key={destination.href}
+                to={destination.href}
+                className="rounded-full border border-[#553582]/70 bg-[#100c17]/80 px-4 py-2 text-sm font-semibold text-neutral-300 transition hover:border-[#e3b94f]/70 hover:text-white"
+              >
+                {destination.label}
+              </Link>
+            ))}
+          </nav>
         </div>
       </div>
     </section>

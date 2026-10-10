@@ -73,7 +73,6 @@ function Navbar() {
       active:
         location.pathname === '/clubhouse' ||
         location.pathname === '/ecosystem' ||
-        location.pathname === '/academy' ||
         location.pathname === '/businesses' ||
         location.pathname === '/mint' ||
         location.pathname === '/vip' ||
@@ -87,11 +86,11 @@ function Navbar() {
       active: location.pathname === '/merch',
     },
     {
-      key: 'about',
-      label: 'About',
-      href: '/contact',
+      key: 'academy',
+      label: 'Academy',
+      href: '/academy',
       external: false,
-      active: location.pathname === '/contact',
+      active: location.pathname === '/academy',
     },
   ] as const;
 
