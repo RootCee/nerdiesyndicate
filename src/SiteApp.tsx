@@ -75,8 +75,7 @@ function Navbar() {
         location.pathname === '/ecosystem' ||
         location.pathname === '/businesses' ||
         location.pathname === '/mint' ||
-        location.pathname === '/vip' ||
-        location.pathname === '/dashboard',
+        location.pathname === '/vip',
     },
     {
       key: 'store',
@@ -92,6 +91,20 @@ function Navbar() {
       external: false,
       active: location.pathname === '/academy',
     },
+    {
+      key: 'dashboard',
+      label: 'Dashboard',
+      href: '/dashboard',
+      external: false,
+      active: location.pathname === '/dashboard',
+    },
+    {
+      key: 'about',
+      label: 'About',
+      href: '/contact',
+      external: false,
+      active: location.pathname === '/contact',
+    },
   ] as const;
 
   function closeMobileMenu() {
@@ -106,7 +119,7 @@ function Navbar() {
             <img src={logo} alt="Logo" className="w-10 h-10" />
             <span className="hidden text-xl text-white sm:inline font-brand">Nerdie Blaq</span>
           </Link>
-          <div className="hidden md:flex items-center gap-6 text-sm font-medium">
+          <div className="hidden items-center gap-4 text-xs font-medium md:flex xl:gap-6 xl:text-sm">
             {navLinks.map((link) => (
               link.external ? (
                 <a
