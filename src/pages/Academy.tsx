@@ -64,11 +64,44 @@ const computerScienceResources = [
   },
 ];
 
-const projectPlaceholders = [
-  'Portfolio landing page',
-  'Signal journal tracker',
-  'Personal Python automation script',
-];
+const projectTracks = [
+  {
+    code: '01',
+    title: 'Digital World Lab',
+    description: 'Design and build a focused digital home for a brand, idea, or creative project.',
+    deliverable: 'A responsive landing page ready to publish',
+    tools: 'HTML · CSS · JavaScript or React',
+    level: 'Beginner',
+    duration: '1–2 weeks',
+  },
+  {
+    code: '02',
+    title: 'Music & Media Lab',
+    description: 'Turn a song, story, or visual concept into an interactive release experience.',
+    deliverable: 'An artist page or digital release campaign',
+    tools: 'Design · Audio · Web publishing',
+    level: 'Beginner',
+    duration: '1 week',
+  },
+  {
+    code: '03',
+    title: 'Intelligence & Automation Lab',
+    description: 'Use structured data and simple automation to solve a repetitive real-world problem.',
+    deliverable: 'An opportunity tracker, signal journal, or automation',
+    tools: 'Python · APIs · Data',
+    level: 'Intermediate',
+    duration: '2–3 weeks',
+  },
+  {
+    code: '04',
+    title: 'Web3 Builder Lab',
+    description: 'Learn wallet safety and build a Base-connected interface using public blockchain data.',
+    deliverable: 'A read-only token or NFT data experience',
+    tools: 'Base · wagmi · Smart-contract reads',
+    level: 'Intermediate',
+    duration: '2–3 weeks',
+  },
+] as const;
 
 const comingSoonItems = [
   'Token-gated Solidity fundamentals',
@@ -312,21 +345,42 @@ export default function Academy() {
       <section className="px-4 py-16">
         <div className="mx-auto max-w-6xl">
           <SectionHeader
-            eyebrow="Nerdie Blaq Projects"
-            title="Project Tracks"
-            description="Placeholder project lanes for turning study time into tangible work you can ship, demo, or build into your portfolio."
+            eyebrow="Nerdie Blaq Build Labs"
+            title="Build Something Real"
+            description="Choose a guided project, develop a practical skill, and leave with something you can demonstrate, publish, or add to your portfolio."
           />
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            {projectPlaceholders.map((item) => (
-              <div key={item} className="rounded-2xl border border-red-900/15 bg-zinc-900/90 p-6">
-                <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-red-800/30 bg-red-900/30 text-sm font-bold text-red-400">
-                  NB
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            {projectTracks.map((track) => (
+              <article
+                key={track.title}
+                className="group rounded-[26px] border border-[#553582]/40 bg-[linear-gradient(145deg,rgba(22,16,32,0.96),rgba(8,20,15,0.92))] p-6 shadow-[0_18px_55px_rgba(0,0,0,0.2)] transition hover:-translate-y-1 hover:border-[#e3b94f]/45 md:p-7"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-[#e3b94f]/30 bg-[#e3b94f]/10 text-sm font-bold text-[#e3b94f]">
+                    {track.code}
+                  </div>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <span className="rounded-full border border-[#553582]/50 bg-[#553582]/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#c7adeb]">
+                      {track.level}
+                    </span>
+                    <span className="rounded-full border border-[#285c43]/60 bg-[#285c43]/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#91c8ad]">
+                      {track.duration}
+                    </span>
+                  </div>
                 </div>
-                <h3 className="text-lg font-bold text-white">{item}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-neutral-500">
-                  Project briefs and guided buildouts can live here in Phase 2.
+                <h3 className="mt-6 text-2xl font-bold text-white">{track.title}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-neutral-400">{track.description}</p>
+                <div className="mt-6 border-t border-white/10 pt-5">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#e3b94f]">What you will build</p>
+                  <p className="mt-2 text-sm font-medium text-neutral-200">{track.deliverable}</p>
+                  <p className="mt-4 text-xs text-neutral-500">
+                    <span className="font-semibold text-[#91c8ad]">Tools:</span> {track.tools}
+                  </p>
+                </div>
+                <p className="mt-5 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500 transition group-hover:text-neutral-300">
+                  Guided project brief coming soon
                 </p>
-              </div>
+              </article>
             ))}
           </div>
         </div>
