@@ -38,9 +38,9 @@ function Navbar() {
 
   const primaryNavLinks = [
     {
-      key: 'worlds',
-      label: 'Worlds',
-      href: '/#worlds',
+      key: 'clubhouse',
+      label: 'Clubhouse',
+      href: '/',
       external: false,
       active: location.pathname === '/' || location.pathname === '/lander',
     },
