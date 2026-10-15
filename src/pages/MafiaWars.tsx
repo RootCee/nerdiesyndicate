@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom';
 import Seo from '../components/Seo';
 
-const GAME_PATH = '/mafia-wars/game/';
+// The public preview uses the game's built-in lite destruction fallback so
+// WebGPU driver initialization cannot strand visitors on the loading screen.
+const GAME_PATH = '/mafia-wars/game/?phys=0';
 
 const controls = [
   { keys: 'W A S D', action: 'Move through the neighborhood' },

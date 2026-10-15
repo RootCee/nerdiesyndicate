@@ -3,5 +3,5 @@
   "channel": "early-development-preview",
   "sourceCommit": "ee131160f2ab21a9409f37fb01ecdbb6339c2d92",
   "sourceBranch": "codex/mafia-wars-milestone-3",
-  "entry": "/mafia-wars/game/"
+  "entry": "/mafia-wars/game/?phys=0"
 }
