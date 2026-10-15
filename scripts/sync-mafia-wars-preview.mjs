@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, readdir, rm, stat } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const sourceRoot = process.argv[2] ? path.resolve(process.argv[2]) : null;
@@ -81,6 +81,16 @@ await stat(path.join(sourceRoot, 'index.html'));
 await rm(outputRoot, { recursive: true, force: true });
 
 for (const file of runtimeFiles) await copyFile(file);
+const gameIndexPath = path.join(outputRoot, 'index.html');
+const gameIndex = await readFile(gameIndexPath, 'utf8');
+const productionImportMap = gameIndex.replaceAll(
+  '"./vendor/three/',
+  '"/mafia-wars/game/vendor/three/'
+);
+if (productionImportMap === gameIndex) {
+  throw new Error('Expected the Mafia Wars relative Three.js import map in index.html');
+}
+await writeFile(gameIndexPath, productionImportMap);
 await copyDirectory('src');
 await copyDirectory('vendor/three-avbd');
 for (const file of ['three.module.js', 'three.core.js', 'LICENSE']) await copyFile(`vendor/three/${file}`);
