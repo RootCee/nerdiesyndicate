@@ -233,6 +233,35 @@ function HeroSection() {
   );
 }
 
+function MafiaWarsBanner() {
+  return (
+    <section className="px-4 py-8 sm:py-10">
+      <div className="mafia-home-banner relative mx-auto max-w-6xl overflow-hidden rounded-[2rem] border border-amber-300/20 px-6 py-10 shadow-2xl sm:px-10 lg:px-14">
+        <div className="mafia-home-banner-grid" aria-hidden="true" />
+        <div className="relative z-10 grid items-center gap-8 lg:grid-cols-[1fr_auto]">
+          <div>
+            <span className="mafia-preview-kicker mb-5 inline-flex rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.22em]">
+              Early Development Preview
+            </span>
+            <h2 className="font-brand text-4xl uppercase leading-none tracking-[0.08em] text-white sm:text-5xl lg:text-6xl">
+              Nerdie City: <span className="text-amber-300">Mafia Wars</span>
+            </h2>
+            <p className="mt-5 max-w-2xl text-neutral-300">
+              Explore the neighborhood. Experience the beginning of a new world.
+            </p>
+          </div>
+          <Link
+            to="/mafia-wars"
+            className="mafia-preview-play inline-flex min-w-[240px] items-center justify-center rounded-full px-7 py-4 text-center text-sm font-black uppercase tracking-[0.12em] transition sm:text-base"
+          >
+            Play the Test Version
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 const companyWorlds = [
   {
     title: 'Technology Platforms',
@@ -1054,6 +1083,7 @@ export default function Home({
         jsonLd={homepageJsonLd}
       />
       <HeroSection />
+      <MafiaWarsBanner />
       <CompanyWorldsSection />
       <OipSpotlightSection />
       <HopeBridgeSpotlightSection />

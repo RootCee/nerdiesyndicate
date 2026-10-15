@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#080807">
+<link rel="icon" href="data:,">
+<title>Nerdie City: Mafia Wars</title>
+<style>
+@font-face { font-family: 'Marker'; src: url(assets/fonts/PermanentMarker-Regular.ttf) format('truetype'); font-display: swap; }
+@font-face { font-family: 'Barlow'; src: url(assets/fonts/BarlowCondensed-SemiBold.ttf) format('truetype'); font-weight: 600; font-display: swap; }
+@font-face { font-family: 'Barlow'; src: url(assets/fonts/BarlowCondensed-Medium.ttf) format('truetype'); font-weight: 500; font-display: swap; }
+:root { --sat: env(safe-area-inset-top, 0px); --sab: env(safe-area-inset-bottom, 0px); --sal: env(safe-area-inset-left, 0px); --sar: env(safe-area-inset-right, 0px);
+  --red: #ff3b4a; --blue: #4aa8ff; --gold: #d9ac58; --gold-bright: #f2d28b; --ink: #f4efe5; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; background: #080807; color: var(--ink); font-family: 'Barlow', 'Segoe UI', sans-serif; overflow: hidden; overscroll-behavior: none; touch-action: none; -webkit-user-select: none; user-select: none; }
+canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+#hud { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity .4s; }
+#hud.on { opacity: 1; }
+.fps { position: absolute; left: calc(10px + var(--sal)); top: calc(6px + var(--sat)); font: 500 11px/1 'Barlow'; letter-spacing: .08em; color: #9fb3c8; }
+/* minimap */
+#mapwrap { position: absolute; left: calc(14px + var(--sal)); top: calc(22px + var(--sat)); width: 150px; height: 150px; border-radius: 50%; overflow: hidden; border: 2px solid rgba(255,255,255,.35); box-shadow: 0 0 0 4px rgba(0,0,0,.25), 0 6px 20px rgba(0,0,0,.4); background: #1d2b1d; }
+#map { width: 100%; height: 100%; display: block; }
+/* team score bottom-left */
+#score { position: absolute; left: calc(18px + var(--sal)); bottom: calc(18px + var(--sab)); }
+#state { font: 600 12px/1 'Barlow'; letter-spacing: .2em; color: #c9d4e0; margin-bottom: 6px; text-transform: uppercase; }
+.team { display: flex; align-items: center; gap: 8px; font: 600 30px/1 'Barlow'; letter-spacing: .02em; }
+.team.red { color: var(--red); }
+.team.blue { color: var(--blue); font-size: 22px; margin-top: 2px; }
+.team .mark { width: 22px; height: 22px; border-radius: 6px; background: currentColor; opacity: .9; clip-path: polygon(20% 0, 100% 0, 80% 100%, 0 100%); }
+.team.blue .mark { width: 16px; height: 16px; }
+.team small { font-size: 55%; opacity: .8; }
+#timer { margin-top: 6px; font: 500 14px/1 'Barlow'; letter-spacing: .1em; color: #c9d4e0; }
+.free-roam #score .team, .free-roam #abil, .free-roam #feed { display: none; }
+.free-roam #score { padding: 10px 12px; border-radius: 8px; background: rgba(10,16,26,.55); }
+#modebadge { position: absolute; right: calc(16px + var(--sar)); top: calc(20px + var(--sat)); padding: 8px 12px; border: 1px solid rgba(255,255,255,.22); border-radius: 999px; background: rgba(10,16,26,.58); color: #dfe7f0; font: 600 11px/1 'Barlow'; letter-spacing: .18em; text-transform: uppercase; }
+/* ammo bottom-right */
+#ammo { position: absolute; right: calc(18px + var(--sar)); bottom: calc(18px + var(--sab)); display: flex; align-items: flex-end; gap: 12px; }
+#wname { font: 600 12px/1 'Barlow'; letter-spacing: .2em; color: #c9d4e0; margin: 0 10px 6px 0; text-transform: uppercase; }
+#ammo .mag { font: 600 34px/1 'Barlow'; }
+#ammo .res { font: 500 14px/1 'Barlow'; opacity: .8; margin-left: 2px; vertical-align: top; }
+#ammo .ab { font: 500 12px/1 'Barlow'; opacity: .8; margin-left: 10px; }
+/* killfeed top-right */
+#feed { position: absolute; right: calc(16px + var(--sar)); top: calc(26px + var(--sat)); text-align: right; font: 500 12px/1.5 'Barlow'; letter-spacing: .03em; text-shadow: 0 1px 2px #000; }
+#feed .k { color: var(--blue); } #feed .r { color: var(--red); } #feed .w { color: #dfe7f0; opacity: .85; margin: 0 5px; }
+/* abilities right-middle */
+#abil { position: absolute; right: calc(14px + var(--sar)); top: 48%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 8px; }
+.ab { width: 40px; height: 40px; border-radius: 9px; background: rgba(10,16,26,.55); border: 1px solid rgba(255,255,255,.18); display: grid; place-items: center; position: relative; color: #dfe7f0; pointer-events: auto; }
+.ab svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ab .key { position: absolute; right: -4px; bottom: -4px; font: 600 9px/1 'Barlow'; background: #dfe7f0; color: #0b1220; border-radius: 4px; padding: 2px 3px; }
+.ab .fill { position: absolute; inset: 0; border-radius: 9px; background: rgba(74,168,255,.25); transform-origin: bottom; transform: scaleY(0); }
+.ab.ready { border-color: #fff; box-shadow: 0 0 12px rgba(255,255,255,.35); }
+.ab.ready .fill { transform: scaleY(1); background: rgba(74,168,255,.35); }
+/* centre callouts */
+#center { position: absolute; left: 50%; top: 16%; transform: translateX(-50%); text-align: center; pointer-events: none; width: 90vw; }
+#callout { font: 400 26px/1.1 'Marker'; letter-spacing: .04em; color: #fff; text-shadow: 0 2px 0 #000, 0 0 14px rgba(0,0,0,.6); opacity: 0; transition: opacity .25s; }
+#callout .ico { display: block; margin: 0 auto 4px; width: 26px; height: 26px; }
+#callout small { display: block; font: 500 11px/1 'Barlow'; letter-spacing: .25em; margin-top: 6px; color: #e0e7ef; }
+#callout.on { opacity: 1; }
+#kill { font: 400 18px/1 'Marker'; color: #fff; text-shadow: 0 2px 0 #000; margin-top: 44px; opacity: 0; transition: opacity .2s; }
+#kill.on { opacity: 1; }
+#pts { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -78px); font: 400 15px/1 'Marker'; color: #fff; text-shadow: 0 2px 0 #000; opacity: 0; }
+#pts.on { animation: ptsUp .9s ease-out forwards; }
+@keyframes ptsUp { 0% { opacity: 1; transform: translate(-50%, -70px); } 100% { opacity: 0; transform: translate(-50%, -110px); } }
+/* crosshair + hit marker */
+/* M700 scope: black surround with a clear round lens and thin crosshair */
+#scope { position: absolute; inset: 0; display: none; background: radial-gradient(circle at 50% 50%, transparent 0, transparent min(34vh, 34vw), #000 calc(min(34vh, 34vw) + 2px)); }
+#scope.on { display: block; }
+#scope i { position: absolute; left: 50%; top: 50%; width: calc(min(68vh, 68vw)); height: calc(min(68vh, 68vw)); transform: translate(-50%, -50%); background: linear-gradient(#000, #000) center / 100% 1px no-repeat, linear-gradient(#000, #000) center / 1px 100% no-repeat; border-radius: 50%; box-shadow: inset 0 0 40px rgba(0,0,0,.8); }
+#xh { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: #fff; box-shadow: 0 0 2px #000; }
+#hit { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px; opacity: 0; }
+#hit.on { animation: hitPop .18s ease-out; }
+#hit.kill { filter: drop-shadow(0 0 3px #f33); }
+@keyframes hitPop { 0% { opacity: 1; transform: scale(1.3); } 100% { opacity: 0; transform: scale(.9); } }
+#hit svg { width: 100%; height: 100%; stroke: #fff; stroke-width: 2.5; }
+#hit.kill svg { stroke: #ff4040; }
+/* damage vignette */
+#hurt { position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(255,0,0,0) 45%, rgba(190,0,10,.55) 100%); opacity: 0; transition: opacity .12s; }
+/* world labels (teammates / spotted) */
+#labels { position: absolute; inset: 0; overflow: hidden; }
+.lab { position: absolute; transform: translate(-50%, -100%); font: 500 10px/1 'Barlow'; letter-spacing: .05em; color: var(--blue); text-align: center; text-shadow: 0 1px 2px #000; white-space: nowrap; }
+.lab.red { color: var(--red); }
+.lab i { display: block; width: 10px; height: 12px; margin: 0 auto 2px; border: 1.5px solid currentColor; border-radius: 3px 3px 6px 6px; }
+.lab.red i { border-radius: 50%; width: 9px; height: 9px; }
+/* touch controls */
+#touch { position: fixed; inset: 0; pointer-events: none; display: none; }
+#touch.on { display: block; }
+#stick { position: absolute; width: 110px; height: 110px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); background: rgba(0,0,0,.2); display: none; }
+#knob { position: absolute; left: 35px; top: 35px; width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,.55); }
+.tb { position: absolute; border-radius: 50%; background: rgba(10,16,26,.5); border: 1.5px solid rgba(255,255,255,.35); color: #fff; display: grid; place-items: center; font: 600 11px/1 'Barlow'; letter-spacing: .1em; pointer-events: auto; backdrop-filter: blur(4px); }
+.tb:active, .tb.down { background: rgba(255,255,255,.35); }
+#tFire { right: calc(26px + var(--sar)); bottom: calc(96px + var(--sab)); width: 86px; height: 86px; font-size: 14px; border-color: rgba(255,80,90,.8); }
+#tAds { right: calc(124px + var(--sar)); bottom: calc(80px + var(--sab)); width: 58px; height: 58px; }
+#tJump { right: calc(30px + var(--sar)); bottom: calc(196px + var(--sab)); width: 56px; height: 56px; }
+#tReload { right: calc(118px + var(--sar)); bottom: calc(166px + var(--sab)); width: 50px; height: 50px; }
+#tFire2 { left: calc(26px + var(--sal)); bottom: calc(250px + var(--sab)); width: 60px; height: 60px; border-color: rgba(255,80,90,.6); }
+#tSwap { left: calc(96px + var(--sal)); bottom: calc(262px + var(--sab)); width: 50px; height: 50px; }
+/* start / end overlays */
+#ov { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(circle at 50% 30%, rgba(87,67,31,.28), transparent 34%), radial-gradient(ellipse at 50% 45%, #1a1916 0%, #080807 68%); z-index: 5; text-align: center; padding: 20px; isolation: isolate; }
+#ov::before { content: ''; position: absolute; inset: 0; z-index: -1; opacity: .2; background: repeating-linear-gradient(115deg, transparent 0 42px, rgba(217,172,88,.08) 43px, transparent 44px 86px), linear-gradient(180deg, transparent 72%, rgba(0,0,0,.72)); mask-image: linear-gradient(to bottom, #000, transparent 70%); }
+#ov.off { display: none; }
+#ov .presenter { color: var(--gold); font: 600 clamp(11px, 2.4vw, 14px)/1 'Barlow'; letter-spacing: .36em; text-transform: uppercase; margin-bottom: 17px; }
+#ov h1 { display: flex; flex-direction: column; align-items: center; margin: 0; text-transform: uppercase; }
+#ov h1 .city { color: #f6f2e9; font: 600 clamp(45px, 10vw, 82px)/.82 'Barlow'; letter-spacing: .035em; text-shadow: 0 4px 0 #000, 0 0 28px rgba(255,255,255,.08); }
+#ov h1 .wars { color: var(--gold-bright); font: 400 clamp(42px, 9vw, 76px)/.92 'Marker'; letter-spacing: .025em; transform: rotate(-1deg); text-shadow: 0 4px 0 #000, 0 0 26px rgba(217,172,88,.18); }
+#ov p { font: 500 14px/1.5 'Barlow'; letter-spacing: .2em; color: #a59b87; margin: 15px 0 0; text-transform: uppercase; }
+#ov .bar { width: min(380px, 80vw); height: 4px; background: rgba(255,255,255,.12); margin: 22px auto 0; border-radius: 2px; overflow: hidden; }
+#ov .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #896526, var(--gold-bright)); transition: width .2s; }
+#ov .msg { font: 500 12px/1 'Barlow'; letter-spacing: .2em; color: #8f8675; margin-top: 10px; text-transform: uppercase; }
+#go { margin-top: 26px; font: 600 18px/1 'Barlow'; letter-spacing: .25em; text-transform: uppercase; color: #15120d; background: linear-gradient(135deg, var(--gold-bright), var(--gold)); border: 1px solid #ffe6ad; border-radius: 6px; padding: 17px 42px; cursor: pointer; display: none; box-shadow: 0 12px 38px rgba(0,0,0,.58), 0 0 26px rgba(217,172,88,.12); }
+#go:hover { filter: brightness(1.08); transform: translateY(-1px); }
+#go.on { display: inline-block; }
+#ov .hint { font: 500 12px/1.6 'Barlow'; letter-spacing: .1em; color: #6f859d; margin-top: 18px; }
+#end { font: 400 clamp(30px, 7vw, 54px)/1 'Marker'; }
+#ov > div { max-height: 100svh; overflow-y: auto; padding: 18px 0; width: min(680px, 100%); }
+#ov .hint b { color: #fff; }
+#lmsg { color: #ffd166; margin-top: 8px; min-height: 12px; }
+#idrow { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
+#idrow input { font: 600 13px/1 'Barlow'; letter-spacing: .14em; text-transform: uppercase; color: #fff; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.25); border-radius: 8px; padding: 11px 12px; width: min(200px, 44vw); outline: none; -webkit-user-select: text; user-select: text; }
+#idrow input:focus { border-color: var(--gold); box-shadow: 0 0 0 1px rgba(217,172,88,.2); }
+#idrow input::placeholder { color: #7f92a8; }
+#ladder { display: block; margin-top: 14px; color: #ffd166 !important; text-decoration: none; pointer-events: auto; }
+@media (max-width: 520px) { #ov { padding: 14px; } #ov .presenter { letter-spacing: .24em; } #idrow { margin-top: 13px; flex-direction: column; align-items: center; } #idrow input, #go { width: min(330px, 88vw); } }
+/* end-of-match ladder: tier cards + top 10 */
+#lboard { display: none; margin: 16px auto 0; text-align: left; }
+#lboard.on { display: block; }
+#lboard .tiers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+#lboard .tier { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); border-radius: 8px; padding: 10px 10px 8px; }
+#lboard .tier.mine { border-color: #ffd166; background: rgba(255,209,102,.12); }
+#lboard .tier b { display: block; font: 600 14px/1 'Barlow'; letter-spacing: .12em; text-transform: uppercase; }
+#lboard .tier .st { font-size: 11px; letter-spacing: .05em; color: #fff; margin-top: 4px; }
+#lboard .tier .st i { font-style: normal; color: rgba(255,255,255,.25); }
+#lboard .tier .usd { font: 600 22px/1 'Barlow'; color: #5dc75d; margin-top: 6px; }
+#lboard .tier .usd small { font-size: 11px; letter-spacing: .1em; margin-left: 3px; }
+#lboard .tier .rk { font: 500 10px/1 'Barlow'; letter-spacing: .14em; color: #8aa0b8; margin-top: 5px; text-transform: uppercase; }
+#lboard table { width: 100%; border-collapse: collapse; margin-top: 8px; font: 500 13px/1.2 'Barlow'; letter-spacing: .06em; }
+#lboard th { font: 500 10px/1 'Barlow'; letter-spacing: .18em; color: #6f859d; text-align: left; padding: 6px 8px; text-transform: uppercase; }
+#lboard td { padding: 7px 8px; border-top: 1px solid rgba(255,255,255,.1); white-space: nowrap; }
+#lboard td.n, #lboard th.n { text-align: right; font-variant-numeric: tabular-nums; }
+#lboard td.pts { color: #5dc75d; font-weight: 600; }
+#lboard tr.me td { background: rgba(255,209,102,.14); color: #ffd166; }
+#lboard .cap { font: 500 10px/1.4 'Barlow'; letter-spacing: .14em; color: #6f859d; text-transform: uppercase; margin-top: 8px; text-align: center; }
+@media (max-width: 520px) { #lboard .tiers { grid-template-columns: repeat(2, 1fr); } #lboard .hs { display: none; } }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div id="hud">
+  <div class="fps" id="fps">FPS --</div>
+  <div id="modebadge">Original Combat</div>
+  <div id="mapwrap"><canvas id="map" width="300" height="300"></canvas></div>
+  <div id="labels"></div>
+  <div id="score">
+    <div id="state">TIED</div>
+    <div class="team red"><span class="mark"></span><span id="sRed">0</span><small>/100</small></div>
+    <div class="team blue"><span class="mark"></span><span id="sBlue">0</span><small>/100</small></div>
+    <div id="timer">10:00</div>
+  </div>
+  <div id="feed"></div>
+  <div id="abil">
+    <div class="ab" id="ab4" data-n="4" title="Snitch"><div class="fill"></div><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M8 15c1.5-1.5 6.5-1.5 8 0M9 10h.01M15 10h.01M7 7l2 2M17 7l-2 2"/></svg><span class="key">4</span></div>
+    <div class="ab" id="ab5" data-n="5" title="Homies"><div class="fill"></div><svg viewBox="0 0 24 24"><circle cx="8" cy="8" r="2.6"/><circle cx="16" cy="8" r="2.6"/><path d="M3 19c0-3 2.2-5 5-5s5 2 5 5M11 19c0-3 2.2-5 5-5s5 2 5 5"/></svg><span class="key">5</span></div>
+    <div class="ab" id="ab6" data-n="6" title="Suicide bomber"><div class="fill"></div><svg viewBox="0 0 24 24"><circle cx="15" cy="5" r="2"/><path d="M9 21l3-6 3 2 1-5-4-2-3 3M12 10l2-2 3 1M10 20l-4 1"/></svg><span class="key">6</span></div>
+  </div>
+  <div id="center"><div id="callout"><span class="ico"></span><span class="t"></span><small></small></div><div id="kill"></div></div>
+  <div id="pts">+100</div>
+  <div id="xh"></div>
+  <div id="scope"><i></i></div>
+  <div id="hit"><svg viewBox="0 0 24 24"><path d="M4 4l5 5M20 4l-5 5M4 20l5-5M20 20l-5-5"/></svg></div>
+  <div id="hurt"></div>
+  <div id="ammo"><div id="wname">AK-47</div><div><span class="mag" id="mag">30</span><span class="res" id="res">180</span><span class="ab" id="kills">1 ☠</span></div></div>
+</div>
+
+<div id="touch">
+  <div id="stick"><div id="knob"></div></div>
+  <div class="tb" id="tFire">FIRE</div>
+  <div class="tb" id="tFire2">FIRE</div>
+  <div class="tb" id="tAds">AIM</div>
+  <div class="tb" id="tJump">JUMP</div>
+  <div class="tb" id="tReload">RLD</div>
+  <div class="tb" id="tSwap">SWAP</div>
+</div>
+
+<div id="ov">
+  <div>
+    <div class="presenter">NERDIE BLAQ CLUBHOUSE PRESENTS</div>
+    <h1><span class="city">NERDIE CITY</span><span class="wars">MAFIA WARS</span></h1>
+    <p id="tagline">The neighborhood is yours</p>
+    <div class="bar"><i id="pbar"></i></div>
+    <div class="msg" id="pmsg">Loading the block…</div>
+    <div id="end"></div>
+    <div class="msg" id="lmsg"></div>
+    <div id="lboard"></div>
+    <div id="idrow"><input id="gname" maxlength="16" placeholder="GAMERTAG" autocomplete="off" spellcheck="false"><input id="gwallet" maxlength="44" placeholder="SOLANA WALLET (OPTIONAL)" autocomplete="off" spellcheck="false"></div>
+    <button id="go">Enter City</button>
+    <a class="hint" id="ladder" href="site/leaderboard.html">WEEKLY LEADERBOARD →</a>
+    <div class="hint" id="hint"><b>FREE ROAM</b> · third-person exploration · no timer · no forced fights<br>WASD move · mouse look · Shift sprint · Space jump · C crouch · V camera</div>
+  </div>
+</div>
+
+<script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/jsm/", "three/webgpu": "./vendor/three-avbd/webgpu-shim.js" } }</script>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

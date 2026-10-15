@@ -20,6 +20,7 @@ import Disclaimer from './pages/Disclaimer';
 import Contact from './pages/Contact';
 import Fit from './pages/Fit';
 import HopeBridge from './pages/HopeBridge';
+import MafiaWars from './pages/MafiaWars';
 
 function ScrollToTop() {
   const location = useLocation();
@@ -247,6 +248,7 @@ function AppRoutes() {
       <Route path="/music" element={<Music />} />
       <Route path="/fit" element={<Fit />} />
       <Route path="/hope-bridge" element={<HopeBridge />} />
+      <Route path="/mafia-wars" element={<MafiaWars />} />
       <Route path="/music/thank-you" element={<MusicThankYou />} />
       <Route path="/music/checkout-cancelled" element={<MusicCheckoutCancelled />} />
       <Route path="/merch" element={<Merch />} />

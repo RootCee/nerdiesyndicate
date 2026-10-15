@@ -1,0 +1,7 @@
+3D models in this folder: CC0 1.0 (public domain), by Quaternius (quaternius.com), downloaded from Poly Pizza (poly.pizza).
+station-kit.glb  "Scifi Kit"            poly.pizza/m/b6otgtfVoe
+trooper.glb      "SWAT"                 poly.pizza/m/Btfn3G5Xv4
+robot-gun.glb    "Robot Enemy Legs Gun" poly.pizza/m/lFZfDh2hzP
+robot-heavy.glb  "Robot Enemy Large Gun" poly.pizza/m/mWojM4i2IH
+rifle.glb        "Scifi Assault Rifle"  poly.pizza/m/RGtBoJNn3N
+turret.glb       "Turret Gun"           poly.pizza/m/hThPXDCbwl

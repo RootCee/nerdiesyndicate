@@ -11,6 +11,7 @@
     "dev": "vite",
     "build": "tsc && vite build && vite build --ssr src/entry-prerender.tsx --outDir dist/server && node scripts/prerender.mjs",
     "preview": "vite preview",
+    "sync:mafia-wars-preview": "node scripts/sync-mafia-wars-preview.mjs",
     "sync:square-merch": "node scripts/sync-square-products.mjs",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "validate:certification-api": "tsc --noEmit -p tsconfig.api.json",
