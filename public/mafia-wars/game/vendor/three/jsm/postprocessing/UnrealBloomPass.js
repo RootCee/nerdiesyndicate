@@ -8,7 +8,7 @@ import {
 	Vector2,
 	Vector3,
 	WebGLRenderTarget
-} from 'three';
+} from '/mafia-wars/game/vendor/three/three.module.js';
 import { Pass, FullScreenQuad } from './Pass.js';
 import { CopyShader } from '../shaders/CopyShader.js';
 import { LuminosityHighPassShader } from '../shaders/LuminosityHighPassShader.js';
@@ -31,7 +31,7 @@ import { LuminosityHighPassShader } from '../shaders/LuminosityHighPassShader.js
  * ```
  *
  * @augments Pass
- * @three_import import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+ * @three_import import { UnrealBloomPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/UnrealBloomPass.js';
  */
 class UnrealBloomPass extends Pass {
 

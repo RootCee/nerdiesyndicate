@@ -1,10 +1,10 @@
 import {
 	Color
-} from 'three';
+} from '/mafia-wars/game/vendor/three/three.module.js';
 
 /**
  * @module LuminosityHighPassShader
- * @three_import import { LuminosityHighPassShader } from 'three/addons/shaders/LuminosityHighPassShader.js';
+ * @three_import import { LuminosityHighPassShader } from '/mafia-wars/game/vendor/three/jsm/shaders/LuminosityHighPassShader.js';
  */
 
 /**

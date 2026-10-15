@@ -1,5 +1,5 @@
 // Bots: grid A* navigation over the block, perception by line of sight, burst fire, team deathmatch roles.
-import * as THREE from 'three';
+import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { Character, ROSTER } from './characters.js';
 import { colliders, MAP, lineClear, raycastWorld } from './world.js';
 import { sfx } from './audio.js';

@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { groundAt, resolve, MAP } from './world.js';
 
 const FWD = new THREE.Vector3(), RIGHT = new THREE.Vector3(), WISH = new THREE.Vector3();

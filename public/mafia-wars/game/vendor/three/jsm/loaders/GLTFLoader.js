@@ -64,7 +64,7 @@ import {
 	VectorKeyframeTrack,
 	SRGBColorSpace,
 	InstancedBufferAttribute
-} from 'three';
+} from '/mafia-wars/game/vendor/three/three.module.js';
 import { toTrianglesDrawMode } from '../utils/BufferGeometryUtils.js';
 import { clone } from '../utils/SkeletonUtils.js';
 
@@ -124,7 +124,7 @@ import { clone } from '../utils/SkeletonUtils.js';
  * ```
  *
  * @augments Loader
- * @three_import import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+ * @three_import import { GLTFLoader } from '/mafia-wars/game/vendor/three/jsm/loaders/GLTFLoader.js';
  */
 class GLTFLoader extends Loader {
 

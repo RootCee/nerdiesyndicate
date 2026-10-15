@@ -1,6 +1,6 @@
 import {
 	Color
-} from 'three';
+} from '/mafia-wars/game/vendor/three/three.module.js';
 import { Pass } from './Pass.js';
 
 /**
@@ -13,7 +13,7 @@ import { Pass } from './Pass.js';
  * ```
  *
  * @augments Pass
- * @three_import import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+ * @three_import import { RenderPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/RenderPass.js';
  */
 class RenderPass extends Pass {
 

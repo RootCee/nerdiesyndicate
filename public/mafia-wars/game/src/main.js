@@ -1,11 +1,11 @@
 // Hood Warfare — browser build. Three.js, no build step. Look recipe studied from Stillwater:
 // ACES + pixel-budget DPR + HDR environment + warm/cool three-light rig + texel-snapped shadows + fog + light post.
-import * as THREE from 'three';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
+import { EffectComposer } from '/mafia-wars/game/vendor/three/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/ShaderPass.js';
+import { OutputPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/OutputPass.js';
 import { manager, loadHDR, loadGLB, setAniso } from './assets.js';
 import { buildWorld, lamps, windowsLit, resolve, MAP } from './world.js';
 import { Player } from './player.js';

@@ -7,11 +7,11 @@ import {
 	SkeletonHelper,
 	Vector3,
 	VectorKeyframeTrack
-} from 'three';
+} from '/mafia-wars/game/vendor/three/three.module.js';
 
 /**
  * @module SkeletonUtils
- * @three_import import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+ * @three_import import * as SkeletonUtils from '/mafia-wars/game/vendor/three/jsm/utils/SkeletonUtils.js';
  */
 
 function getBoneName( bone, options ) {

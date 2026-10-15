@@ -1,7 +1,7 @@
 // Loaders + material helpers. Every texture/model here is a real downloaded asset (Poly Haven CC0, itch CC0).
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
+import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
+import { GLTFLoader } from '/mafia-wars/game/vendor/three/jsm/loaders/GLTFLoader.js';
+import { HDRLoader } from '/mafia-wars/game/vendor/three/jsm/loaders/HDRLoader.js';
 
 export const manager = new THREE.LoadingManager();
 const gltfLoader = new GLTFLoader(manager);

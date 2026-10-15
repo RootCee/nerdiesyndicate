@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { mapRects, MAP } from './world.js';
 const $ = (s) => document.querySelector(s);
 const el = {};

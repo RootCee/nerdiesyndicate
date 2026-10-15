@@ -9,11 +9,11 @@ import {
 	TriangleStripDrawMode,
 	TrianglesDrawMode,
 	Vector3,
-} from 'three';
+} from '/mafia-wars/game/vendor/three/three.module.js';
 
 /**
  * @module BufferGeometryUtils
- * @three_import import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+ * @three_import import * as BufferGeometryUtils from '/mafia-wars/game/vendor/three/jsm/utils/BufferGeometryUtils.js';
  */
 
 /**

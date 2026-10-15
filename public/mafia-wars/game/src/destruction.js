@@ -6,7 +6,7 @@
 // Structures: garden walls (small blocks) and the houses (big siding/brick panels + roof slabs). Every
 // block is a box body; neighbours are welded with joints that tear on PULL (the paper's angular
 // breakForce never lets go under a blast: measured in qa/avbd-smoke.html, the wall just topples whole).
-import * as THREE from 'three';
+import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { pbr } from './assets.js';
 import { colliders } from './world.js';
 

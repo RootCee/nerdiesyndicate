@@ -3,7 +3,7 @@
 // add, change and remove into the solver before its next step, and reads poses back on request
 // (a readback is an async buffer copy, so it's never implicit). With a renderer, the bodies
 // live in a buffer Three.js draws from directly (BodyMesh): no copies, no readback to draw.
-import * as THREE from 'three/webgpu';
+import * as THREE from '/mafia-wars/game/vendor/three-avbd/webgpu-shim.js';
 import { B_ANGVEL, B_POS, B_ROT, B_VEL, BODY_FLOATS } from "../avbd3d/gpu/layout.js";
 import { decodeJoint } from "../avbd3d/gpu/joints.js";
 import { checkBreakBend, GpuSolver3D, gpuParams3D, unitRotation } from "../avbd3d/gpu/solver.js";

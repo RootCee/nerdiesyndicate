@@ -44,6 +44,29 @@ async function copyDirectory(relativePath) {
   });
 }
 
+function rewriteModuleSpecifiers(text) {
+  return text
+    .replaceAll("'three/addons/", "'/mafia-wars/game/vendor/three/jsm/")
+    .replaceAll('"three/addons/', '"/mafia-wars/game/vendor/three/jsm/')
+    .replaceAll("'three/webgpu'", "'/mafia-wars/game/vendor/three-avbd/webgpu-shim.js'")
+    .replaceAll('"three/webgpu"', '"/mafia-wars/game/vendor/three-avbd/webgpu-shim.js"')
+    .replaceAll("'three'", "'/mafia-wars/game/vendor/three/three.module.js'")
+    .replaceAll('"three"', '"/mafia-wars/game/vendor/three/three.module.js"');
+}
+
+async function rewriteJavaScriptDirectory(directory) {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const filePath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      await rewriteJavaScriptDirectory(filePath);
+    } else if (entry.isFile() && entry.name.endsWith('.js')) {
+      const source = await readFile(filePath, 'utf8');
+      const rewritten = rewriteModuleSpecifiers(source);
+      if (rewritten !== source) await writeFile(filePath, rewritten);
+    }
+  }
+}
+
 function resolveAddonImport(importer, specifier) {
   if (specifier.startsWith('three/addons/')) return specifier.slice('three/addons/'.length);
   if (!specifier.startsWith('.')) return null;
@@ -83,18 +106,22 @@ await rm(outputRoot, { recursive: true, force: true });
 for (const file of runtimeFiles) await copyFile(file);
 const gameIndexPath = path.join(outputRoot, 'index.html');
 const gameIndex = await readFile(gameIndexPath, 'utf8');
-const productionImportMap = gameIndex.replaceAll(
-  '"./vendor/three/',
-  '"/mafia-wars/game/vendor/three/'
-);
-if (productionImportMap === gameIndex) {
-  throw new Error('Expected the Mafia Wars relative Three.js import map in index.html');
+const productionIndex = gameIndex.replace(/<script type="importmap">.*?<\/script>\s*/s, '');
+if (productionIndex === gameIndex) {
+  throw new Error('Expected the Mafia Wars Three.js import map in index.html');
 }
-await writeFile(gameIndexPath, productionImportMap);
+await writeFile(gameIndexPath, productionIndex);
 await copyDirectory('src');
 await copyDirectory('vendor/three-avbd');
 for (const file of ['three.module.js', 'three.core.js', 'LICENSE']) await copyFile(`vendor/three/${file}`);
 await copyThreeAddonGraph();
+await rewriteJavaScriptDirectory(path.join(outputRoot, 'src'));
+await rewriteJavaScriptDirectory(path.join(outputRoot, 'vendor', 'three', 'jsm'));
+const avbdWorldPath = path.join(outputRoot, 'vendor', 'three-avbd', 'lib', 'world.js');
+await writeFile(
+  avbdWorldPath,
+  rewriteModuleSpecifiers(await readFile(avbdWorldPath, 'utf8'))
+);
 
 for (const file of characterFiles) await copyFile(`assets/chars/${file}`);
 for (const file of fontFiles) await copyFile(`assets/fonts/${file}`);

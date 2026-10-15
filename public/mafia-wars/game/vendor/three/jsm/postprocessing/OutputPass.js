@@ -10,7 +10,7 @@ import {
 	NeutralToneMapping,
 	CustomToneMapping,
 	SRGBTransfer
-} from 'three';
+} from '/mafia-wars/game/vendor/three/three.module.js';
 import { Pass, FullScreenQuad } from './Pass.js';
 import { OutputShader } from '../shaders/OutputShader.js';
 
@@ -28,7 +28,7 @@ import { OutputShader } from '../shaders/OutputShader.js';
  * ```
  *
  * @augments Pass
- * @three_import import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+ * @three_import import { OutputPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/OutputPass.js';
  */
 class OutputPass extends Pass {
 

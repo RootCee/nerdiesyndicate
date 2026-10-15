@@ -1,7 +1,7 @@
 // AK-47 viewmodel (CC0 Classic Weapons Pack), hitscan firing, and the shared FX pools (tracers, impacts, decals, blood, flashes).
-import * as THREE from 'three';
+import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { loadGLB, prep } from './assets.js';
-import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import * as SkeletonUtils from '/mafia-wars/game/vendor/three/jsm/utils/SkeletonUtils.js';
 import { raycastWorld } from './world.js';
 import { sfx } from './audio.js';
 

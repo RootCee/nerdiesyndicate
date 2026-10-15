@@ -1,7 +1,7 @@
 // Tripo hoodie characters: shared Mixamo clips, a third-person AK, and two-bone IK so both hands
 // hold the rifle on top of any locomotion clip (idle / walk / run / hit / fall).
-import * as THREE from 'three';
-import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
+import * as SkeletonUtils from '/mafia-wars/game/vendor/three/jsm/utils/SkeletonUtils.js';
 import { loadGLB, prep } from './assets.js';
 
 export const ROSTER = {

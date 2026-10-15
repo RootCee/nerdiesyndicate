@@ -1,7 +1,7 @@
 // The block: a Chicago residential street at dusk. Houses are kit-built from real PBR photo textures
 // (Poly Haven), props/fences/poles/trees are Poly Haven scans decimated in Blender.
-import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
+import { mergeGeometries } from '/mafia-wars/game/vendor/three/jsm/utils/BufferGeometryUtils.js';
 import { pbr, weather, prep, loadGLB } from './assets.js';
 
 export const MAP = { minX: -43, maxX: 43, minZ: -46, maxZ: 46 };

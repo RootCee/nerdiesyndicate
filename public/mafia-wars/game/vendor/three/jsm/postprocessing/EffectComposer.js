@@ -4,7 +4,7 @@ import {
 	Timer,
 	Vector2,
 	WebGLRenderTarget
-} from 'three';
+} from '/mafia-wars/game/vendor/three/three.module.js';
 import { CopyShader } from '../shaders/CopyShader.js';
 import { ShaderPass } from './ShaderPass.js';
 import { ClearMaskPass, MaskPass } from './MaskPass.js';
@@ -37,7 +37,7 @@ import { ClearMaskPass, MaskPass } from './MaskPass.js';
  * }
  * ```
  *
- * @three_import import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+ * @three_import import { EffectComposer } from '/mafia-wars/game/vendor/three/jsm/postprocessing/EffectComposer.js';
  */
 class EffectComposer {
 

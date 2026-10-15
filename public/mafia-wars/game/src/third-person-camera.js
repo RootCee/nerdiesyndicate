@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { raycastWorld } from './world.js';
 import { collisionDistance, dampAngle, dampFactor, dampValue } from './camera-math.js';
 
