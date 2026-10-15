@@ -298,6 +298,9 @@ async function boot() {
   pbar.style.width = '100%'; pmsg.textContent = Q.mobile ? 'City ready · left thumb moves · right thumb aims' : 'City ready';
   $('go').classList.add('on');
   configureEntryUi();
+  // Mobile browsers require audio to be unlocked during the earliest user
+  // gesture; waiting until click can leave Safari's AudioContext suspended.
+  $('go').addEventListener('pointerdown', unlockAudio, { passive: true });
   $('go').addEventListener('click', () => { startGame(selectedMode); });
   $('gname').value = ident.name || ''; $('gwallet').value = ident.wallet || ''; for (const id of ['gname', 'gwallet']) $(id).addEventListener('change', saveIdent);
   if (location.pathname.startsWith('/play/')) $('ladder').href = '../leaderboard.html';

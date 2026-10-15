@@ -67,6 +67,26 @@ async function rewriteJavaScriptDirectory(directory) {
   }
 }
 
+async function applyMobileAudioUnlock() {
+  const audioPath = path.join(outputRoot, 'src', 'audio.js');
+  const audioSource = await readFile(audioPath, 'utf8');
+  const audioPatched = audioSource.replace(
+    /  if \(ctx\) \{ if \(ctx\.state === 'suspended'\) ctx\.resume\(\); return; \}\r?\n  ctx = new \(window\.AudioContext \|\| window\.webkitAudioContext\)\(\);/,
+    "  if (ctx) { if (ctx.state === 'suspended') ctx.resume().catch(() => {}); return; }\n  const AudioContextClass = window.AudioContext || window.webkitAudioContext;\n  if (!AudioContextClass) return;\n  ctx = new AudioContextClass();\n  if (ctx.state === 'suspended') ctx.resume().catch(() => {});"
+  );
+  if (audioPatched === audioSource) throw new Error('Expected the Mafia Wars audio unlock block');
+  await writeFile(audioPath, audioPatched);
+
+  const mainPath = path.join(outputRoot, 'src', 'main.js');
+  const mainSource = await readFile(mainPath, 'utf8');
+  const mainPatched = mainSource.replace(
+    "  $('go').addEventListener('click', () => { startGame(selectedMode); });",
+    "  // Mobile browsers require audio to be unlocked during the earliest user\n  // gesture; waiting until click can leave Safari's AudioContext suspended.\n  $('go').addEventListener('pointerdown', unlockAudio, { passive: true });\n  $('go').addEventListener('click', () => { startGame(selectedMode); });"
+  );
+  if (mainPatched === mainSource) throw new Error('Expected the Mafia Wars start button listener');
+  await writeFile(mainPath, mainPatched);
+}
+
 function resolveAddonImport(importer, specifier) {
   if (specifier.startsWith('three/addons/')) return specifier.slice('three/addons/'.length);
   if (!specifier.startsWith('.')) return null;
@@ -117,6 +137,7 @@ for (const file of ['three.module.js', 'three.core.js', 'LICENSE']) await copyFi
 await copyThreeAddonGraph();
 await rewriteJavaScriptDirectory(path.join(outputRoot, 'src'));
 await rewriteJavaScriptDirectory(path.join(outputRoot, 'vendor', 'three', 'jsm'));
+await applyMobileAudioUnlock();
 const avbdWorldPath = path.join(outputRoot, 'vendor', 'three-avbd', 'lib', 'world.js');
 await writeFile(
   avbdWorldPath,

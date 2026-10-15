@@ -14,8 +14,11 @@ export const audioReady = Promise.all(NAMES.map((n) =>
   fetch(`assets/sfx/${n}.mp3`).then((r) => (r.ok ? r.arrayBuffer() : null)).then((b) => { if (b) raw[n] = b; }).catch(() => {})));
 
 export function unlockAudio() {
-  if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
-  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if (ctx) { if (ctx.state === 'suspended') ctx.resume().catch(() => {}); return; }
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+  ctx = new AudioContextClass();
+  if (ctx.state === 'suspended') ctx.resume().catch(() => {});
   master = ctx.createGain(); master.gain.value = muted ? 0 : 0.9; master.connect(ctx.destination);
   // gentle bus compressor so stacked gunfire doesn't clip
   const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4; comp.attack.value = 0.003; comp.release.value = 0.15;
