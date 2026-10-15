@@ -10,6 +10,8 @@ const rgbeLoader = new HDRLoader(manager);
 
 export let ANISO = 4;
 export function setAniso(n) { ANISO = n; }
+let LOW_MEMORY = false;
+export function setLowMemoryAssets(enabled) { LOW_MEMORY = !!enabled; }
 
 export const loadGLB = (url) => gltfLoader.loadAsync(url);
 export const loadHDR = (url) => rgbeLoader.loadAsync(url);
@@ -30,11 +32,11 @@ export function pbr(slug, opts = {}) {
   const base = `assets/ph/textures/${slug}/`;
   const m = new THREE.MeshStandardMaterial({
     map: tex(base + 'Diffuse.jpg', { srgb: true }),
-    normalMap: tex(base + 'nor_gl.jpg'),
-    roughnessMap: tex(base + 'arm.jpg'),
-    metalnessMap: tex(base + 'arm.jpg'),
-    aoMap: tex(base + 'arm.jpg'),
-    metalness: 1, roughness: 1,
+    normalMap: LOW_MEMORY ? null : tex(base + 'nor_gl.jpg'),
+    roughnessMap: LOW_MEMORY ? null : tex(base + 'arm.jpg'),
+    metalnessMap: LOW_MEMORY ? null : tex(base + 'arm.jpg'),
+    aoMap: LOW_MEMORY ? null : tex(base + 'arm.jpg'),
+    metalness: LOW_MEMORY ? 0 : 1, roughness: 1,
     color: opts.color ?? 0xffffff,
     vertexColors: !!opts.vertexColors,
     side: opts.side ?? THREE.FrontSide,

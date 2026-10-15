@@ -6,7 +6,7 @@ import { RenderPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/Ren
 import { UnrealBloomPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/OutputPass.js';
-import { manager, loadHDR, loadGLB, setAniso } from './assets.js';
+import { manager, loadHDR, loadGLB, setAniso, setLowMemoryAssets } from './assets.js';
 import { buildWorld, lamps, windowsLit, resolve, MAP } from './world.js';
 import { Player } from './player.js';
 import { FX, Weapon, GUN_SPECS } from './weapon.js';
@@ -47,16 +47,22 @@ async function submitMatch() {
   try { const r = await fetch(API + '/api/ladder?limit=10', { signal: AbortSignal.timeout(9000) }); const d = await r.json(); if (d.ok) renderLadder($('lboard'), d, me); } catch {}
 }
 const Q = { mobile: TOUCH || qs.get('mobile') === '1', silent: qs.get('silent') === '1', fps: 0, houses: qs.get('houses') !== '0' };
+// iOS Safari terminates WebContent tabs under GPU/decoded-image pressure instead
+// of surfacing a catchable JS exception. Keep the full desktop presentation, but
+// use a bounded render/asset profile on coarse-pointer devices. ?full=1 remains
+// available for device testing without changing the public default.
+Q.lowMemory = Q.mobile && qs.get('full') !== '1';
+setLowMemoryAssets(Q.lowMemory);
 const $ = (id) => document.getElementById(id);
 const canvas = $('gl');
 
 // ---------- renderer ----------
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', alpha: false, stencil: false });
-function dpr(w, h) { return Math.min(devicePixelRatio || 1, Q.mobile ? 1.6 : 2, Math.sqrt((Q.mobile ? 3.0e6 : 4.6e6) / (w * h))); }
+function dpr(w, h) { return Math.min(devicePixelRatio || 1, Q.lowMemory ? 1 : Q.mobile ? 1.6 : 2, Math.sqrt((Q.lowMemory ? 1.2e6 : Q.mobile ? 3.0e6 : 4.6e6) / (w * h))); }
 renderer.setPixelRatio(dpr(innerWidth, innerHeight)); renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
-renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
-setAniso(Math.min(8, renderer.capabilities.getMaxAnisotropy()));
+renderer.shadowMap.enabled = !Q.lowMemory; renderer.shadowMap.type = THREE.PCFShadowMap;
+setAniso(Q.lowMemory ? 1 : Math.min(8, renderer.capabilities.getMaxAnisotropy()));
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1d2738);
@@ -65,7 +71,7 @@ const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.06, 4
 scene.add(camera);
 
 // lights: cool dusk key from the sky, warm afterglow rim, cool hemisphere, then the street lamps
-const key = new THREE.DirectionalLight(0xa8bce8, 2.6); key.position.set(-30, 60, 25); key.castShadow = true;
+const key = new THREE.DirectionalLight(0xa8bce8, 2.6); key.position.set(-30, 60, 25); key.castShadow = !Q.lowMemory;
 const SHADOW = Q.mobile ? 1536 : 2048; key.shadow.mapSize.set(SHADOW, SHADOW);
 Object.assign(key.shadow.camera, { left: -34, right: 34, top: 34, bottom: -34, near: 1, far: 160 }); key.shadow.camera.updateProjectionMatrix();
 key.shadow.normalBias = 0.05; key.shadow.bias = -0.00015; key.shadow.radius = 1.5;
@@ -81,12 +87,16 @@ function snapShadow(p) {
 }
 
 // ---------- post ----------
-const rt = new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.HalfFloatType, samples: Q.mobile ? 2 : 4 });
-const composer = new EffectComposer(renderer, rt);
-composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), Q.mobile ? 0.28 : 0.34, 0.65, 0.88); composer.addPass(bloom);
-const grade = new ShaderPass({
-  uniforms: { tDiffuse: { value: null }, time: { value: 0 }, hurt: { value: 0 }, aspect: { value: 1 } },
+const gradeUniforms = { tDiffuse: { value: null }, time: { value: 0 }, hurt: { value: 0 }, aspect: { value: 1 } };
+let composer = null, bloom = null;
+let grade = { uniforms: gradeUniforms };
+if (!Q.lowMemory) {
+  const rt = new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.HalfFloatType, samples: Q.mobile ? 2 : 4 });
+  composer = new EffectComposer(renderer, rt);
+  composer.addPass(new RenderPass(scene, camera));
+  bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), Q.mobile ? 0.28 : 0.34, 0.65, 0.88); composer.addPass(bloom);
+  grade = new ShaderPass({
+  uniforms: gradeUniforms,
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
   fragmentShader: `uniform sampler2D tDiffuse; uniform float time, hurt, aspect; varying vec2 vUv;
     float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
@@ -100,10 +110,11 @@ const grade = new ShaderPass({
       c = mix(c, vec3(lum * 1.4, lum * 0.25, lum * 0.2) + c * 0.25, clamp(hurt, 0.0, 1.0) * 0.7 * smoothstep(0.1, 0.9, r2 + 0.3));
       gl_FragColor = vec4(c, 1.0);
     }`,
-});
-composer.addPass(grade); composer.addPass(new OutputPass());
+  });
+  composer.addPass(grade); composer.addPass(new OutputPass());
+}
 function resize() {
-  const w = innerWidth, h = innerHeight; renderer.setPixelRatio(dpr(w, h)); renderer.setSize(w, h); composer.setSize(w, h); bloom.setSize(w / 2, h / 2);
+  const w = innerWidth, h = innerHeight; renderer.setPixelRatio(dpr(w, h)); renderer.setSize(w, h); composer?.setSize(w, h); bloom?.setSize(w / 2, h / 2);
   camera.aspect = w / h; camera.updateProjectionMatrix(); grade.uniforms.aspect.value = w / h;
   // portrait phones: keep a sane horizontal field of view instead of a tunnel
   weapon.baseFov = w < h ? THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(33)) / (w / h))), 72, 98) : 72;
@@ -119,7 +130,7 @@ const fx = new FX(scene);
 const weapon = new Weapon(scene, camera, player, fx);
 // the arsenal: AK (also the bots' third-person gun), MAC-10, MP5, M700 sniper, plus the RPG-7 launcher
 const guns = { ak: weapon, mac10: new Weapon(scene, camera, player, fx, GUN_SPECS.mac10), mp5: new Weapon(scene, camera, player, fx, GUN_SPECS.mp5), m700: new Weapon(scene, camera, player, fx, GUN_SPECS.m700) };
-const ORDER = ['ak', 'mac10', 'mp5', 'm700', 'rpg'];
+const ORDER = Q.lowMemory ? ['ak'] : ['ak', 'mac10', 'mp5', 'm700', 'rpg'];
 const curGun = () => guns[arsenal.cur] || null;
 const launcher = new Launcher(scene, camera, player, fx);
 const arsenal = { cur: 'ak', switchT: 0 };
@@ -228,18 +239,22 @@ async function boot() {
   const skyName = SKIES[qs.get('sky')] ? qs.get('sky') : 'rooftop_night';
   const SKY = { name: skyName, ...SKIES[skyName] };
   if (qs.get('skyi')) SKY.bg = +qs.get('skyi'); if (qs.get('skyr')) SKY.rot = +qs.get('skyr'); if (qs.get('envi')) SKY.env = +qs.get('envi'); if (qs.get('fog')) SKY.fog = parseInt(qs.get('fog'), 16);
-  const hdr = await loadHDR(`assets/ph/hdri/${SKY.name}_2k.hdr`);
-  hdr.mapping = THREE.EquirectangularReflectionMapping;
-  if (SKY.clamp && hdr.image?.data) { // clamp baked lamps/sun so they neither flare in the backdrop nor dot the reflections
-    const d = hdr.image.data, half = d instanceof Uint16Array;
-    for (let i = 0; i < d.length; i++) { if ((i & 3) === 3) continue; const v = half ? THREE.DataUtils.fromHalfFloat(d[i]) : d[i]; if (v > SKY.clamp) d[i] = half ? THREE.DataUtils.toHalfFloat(SKY.clamp) : SKY.clamp; }
-    hdr.needsUpdate = true;
-  }
   scene.fog.color.setHex(SKY.fog); scene.fog.near = SKY.fogNear; scene.fog.far = SKY.fogFar;
   key.color.setHex(SKY.key[0]); key.intensity = SKY.key[1]; hemi.color.setHex(SKY.hemi[0]); hemi.groundColor.setHex(SKY.hemi[1]); hemi.intensity = SKY.hemi[2]; rim.color.setHex(SKY.rim[0]); rim.intensity = SKY.rim[1];
-  const pm = new THREE.PMREMGenerator(renderer); pm.compileEquirectangularShader();
-  scene.environment = pm.fromEquirectangular(hdr).texture; scene.environmentIntensity = SKY.env; scene.environmentRotation = new THREE.Euler(0, SKY.rot, 0);
-  scene.background = hdr; scene.backgroundIntensity = SKY.bg; scene.backgroundBlurriness = 0; scene.backgroundRotation = new THREE.Euler(0, SKY.rot, 0);
+  if (!Q.lowMemory) {
+    const hdr = await loadHDR(`assets/ph/hdri/${SKY.name}_2k.hdr`);
+    hdr.mapping = THREE.EquirectangularReflectionMapping;
+    if (SKY.clamp && hdr.image?.data) { // clamp baked lamps/sun so they neither flare in the backdrop nor dot the reflections
+      const d = hdr.image.data, half = d instanceof Uint16Array;
+      for (let i = 0; i < d.length; i++) { if ((i & 3) === 3) continue; const v = half ? THREE.DataUtils.fromHalfFloat(d[i]) : d[i]; if (v > SKY.clamp) d[i] = half ? THREE.DataUtils.toHalfFloat(SKY.clamp) : SKY.clamp; }
+      hdr.needsUpdate = true;
+    }
+    const pm = new THREE.PMREMGenerator(renderer); pm.compileEquirectangularShader();
+    scene.environment = pm.fromEquirectangular(hdr).texture; scene.environmentIntensity = SKY.env; scene.environmentRotation = new THREE.Euler(0, SKY.rot, 0);
+    scene.background = hdr; scene.backgroundIntensity = SKY.bg; scene.backgroundBlurriness = 0; scene.backgroundRotation = new THREE.Euler(0, SKY.rot, 0);
+  } else {
+    scene.background = new THREE.Color(SKY.fog);
+  }
   window.__sky = SKY;
   pmsg.textContent = 'Building the block…';
   await buildWorld(scene, Q, (f) => { loadedFrac = f; pbar.style.width = Math.round(f * 100) + '%'; });
@@ -265,9 +280,10 @@ async function boot() {
   // brick dust thrown off a broken wall (photographic puffs, tinted brick-brown, lit low for the night scene)
   destruction.onBlast = (p, n) => { for (let i = 0; i < Math.min(12, 4 + (n >> 3)); i++) fx.billow('puff', p.clone().add(new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 1.5, (Math.random() - 0.5) * 3)), new THREE.Vector3((Math.random() - 0.5) * 4, 0.4 + Math.random() * 1.6, (Math.random() - 0.5) * 4), 2.2 + Math.random() * 1.6, 0.9, 4 + Math.random() * 2, { op: 0.75, tint: [0.085, 0.05, 0.035], drag: 1.8, rise: 0.15 }); };
   pmsg.textContent = 'Loading the AK…';
-  await Promise.all(Object.values(guns).map((g) => g.load())); await launcher.load();
+  if (Q.lowMemory) await weapon.load();
+  else { await Promise.all(Object.values(guns).map((g) => g.load())); await launcher.load(); }
   pmsg.textContent = 'Calling the homies…';
-  await loadCharacters(weapon.template3p);
+  await loadCharacters(weapon.template3p, Q.lowMemory ? ['blue_zip', 'navy'] : undefined);
   localAvatar = new Character(scene, 'navy', ghostMat);
   localAvatar.obj.visible = false; localAvatar.gun.visible = false;
   for (const g of Object.values(guns)) {
@@ -292,7 +308,7 @@ async function boot() {
   const warm = [fx.tracers[0].m, fx.flashes[0].s, fx.parts[0].s, fx.decals[0], ...launcher.pool.map((p) => p.obj)];
   for (const o of warm) o.visible = true; fx.parts[0].s.material = fx.boomMat; fx.parts[1].s.material = fx.bloodMat; fx.parts[1].s.visible = true; fx.parts[2].s.material = fx.sparkMat; fx.parts[2].s.visible = true;
   fx.cam = camera; fx.warm(true);
-  renderer.compile(scene, camera); composer.render();
+  renderer.compile(scene, camera); if (composer) composer.render(); else renderer.render(scene, camera);
   fx.warm(false);
   for (const o of warm) o.visible = false; fx.parts[1].s.visible = false; fx.parts[2].s.visible = false; fx.parts[0].s.material = fx.parts[1].s.material = fx.parts[2].s.material = fx.dustMat;
   pbar.style.width = '100%'; pmsg.textContent = Q.mobile ? 'City ready · left thumb moves · right thumb aims' : 'City ready';
@@ -379,7 +395,7 @@ function loop(now) {
     }
     hud.labels(camera, labelItems); hud.minimap(player, dots, snitch);
   }
-  composer.render();
+  if (composer) composer.render(); else renderer.render(scene, camera);
 }
 boot().catch((e) => { console.error(e); pmsg.textContent = 'Could not start: ' + e.message; });
 // expose for QA

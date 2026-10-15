@@ -411,6 +411,10 @@ export async function buildWorld(scene, Q, progress = () => {}) {
   progress(0.78);
 
   // ---------- vegetation ----------
+  // The detailed vegetation GLBs are the largest world models (about 19 MB
+  // compressed and considerably more once decoded). Omit them from the bounded
+  // mobile profile; buildings, roads, props, collisions, and exploration remain.
+  if (!Q.lowMemory) {
   const trees = {};
   for (const n of ['island_tree_01', 'tree_small_02', 'jacaranda_tree']) trees[n] = await prop(n);
   const treeSpots = [['island_tree_01', -7.4, -26, 1.0], ['tree_small_02', 7.4, -34, 1.1], ['island_tree_01', -7.4, 2, 0.9], ['island_tree_01', 7.4, 14, 0.95], ['tree_small_02', -7.4, 30, 1.0], ['tree_small_02', 7.4, 38, 0.95],
@@ -443,6 +447,7 @@ export async function buildWorld(scene, Q, progress = () => {}) {
   const shrubItems = [[], []];
   for (const l of lots) if (rnd() < 0.55) shrubItems[Math.floor(rnd() * 2)].push({ x: l.side * rr(12, 13.4), z: l.zc + rr(-2.6, 2.6) * (l.side < 0 ? -1 : 1) * 0.5 - l.side * 0, r: rnd() * 6.28, s: rr(0.8, 1.3) });
   shrubs.forEach((s, i) => { if (shrubItems[i].length) instanced(scene, firstMesh(s), shrubItems[i], { cast: !Q.mobile }); });
+  }
   progress(0.9);
 
   // ---------- map boundary ----------

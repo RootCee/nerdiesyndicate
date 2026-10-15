@@ -13,8 +13,7 @@ const CLIP_MAP = { Idle_Gun: 'idle', Idle_Gun_Shoot: 'idle', Run: 'run', Run_Sho
 
 const lib = { models: {}, clips: {}, gun: null, ready: false };
 
-export async function loadCharacters(gunTemplate) {
-  const names = [...ROSTER.blue, ...ROSTER.red];
+export async function loadCharacters(gunTemplate, names = [...ROSTER.blue, ...ROSTER.red]) {
   const glbs = await Promise.all(names.map((n) => loadGLB(`assets/chars/${n}.glb`).catch(() => null)));
   names.forEach((n, i) => { if (glbs[i]) lib.models[n] = glbs[i]; });
   // clips: take them from whichever model carries them (blue_zip was exported with all of them)

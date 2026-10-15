@@ -1,4 +1,5 @@
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
 const sourceRoot = process.argv[2] ? path.resolve(process.argv[2]) : null;
@@ -138,6 +139,12 @@ await copyThreeAddonGraph();
 await rewriteJavaScriptDirectory(path.join(outputRoot, 'src'));
 await rewriteJavaScriptDirectory(path.join(outputRoot, 'vendor', 'three', 'jsm'));
 await applyMobileAudioUnlock();
+// Keep the website-only iOS memory safeguards reproducible without modifying
+// the independent Mafia Wars source repository.
+execFileSync('git', ['apply', '--ignore-whitespace', '--whitespace=nowarn', path.join(projectRoot, 'scripts', 'mafia-wars-mobile-memory.patch')], {
+  cwd: projectRoot,
+  stdio: 'pipe',
+});
 const avbdWorldPath = path.join(outputRoot, 'vendor', 'three-avbd', 'lib', 'world.js');
 await writeFile(
   avbdWorldPath,
