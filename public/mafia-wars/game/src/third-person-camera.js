@@ -1,6 +1,6 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { raycastWorld } from './world.js';
-import { collisionDistance, dampAngle, dampFactor, dampValue } from './camera-math.js';
+import { clampCameraHeight, collisionDistance, dampAngle, dampFactor, dampValue } from './camera-math.js';
 
 const TARGET = new THREE.Vector3();
 const VIEW = new THREE.Vector3();
@@ -66,8 +66,15 @@ export class ThirdPersonCamera {
       this.currentDistance = dampValue(this.currentDistance, clearDistance, collisionSpeed, dt);
     }
     DESIRED.copy(TARGET).addScaledVector(SEGMENT.normalize(), this.currentDistance);
+    // Looking upward naturally places an orbit camera below its target. The city
+    // ground is visual geometry (not a raycast collider), so constrain the
+    // camera to the player's current walking floor without changing the orbit.
+    DESIRED.y = clampCameraHeight(DESIRED.y, player.pos.y);
     if (snap || !this.initialized) this.currentPosition.copy(DESIRED);
     else this.currentPosition.lerp(DESIRED, dampFactor(this.smoothing, dt));
+    // Also clamp the smoothed position so a prior below-floor frame cannot ease
+    // upward through visible terrain on slower mobile frame rates.
+    this.currentPosition.y = clampCameraHeight(this.currentPosition.y, player.pos.y);
     camera.position.copy(this.currentPosition);
     LOOK_AT.copy(TARGET).addScaledVector(VIEW, 6).addScaledVector(RIGHT, this.shoulder * 0.25);
     camera.up.set(0, 1, 0);

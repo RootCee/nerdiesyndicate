@@ -344,7 +344,7 @@ function loop(now) {
     if (input.ab) { if (isCombatMode(MATCH.mode)) useAbility(input.ab); input.ab = 0; }
     player.update(dt, MATCH.over ? { moveX: 0, moveY: 0 } : input, look, time, !thirdCamera.enabled);
     if (city && MATCH.mode === GAME_MODES.FREE_ROAM) {
-      const apartmentState = city.apartment.update(player, input);
+      const apartmentState = city.apartment.update(player, input, time);
       hud.prompt(apartmentState.prompt, apartmentState.active);
       if (apartmentState.transitioned) {
         setCameraMode(true);

@@ -72,3 +72,7 @@ export function insideInteractionRange(playerPosition, target, radius = 2.4) {
   const dz = playerPosition.z - target.z;
   return dx * dx + dy * dy + dz * dz <= radius * radius;
 }
+
+export function interactionCooldownReady(now, readyAt) {
+  return Number.isFinite(now) && Number.isFinite(readyAt) && now >= readyAt;
+}

@@ -2,11 +2,12 @@ import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { groundAt, resolve, MAP } from './world.js';
 
 const FWD = new THREE.Vector3(), RIGHT = new THREE.Vector3(), WISH = new THREE.Vector3();
+export const PLAYER_COLLISION_RADIUS = 0.48;
 export class Player {
   constructor(camera) {
     this.camera = camera; this.pos = new THREE.Vector3(0, 0, 40); this.vel = new THREE.Vector3();
     this.yaw = Math.PI; this.pitch = 0; this.kick = 0; this.kickYaw = 0; this.hp = 100; this.maxHp = 100; this.dead = false; this.onGround = true;
-    this.crouchT = 0; this.radius = 0.36; this.height = 1.8; this.eye = 1.62; this.bob = 0; this.bobAmp = 0; this.sens = 0.0022; this.team = 'blue'; this.name = 'You';
+    this.crouchT = 0; this.radius = PLAYER_COLLISION_RADIUS; this.height = 1.8; this.eye = 1.62; this.bob = 0; this.bobAmp = 0; this.sens = 0.0022; this.team = 'blue'; this.name = 'You';
     this.kills = 0; this.deaths = 0; this.lastHit = -10; this.regenAt = 0; this.stepT = 0; this.speedMul = 1; this.fovAds = 0;
     camera.rotation.order = 'YXZ';
   }

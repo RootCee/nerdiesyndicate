@@ -1,5 +1,7 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
-import { insideInteractionRange } from './city-layout.js';
+import { insideInteractionRange, interactionCooldownReady } from './city-layout.js';
+
+const TRANSITION_COOLDOWN = 0.65;
 
 const makeMaterial = (color, options = {}) => new THREE.MeshStandardMaterial({ color, roughness: options.roughness ?? 0.82, metalness: options.metalness ?? 0 });
 
@@ -21,6 +23,7 @@ export class HybridApartmentSystem {
     this.mobile = mobile;
     this.active = false;
     this.prompt = '';
+    this.transitionReadyAt = 0;
     this.exterior = new THREE.Group(); this.exterior.name = `apartment-exterior-${site.id}`;
     this.interior = new THREE.Group(); this.interior.name = `apartment-interior-${site.id}`; this.interior.visible = false;
     scene.add(this.interior);
@@ -29,9 +32,9 @@ export class HybridApartmentSystem {
     const frontX = site.x - site.width / 2;
     const interiorFrontX = site.x - 13 / 2;
     this.entry = new THREE.Vector3(frontX - 1.4, 0, site.z);
-    this.insideSpawn = new THREE.Vector3(interiorFrontX + 1, site.interiorY, site.z);
-    this.exit = new THREE.Vector3(interiorFrontX + 0.6, site.interiorY, site.z);
-    this.outsideSpawn = new THREE.Vector3(frontX - 2.1, 0, site.z);
+    this.insideSpawn = new THREE.Vector3(interiorFrontX + 1.2, site.interiorY, site.z);
+    this.exit = new THREE.Vector3(interiorFrontX + 0.8, site.interiorY, site.z);
+    this.outsideSpawn = new THREE.Vector3(frontX - 1.2, 0, site.z);
   }
 
   buildExterior() {
@@ -92,22 +95,30 @@ export class HybridApartmentSystem {
     wallCollider(this.addCollider, frontX, y + 2.45 + (h - 2.45) / 2, cz, t, h - 2.45, door, { interior: s.id });
     wallCollider(this.addCollider, cx + 0.4, y + h / 2, cz - 3.3, t, h, 3.4, { interior: s.id });
     wallCollider(this.addCollider, cx + 0.4, y + h / 2, cz + 3.3, t, h, 3.4, { interior: s.id });
+    // Furniture uses inexpensive AABBs so the visible avatar cannot walk
+    // through it. These live at the elevated interior floor and therefore do
+    // not affect the exterior neighborhood.
+    wallCollider(this.addCollider, cx + 3.9, y + 0.35, cz - 3.9, 3.1, 0.7, 1.15, { interior: s.id, furniture: 'counter' });
+    wallCollider(this.addCollider, cx + 5.4, y + 0.9, cz - 4.25, 1.2, 1.8, 0.75, { interior: s.id, furniture: 'fridge' });
+    wallCollider(this.addCollider, cx + 3.4, y + 0.325, cz + 2.7, 3.4, 0.65, 1.8, { interior: s.id, furniture: 'sofa' });
+    wallCollider(this.addCollider, cx - 2.4, y + 0.225, cz - 2.25, 2.8, 0.45, 4.2, { interior: s.id, furniture: 'bed' });
   }
 
-  update(player, input) {
+  update(player, input, now = 0) {
     const wantsInteract = !!input.interact;
     input.interact = false;
     const target = this.active ? this.exit : this.entry;
     const near = insideInteractionRange(player.pos, target, this.active ? 2.7 : 2.8);
     const action = this.mobile ? 'TAP ENTER' : '[E]';
     this.prompt = near ? (this.active ? `EXIT NORTH COURT · ${action}` : `ENTER NORTH COURT · ${action}`) : '';
-    if (!near || !wantsInteract) return { active: this.active, transitioned: false, prompt: this.prompt };
+    const cooldownReady = interactionCooldownReady(now, this.transitionReadyAt);
+    if (!near || !wantsInteract || !cooldownReady) return { active: this.active, transitioned: false, prompt: this.prompt, cooldownReady };
     this.active = !this.active;
     this.interior.visible = this.active;
     player.pos.copy(this.active ? this.insideSpawn : this.outsideSpawn);
     player.vel.set(0, 0, 0); player.onGround = true;
-    player.yaw = this.active ? -Math.PI / 2 : Math.PI / 2; player.pitch = 0;
+    this.transitionReadyAt = now + TRANSITION_COOLDOWN;
     this.prompt = '';
-    return { active: this.active, transitioned: true, prompt: '', name: this.site.name };
+    return { active: this.active, transitioned: true, prompt: '', name: this.site.name, cooldownReady: true };
   }
 }
