@@ -70,7 +70,8 @@ export const colliders = [];   // {minX,maxX,minY,maxY,minZ,maxZ,step,fence}
 export const mapRects = [];    // minimap: {x,z,w,h,type}
 export const lamps = [];       // {x,y,z, warm}
 export const windowsLit = [];
-function solid(minX, minZ, maxX, maxZ, minY, maxY, extra = {}) { const c = { minX, maxX, minY, maxY, minZ, maxZ, ...extra }; colliders.push(c); return c; }
+export function addCollider(minX, minZ, maxX, maxZ, minY, maxY, extra = {}) { const c = { minX, maxX, minY, maxY, minZ, maxZ, ...extra }; colliders.push(c); return c; }
+const solid = addCollider;
 export const houseDescs = [];   // destructible houses (see destruction.js addHouse)
 let curWindows = null;
 
@@ -242,6 +243,7 @@ function wire(scene, a, b, mat, sag = 0.9) {
 // ---------- main build ----------
 export async function buildWorld(scene, Q, progress = () => {}) {
   seed = 1337;
+  colliders.length = 0; mapRects.length = 0; lamps.length = 0; windowsLit.length = 0; houseDescs.length = 0;
   const materials = {
     siding: weather(pbr('white_planks_clean', { vertexColors: true, normalScale: 0.8 }), 0.07),
     siding2: weather(pbr('weathered_plank_siding', { vertexColors: true, color: 0xd8d0c4, normalScale: 0.9 }), 0.05),
@@ -272,7 +274,7 @@ export async function buildWorld(scene, Q, progress = () => {}) {
     }
   }
   // backdrop rows beyond the cross streets (not reachable)
-  for (let i = 0; i < 9; i++) for (const s of [-1, 1]) {
+  if (!Q.cityExpansion) for (let i = 0; i < 9; i++) for (const s of [-1, 1]) {
     const x = -36 + i * 9 + rr(-0.5, 0.5);
     buildHouse(b, mat(x, 0, s * 60, s < 0 ? Math.PI / 2 : -Math.PI / 2), { floors: 2, brick: rnd() < 0.4, tint: pick(TINTS), ridgeX: rnd() < 0.6, porch: true, chimney: rnd() < 0.5, collide: false, litChance: 0.3 });
   }
@@ -380,8 +382,10 @@ export async function buildWorld(scene, Q, progress = () => {}) {
   placeClone(scene, P.fire_hydrant, 5.6, 0, -20, 0.3, 1, true); placeClone(scene, P.fire_hydrant, -5.6, 0, 18, 2.1, 1, true);
   for (const z of [-30, -6, 14, 34]) placeClone(scene, P.water_manhole_cover, rr(-2.5, 2.5), 0.03, z, rnd() * 6);
   // road blocked at the ends by barriers (map edge)
-  for (const s of [-1, 1]) for (const x of [-3, 0, 3]) placeClone(scene, P.concrete_road_barrier, x, 0, s * 45.5, Math.PI / 2, 1, true);
-  for (const s of [-1, 1]) for (const x of [-ALLEY_X, ALLEY_X]) placeClone(scene, P.concrete_road_barrier, x, 0, s * 45.5, Math.PI / 2, 1, true);
+  if (!Q.cityExpansion) {
+    for (const s of [-1, 1]) for (const x of [-3, 0, 3]) placeClone(scene, P.concrete_road_barrier, x, 0, s * 45.5, Math.PI / 2, 1, true);
+    for (const s of [-1, 1]) for (const x of [-ALLEY_X, ALLEY_X]) placeClone(scene, P.concrete_road_barrier, x, 0, s * 45.5, Math.PI / 2, 1, true);
+  }
   // cars on the street
   const carSpots = [[-3.2, -34], [3.2, -16], [-3.2, 4], [3.2, 26], [-ALLEY_X - 0.3, 20], [ALLEY_X + 0.3, -8]];
   for (const [x, z] of carSpots) placeClone(scene, P.covered_car, x, 0, z, Math.PI / 2 + rr(-0.05, 0.05) + (rnd() < 0.5 ? Math.PI : 0), 1, true);
@@ -411,9 +415,6 @@ export async function buildWorld(scene, Q, progress = () => {}) {
   progress(0.78);
 
   // ---------- vegetation ----------
-  // The detailed vegetation GLBs are the largest world models (about 19 MB
-  // compressed and considerably more once decoded). Omit them from the bounded
-  // mobile profile; buildings, roads, props, collisions, and exploration remain.
   if (!Q.lowMemory) {
   const trees = {};
   for (const n of ['island_tree_01', 'tree_small_02', 'jacaranda_tree']) trees[n] = await prop(n);
@@ -451,8 +452,10 @@ export async function buildWorld(scene, Q, progress = () => {}) {
   progress(0.9);
 
   // ---------- map boundary ----------
-  solid(MAP.minX - 2, MAP.minZ - 2, MAP.minX, MAP.maxZ + 2, 0, 6); solid(MAP.maxX, MAP.minZ - 2, MAP.maxX + 2, MAP.maxZ + 2, 0, 6);
-  solid(MAP.minX - 2, MAP.minZ - 2, MAP.maxX + 2, MAP.minZ, 0, 6); solid(MAP.minX - 2, MAP.maxZ, MAP.maxX + 2, MAP.maxZ + 2, 0, 6);
+  if (!Q.cityExpansion) {
+    solid(MAP.minX - 2, MAP.minZ - 2, MAP.minX, MAP.maxZ + 2, 0, 6); solid(MAP.maxX, MAP.minZ - 2, MAP.maxX + 2, MAP.maxZ + 2, 0, 6);
+    solid(MAP.minX - 2, MAP.minZ - 2, MAP.maxX + 2, MAP.minZ, 0, 6); solid(MAP.minX - 2, MAP.maxZ, MAP.maxX + 2, MAP.maxZ + 2, 0, 6);
+  }
   // backdrop house row blockers
   return { kit, materials, lots };
 }

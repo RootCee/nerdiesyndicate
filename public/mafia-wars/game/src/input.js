@@ -1,7 +1,7 @@
 // Keyboard + mouse (pointer lock) on desktop, twin-stick touch on phones.
 export const TOUCH = matchMedia('(pointer: coarse)').matches && 'ontouchstart' in window;
 export const keys = {};
-export const input = { yaw: 0, pitch: 0, mx: 0, my: 0, fire: false, ads: false, jump: false, reload: false, sprint: false, crouch: false, ab: 0, locked: false, moveX: 0, moveY: 0, swap: '' };
+export const input = { yaw: 0, pitch: 0, mx: 0, my: 0, fire: false, ads: false, jump: false, reload: false, interact: false, sprint: false, crouch: false, ab: 0, locked: false, moveX: 0, moveY: 0, swap: '' };
 let canvas, onFirst = null;
 function tryPointerLock() {
   try {
@@ -11,7 +11,7 @@ function tryPointerLock() {
 }
 export function initInput(c, firstGesture) {
   canvas = c; onFirst = firstGesture;
-  addEventListener('keydown', (e) => { if (e.target && e.target.tagName === 'INPUT') return; keys[e.code] = true; if (e.code === 'KeyR') input.reload = true; if (e.code === 'Space') { input.jump = true; e.preventDefault(); } if (/^Digit[456]$/.test(e.code)) input.ab = +e.code.slice(5); if (e.code === 'Digit1') input.swap = 'ak'; if (e.code === 'Digit2') input.swap = 'rpg'; if (e.code === 'Digit3') input.swap = 'mac10'; if (e.code === 'Digit7') input.swap = 'mp5'; if (e.code === 'Digit8') input.swap = 'm700'; if (e.code === 'KeyQ') input.swap = 'next'; if (e.code === 'KeyC') input.crouch = !input.crouch; });
+  addEventListener('keydown', (e) => { if (e.target && e.target.tagName === 'INPUT') return; keys[e.code] = true; if (e.code === 'KeyR') input.reload = true; if (e.code === 'KeyE' && !e.repeat) input.interact = true; if (e.code === 'Space') { input.jump = true; e.preventDefault(); } if (/^Digit[456]$/.test(e.code)) input.ab = +e.code.slice(5); if (e.code === 'Digit1') input.swap = 'ak'; if (e.code === 'Digit2') input.swap = 'rpg'; if (e.code === 'Digit3') input.swap = 'mac10'; if (e.code === 'Digit7') input.swap = 'mp5'; if (e.code === 'Digit8') input.swap = 'm700'; if (e.code === 'KeyQ') input.swap = 'next'; if (e.code === 'KeyC') input.crouch = !input.crouch; });
   addEventListener('keyup', (e) => { keys[e.code] = false; });
   let wheelT = 0; addEventListener('wheel', (e) => { const now = performance.now(); if (now - wheelT < 160 || !input.locked) return; wheelT = now; input.swap = e.deltaY > 0 ? 'next' : 'prev'; }, { passive: true });
   canvas.addEventListener('mousedown', (e) => { onFirst?.(); if (!TOUCH && !input.locked) { tryPointerLock(); return; } if (e.button === 0) input.fire = true; if (e.button === 2) input.ads = true; });
@@ -33,7 +33,7 @@ export function poll() {
 }
 function initTouch() {
   document.getElementById('touch').classList.add('on');
-  const hint = document.getElementById('hint'); if (hint) hint.innerHTML = '<b>TAP SWAP TO CYCLE GUNS</b> · AK-47 → MAC-10 → MP5 → M700 → RPG-7<br>Left thumb: move stick · right thumb: look · hold FIRE · tap AIM to toggle · 4 5 6 abilities';
+  const hint = document.getElementById('hint'); if (hint) hint.innerHTML = '<b>FREE ROAM</b> · left thumb moves · right thumb looks<br>Tap ENTER at marked doors · JUMP and AIM are on the right';
   const stick = { id: null, x0: 0, y0: 0 }, look = { id: null, x: 0, y: 0 };
   const sEl = document.getElementById('stick'), knob = document.getElementById('knob');
   canvas.addEventListener('touchstart', (e) => {
@@ -60,5 +60,6 @@ function initTouch() {
   btn('tJump', () => { input.jump = true; });
   btn('tReload', () => { input.reload = true; });
   btn('tSwap', () => { input.swap = 'next'; });
+  btn('tInteract', () => { input.interact = true; });
   for (const n of [4, 5, 6]) { const el = document.getElementById('ab' + n); el.addEventListener('touchstart', (e) => { input.ab = n; e.preventDefault(); }, { passive: false }); }
 }

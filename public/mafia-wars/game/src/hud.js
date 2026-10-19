@@ -3,17 +3,17 @@ import { mapRects, MAP } from './world.js';
 const $ = (s) => document.querySelector(s);
 const el = {};
 export function initHud() {
-  for (const id of ['fps', 'map', 'state', 'sRed', 'sBlue', 'timer', 'feed', 'callout', 'kill', 'pts', 'hit', 'hurt', 'labels', 'mag', 'res', 'kills', 'ab4', 'ab5', 'ab6', 'hud', 'wname']) el[id] = document.getElementById(id);
+  for (const id of ['fps', 'map', 'state', 'sRed', 'sBlue', 'timer', 'feed', 'callout', 'kill', 'pts', 'hit', 'hurt', 'labels', 'mag', 'res', 'kills', 'ab4', 'ab5', 'ab6', 'hud', 'wname', 'interactPrompt', 'tInteract']) el[id] = document.getElementById(id);
   el.map2d = el.map.getContext('2d');
   // bake the block map once: 4 px per metre on a 100x100 m canvas
-  const S = 4, W = 110, H = 110; const off = document.createElement('canvas'); off.width = W * S; off.height = H * S; const g = off.getContext('2d');
+  const W = MAP.maxX - MAP.minX, H = MAP.maxZ - MAP.minZ, S = Math.min(4, 512 / Math.max(W, H)); const off = document.createElement('canvas'); off.width = Math.ceil(W * S); off.height = Math.ceil(H * S); const g = off.getContext('2d');
   g.fillStyle = '#39482c'; g.fillRect(0, 0, off.width, off.height);
-  const col = { road: '#2a2f38', alley: '#35383d', walk: '#737a80', house: '#d8d2c5', garage: '#b3ada2', fence: '#8a9a88', tree: '#2c5a2e', pole: '#9a9a9a' };
-  const order = ['road', 'alley', 'walk', 'fence', 'tree', 'garage', 'house', 'pole'];
+  const col = { road: '#2a2f38', alley: '#35383d', walk: '#737a80', house: '#d8d2c5', apartment: '#b88a4a', garage: '#b3ada2', fence: '#8a9a88', tree: '#2c5a2e', pole: '#9a9a9a' };
+  const order = ['road', 'alley', 'walk', 'fence', 'tree', 'garage', 'house', 'apartment', 'pole'];
   for (const t of order) for (const r of mapRects) if (r.type === t) {
     g.fillStyle = col[t];
-    if (t === 'tree') { g.beginPath(); g.arc((r.x + r.w / 2 + W / 2) * S, (r.z + r.h / 2 + H / 2) * S, r.w / 2 * S, 0, 6.3); g.fill(); }
-    else { g.fillRect((r.x + W / 2) * S, (r.z + H / 2) * S, Math.max(1, r.w * S), Math.max(1, r.h * S)); if (t === 'house') { g.strokeStyle = '#8c8578'; g.lineWidth = 1; g.strokeRect((r.x + W / 2) * S, (r.z + H / 2) * S, r.w * S, r.h * S); } }
+    if (t === 'tree') { g.beginPath(); g.arc((r.x + r.w / 2 - MAP.minX) * S, (r.z + r.h / 2 - MAP.minZ) * S, r.w / 2 * S, 0, 6.3); g.fill(); }
+    else { g.fillRect((r.x - MAP.minX) * S, (r.z - MAP.minZ) * S, Math.max(1, r.w * S), Math.max(1, r.h * S)); if (t === 'house' || t === 'apartment') { g.strokeStyle = '#8c8578'; g.lineWidth = 1; g.strokeRect((r.x - MAP.minX) * S, (r.z - MAP.minZ) * S, r.w * S, r.h * S); } }
   }
   el.off = off; el.S = S; el.W = W; el.H = H;
   el.hud.classList.add('on');
@@ -30,6 +30,11 @@ export const hud = {
   callout(text, sub = '', icon = '') {
     el.callout.querySelector('.t').textContent = text; el.callout.querySelector('small').textContent = sub; el.callout.querySelector('.ico').innerHTML = icon;
     el.callout.classList.add('on'); clearTimeout(el.calloutT); el.calloutT = setTimeout(() => el.callout.classList.remove('on'), 2600);
+  },
+  prompt(text = '', interior = false) {
+    if (!el.interactPrompt) return;
+    el.interactPrompt.textContent = text; el.interactPrompt.classList.toggle('on', !!text); el.interactPrompt.classList.toggle('interior', interior);
+    if (el.tInteract) el.tInteract.classList.toggle('on', !!text);
   },
   killText(t) { el.kill.textContent = t; el.kill.classList.add('on'); clearTimeout(el.killT); el.killT = setTimeout(() => el.kill.classList.remove('on'), 1800); },
   points(t = '+100') { el.pts.textContent = t; el.pts.classList.remove('on'); void el.pts.offsetWidth; el.pts.classList.add('on'); },
@@ -54,11 +59,11 @@ export const hud = {
     g.save(); g.beginPath(); g.arc(R, R, R, 0, 6.3); g.clip();
     g.translate(R, R); g.rotate(player.yaw);
     const scale = 2.1; // zoom (canvas px per map px)
-    g.scale(scale, scale); g.translate(-(player.pos.x + el.W / 2) * S, -(player.pos.z + el.H / 2) * S);
+    g.scale(scale, scale); g.translate(-(player.pos.x - MAP.minX) * S, -(player.pos.z - MAP.minZ) * S);
     g.drawImage(el.off, 0, 0);
     for (const d of dots) {
       if (d.team === 'red' && !snitch && !d.spotted) continue;
-      g.fillStyle = d.team === 'red' ? '#ff3b4a' : '#4aa8ff'; g.beginPath(); g.arc((d.pos.x + el.W / 2) * S, (d.pos.z + el.H / 2) * S, 2.6, 0, 6.3); g.fill();
+      g.fillStyle = d.team === 'red' ? '#ff3b4a' : '#4aa8ff'; g.beginPath(); g.arc((d.pos.x - MAP.minX) * S, (d.pos.z - MAP.minZ) * S, 2.6, 0, 6.3); g.fill();
     }
     g.restore();
     // player arrow (always pointing up)

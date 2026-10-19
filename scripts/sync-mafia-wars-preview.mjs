@@ -10,7 +10,7 @@ if (!sourceRoot) {
   throw new Error('Usage: node scripts/sync-mafia-wars-preview.mjs /absolute/path/to/game/source');
 }
 
-const expectedCommit = 'ee131160f2ab21a9409f37fb01ecdbb6339c2d92';
+const expectedCommit = '150adceec7799b0235ec649dc6ba2ac0cf9e9148';
 const runtimeFiles = ['index.html', 'version.txt'];
 const characterFiles = ['blue_zip.glb', 'navy.glb', 'red_hoodie.glb', 'red_jersey.glb'];
 const fontFiles = ['BarlowCondensed-Medium.ttf', 'BarlowCondensed-SemiBold.ttf', 'PermanentMarker-Regular.ttf'];
@@ -71,21 +71,36 @@ async function rewriteJavaScriptDirectory(directory) {
 async function applyMobileAudioUnlock() {
   const audioPath = path.join(outputRoot, 'src', 'audio.js');
   const audioSource = await readFile(audioPath, 'utf8');
-  const audioPatched = audioSource.replace(
-    /  if \(ctx\) \{ if \(ctx\.state === 'suspended'\) ctx\.resume\(\); return; \}\r?\n  ctx = new \(window\.AudioContext \|\| window\.webkitAudioContext\)\(\);/,
-    "  if (ctx) { if (ctx.state === 'suspended') ctx.resume().catch(() => {}); return; }\n  const AudioContextClass = window.AudioContext || window.webkitAudioContext;\n  if (!AudioContextClass) return;\n  ctx = new AudioContextClass();\n  if (ctx.state === 'suspended') ctx.resume().catch(() => {});"
-  );
-  if (audioPatched === audioSource) throw new Error('Expected the Mafia Wars audio unlock block');
-  await writeFile(audioPath, audioPatched);
+  if (!audioSource.includes('const AudioContextClass = window.AudioContext || window.webkitAudioContext;')) {
+    const audioPatched = audioSource.replace(
+      /  if \(ctx\) \{ if \(ctx\.state === 'suspended'\) ctx\.resume\(\); return; \}\r?\n  ctx = new \(window\.AudioContext \|\| window\.webkitAudioContext\)\(\);/,
+      "  if (ctx) { if (ctx.state === 'suspended') ctx.resume().catch(() => {}); return; }\n  const AudioContextClass = window.AudioContext || window.webkitAudioContext;\n  if (!AudioContextClass) return;\n  ctx = new AudioContextClass();\n  if (ctx.state === 'suspended') ctx.resume().catch(() => {});"
+    );
+    if (audioPatched === audioSource) throw new Error('Expected a supported Mafia Wars audio unlock block');
+    await writeFile(audioPath, audioPatched);
+  }
 
   const mainPath = path.join(outputRoot, 'src', 'main.js');
   const mainSource = await readFile(mainPath, 'utf8');
-  const mainPatched = mainSource.replace(
-    "  $('go').addEventListener('click', () => { startGame(selectedMode); });",
-    "  // Mobile browsers require audio to be unlocked during the earliest user\n  // gesture; waiting until click can leave Safari's AudioContext suspended.\n  $('go').addEventListener('pointerdown', unlockAudio, { passive: true });\n  $('go').addEventListener('click', () => { startGame(selectedMode); });"
+  if (!mainSource.includes("$('go').addEventListener('pointerdown', unlockAudio")) {
+    const mainPatched = mainSource.replace(
+      "  $('go').addEventListener('click', () => { startGame(selectedMode); });",
+      "  // Mobile browsers require audio to be unlocked during the earliest user\n  // gesture; waiting until click can leave Safari's AudioContext suspended.\n  $('go').addEventListener('pointerdown', unlockAudio, { passive: true });\n  $('go').addEventListener('click', () => { startGame(selectedMode); });"
+    );
+    if (mainPatched === mainSource) throw new Error('Expected the Mafia Wars start button listener');
+    await writeFile(mainPath, mainPatched);
+  }
+}
+
+async function ensureMobileMemoryProfile() {
+  const [main, assets, world] = await Promise.all(
+    ['main.js', 'assets.js', 'world.js'].map((file) => readFile(path.join(outputRoot, 'src', file), 'utf8')),
   );
-  if (mainPatched === mainSource) throw new Error('Expected the Mafia Wars start button listener');
-  await writeFile(mainPath, mainPatched);
+  if (main.includes('Q.lowMemory') && assets.includes('setLowMemoryAssets') && world.includes('if (!Q.lowMemory)')) return;
+  execFileSync('git', ['apply', '--ignore-whitespace', '--whitespace=nowarn', path.join(projectRoot, 'scripts', 'mafia-wars-mobile-memory.patch')], {
+    cwd: projectRoot,
+    stdio: 'pipe',
+  });
 }
 
 function resolveAddonImport(importer, specifier) {
@@ -122,6 +137,10 @@ async function copyThreeAddonGraph() {
 }
 
 await stat(path.join(sourceRoot, 'index.html'));
+const actualCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: sourceRoot, encoding: 'utf8' }).trim();
+if (actualCommit !== expectedCommit) {
+  throw new Error(`Expected Mafia Wars source ${expectedCommit}, received ${actualCommit}`);
+}
 await rm(outputRoot, { recursive: true, force: true });
 
 for (const file of runtimeFiles) await copyFile(file);
@@ -139,12 +158,9 @@ await copyThreeAddonGraph();
 await rewriteJavaScriptDirectory(path.join(outputRoot, 'src'));
 await rewriteJavaScriptDirectory(path.join(outputRoot, 'vendor', 'three', 'jsm'));
 await applyMobileAudioUnlock();
-// Keep the website-only iOS memory safeguards reproducible without modifying
-// the independent Mafia Wars source repository.
-execFileSync('git', ['apply', '--ignore-whitespace', '--whitespace=nowarn', path.join(projectRoot, 'scripts', 'mafia-wars-mobile-memory.patch')], {
-  cwd: projectRoot,
-  stdio: 'pipe',
-});
+// Milestone 4 carries the proven iOS safeguards in source. The legacy patch
+// remains as a fallback so older approved sources cannot silently lose them.
+await ensureMobileMemoryProfile();
 const avbdWorldPath = path.join(outputRoot, 'vendor', 'three-avbd', 'lib', 'world.js');
 await writeFile(
   avbdWorldPath,
