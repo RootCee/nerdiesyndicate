@@ -3,15 +3,15 @@ import { ceilingIntersection, insideInteractionRange, interactionCooldownReady, 
 
 const TRANSITION_COOLDOWN = 0.65;
 
-const makeMaterial = (color, options = {}) => new THREE.MeshStandardMaterial({ color, roughness: options.roughness ?? 0.82, metalness: options.metalness ?? 0 });
+export const makeMaterial = (color, options = {}) => new THREE.MeshStandardMaterial({ color, roughness: options.roughness ?? 0.82, metalness: options.metalness ?? 0 });
 
-function box(parent, material, size, position, name = '') {
+export function box(parent, material, size, position, name = '') {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material);
   mesh.position.set(...position); mesh.castShadow = true; mesh.receiveShadow = true; mesh.name = name;
   parent.add(mesh); return mesh;
 }
 
-function wallCollider(addCollider, x, y, z, sx, sy, sz, extra = {}) {
+export function wallCollider(addCollider, x, y, z, sx, sy, sz, extra = {}) {
   return addCollider(x - sx / 2, z - sz / 2, x + sx / 2, z + sz / 2, y - sy / 2, y + sy / 2, extra);
 }
 

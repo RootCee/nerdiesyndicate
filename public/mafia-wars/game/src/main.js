@@ -144,7 +144,7 @@ let combatAssetsReady = !Q.lowMemory, combatAssetsLoading = false;
 const ab = { 4: { need: 3, have: 0, name: 'SNITCH', sub: 'PRESS [4]' }, 5: { need: 5, have: 0, name: 'HOMIES', sub: 'PRESS [5]' }, 6: { need: 4, have: 0, name: 'SUICIDE BOMBER', sub: 'PRESS [6]' } };
 let snitchUntil = 0, killStreak = 0, streakT = 0, time = 0, hurtK = 0, respawnAt = 0;
 const ghostMat = new THREE.MeshBasicMaterial({ color: 0xff3040, transparent: true, opacity: 0.4, depthTest: false, depthWrite: false, toneMapped: false });
-function setApartmentRenderLayer(active) {
+function setInteriorRenderLayer(active) {
   const layer = active ? 1 : 0;
   camera.layers.set(layer);
   localAvatar?.obj?.traverse((object) => object.layers.set(layer));
@@ -331,7 +331,7 @@ async function boot() {
   await loadCharacters(weapon.template3p, Q.lowMemory ? ['blue_zip', 'navy'] : undefined);
   localAvatar = new Character(scene, 'navy', ghostMat);
   localAvatar.obj.visible = false; localAvatar.gun.visible = false;
-  setApartmentRenderLayer(false);
+  setInteriorRenderLayer(false);
   for (const g of Object.values(guns)) {
     g.rayTargets = (o, d, maxT) => rayVsBots(o, d, maxT, bots.filter((b) => b.team === 'red' || b.kind === 'bomber'));
     g.onHit = (bot, dmg, point, dir) => { hud.hit(false); sfx.hit(); if (bot.damage(dmg, player, time, point, dir)) onDeath(bot, player); };
@@ -408,23 +408,30 @@ function loop(now) {
     player.update(dt, MATCH.over || combatLobbyOpen ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
     if (city && MATCH.mode === GAME_MODES.FREE_ROAM) {
       const apartmentState = city.apartment.update(player, input, time);
-      const venueState = apartmentState.active || apartmentState.transitioned
+      const houseState = apartmentState.active || apartmentState.transitioned
+        ? { active: false, transitioned: false, prompt: '' }
+        : city.house.update(player, input, time);
+      const interiorActive = apartmentState.active || houseState.active;
+      const venueState = interiorActive || apartmentState.transitioned || houseState.transitioned
         ? { prompt: '', requestedLobby: false }
         : city.combatVenue.update(player, !!input.interact, time, combatLobbyOpen);
       if (venueState.requestedLobby) setCombatLobby(true);
-      const prompt = apartmentState.prompt || venueState.prompt;
-      hud.prompt(prompt, apartmentState.active, venueState.prompt ? 'ENTER COMBAT' : '');
+      const prompt = apartmentState.prompt || houseState.prompt || venueState.prompt;
+      const mobileLabel = venueState.prompt ? 'ENTER COMBAT' : houseState.prompt ? (houseState.active ? 'EXIT HOUSE' : 'ENTER HOUSE') : '';
+      hud.prompt(prompt, interiorActive, mobileLabel);
       input.interact = false;
-      if (apartmentState.transitioned) {
-        setApartmentRenderLayer(apartmentState.active);
+      const transition = apartmentState.transitioned ? { type: 'apartment', state: apartmentState } : houseState.transitioned ? { type: 'house', state: houseState } : null;
+      if (transition) {
+        setInteriorRenderLayer(transition.state.active);
         setCameraMode(true);
-        console.log('apartment transition:', apartmentState.active ? 'inside' : 'outside');
-        hud.callout(apartmentState.active ? 'NORTH COURT APARTMENTS' : 'BACK ON THE BLOCK', apartmentState.active ? 'APARTMENT INTERIOR PROTOTYPE' : 'EXPLORE THE CITY');
+        console.log(`${transition.type} transition:`, transition.state.active ? 'inside' : 'outside');
+        hud.callout(transition.state.active ? transition.state.name.toUpperCase() : 'BACK ON THE BLOCK', transition.state.active ? (transition.type === 'house' ? 'PRIVATE HOUSE INTERIOR' : 'APARTMENT INTERIOR PROTOTYPE') : 'EXPLORE THE CITY');
       }
       city.update(player);
     } else { hud.prompt(''); input.interact = false; }
     thirdCamera.update(dt);
     city?.apartment?.updateCameraVisibility(camera, player, dt);
+    city?.house?.updateCameraVisibility(camera, player, dt);
     if (localAvatar) {
       const show = thirdCamera.enabled && !player.dead;
       if (show) localAvatar.play(player.sprinting ? 'Run' : player.planar > 0.25 ? 'Walk' : 'Idle_Gun', 0.12);

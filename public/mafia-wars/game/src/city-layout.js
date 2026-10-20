@@ -29,6 +29,19 @@ export const COMBAT_VENUE_SITE = Object.freeze({
   height: 10.5,
 });
 
+export const ENTERABLE_HOUSE_SITE = Object.freeze({
+  id: 'east-73',
+  name: '73 East Market House',
+  districtId: 'east-residential-north',
+  x: 112,
+  z: 73,
+  width: 11,
+  depth: 8.5,
+  height: 6.2,
+  interiorY: 55,
+  facing: 'west',
+});
+
 const BUILDING_TINTS = [0x8d654c, 0x6d7884, 0x75604e, 0x7f7467, 0x665f58, 0x73514a];
 
 function district(id, centerZ, seedOffset) {
@@ -56,19 +69,28 @@ function district(id, centerZ, seedOffset) {
 
 function eastResidential(id, centerZ, seedOffset) {
   const buildings = [];
-  const zSlots = centerZ > 0 ? [62, 78, 114, 132] : [-62, -78, -114, -132];
-  const xSlots = [65, 111, 127];
+  const zSlots = centerZ > 0 ? [60, 73, 86, 108, 121, 134] : [-60, -73, -86, -108, -121, -134];
+  // Two parallel rows face the existing east avenue. The cross and market
+  // streets already span the full city, so both rows connect without changing
+  // Neighborhood One's approved 280 x 296 metre boundary.
+  const rows = [
+    { x: 65, facing: 'east' },
+    { x: 112, facing: 'west' },
+  ];
   let index = 0;
-  for (const x of xSlots) for (const z of zSlots) {
+  for (const row of rows) for (const z of zSlots) {
     const hash = (seedOffset + index * 29) >>> 0;
-    const apartment = x === 127 && index % 2 === 0;
+    const enterable = id === ENTERABLE_HOUSE_SITE.districtId && row.x === ENTERABLE_HOUSE_SITE.x && z === ENTERABLE_HOUSE_SITE.z;
     buildings.push({
       id: `${id}-${index++}`,
-      kind: apartment ? 'apartment' : 'house',
-      x, z,
-      width: apartment ? 15 : 11 + (hash % 3),
-      depth: apartment ? 11 : 9 + ((hash >> 2) % 3),
-      height: apartment ? 12.5 : 6.2 + ((hash >> 4) % 2) * 1.1,
+      kind: 'house',
+      x: row.x, z,
+      width: enterable ? ENTERABLE_HOUSE_SITE.width : 10.5 + (hash % 2),
+      depth: enterable ? ENTERABLE_HOUSE_SITE.depth : 8 + ((hash >> 2) % 2) * 0.5,
+      height: enterable ? ENTERABLE_HOUSE_SITE.height : 6.2 + ((hash >> 4) % 2) * 1.1,
+      facing: row.facing,
+      driveway: true,
+      enterableHouseId: enterable ? ENTERABLE_HOUSE_SITE.id : null,
       tint: BUILDING_TINTS[hash % BUILDING_TINTS.length],
     });
   }
@@ -122,6 +144,7 @@ export function createCityPlan(profileName = 'desktop') {
       westMixedUse('west-industrial-south', -96, 2801, true),
     ],
     apartment: { ...APARTMENT_SITE },
+    enterableHouse: { ...ENTERABLE_HOUSE_SITE },
     combatVenue: { ...COMBAT_VENUE_SITE },
   };
 }
