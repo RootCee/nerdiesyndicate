@@ -1,6 +1,6 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
-import { groundAt, resolve, MAP } from './world.js';
-import { movementSubsteps, PLAYER_COLLISION_RADIUS } from './collision-math.js';
+import { groundAt, moveAndSlide, MAP } from './world.js';
+import { PLAYER_COLLISION_RADIUS } from './collision-math.js';
 export { PLAYER_COLLISION_RADIUS } from './collision-math.js';
 
 const FWD = new THREE.Vector3(), RIGHT = new THREE.Vector3(), WISH = new THREE.Vector3();
@@ -12,6 +12,7 @@ export class Player {
     this.yaw = Math.PI; this.pitch = 0; this.kick = 0; this.kickYaw = 0; this.hp = 100; this.maxHp = 100; this.dead = false; this.onGround = true;
     this.crouchT = 0; this.radius = PLAYER_COLLISION_RADIUS; this.height = 1.8; this.eye = 1.62; this.bob = 0; this.bobAmp = 0; this.sens = 0.0022; this.team = 'blue'; this.name = 'You';
     this.kills = 0; this.deaths = 0; this.lastHit = -10; this.regenAt = 0; this.stepT = 0; this.speedMul = 1; this.fovAds = 0;
+    this.collisionHit = false; this.collisionNormal = new THREE.Vector3(); this.collisionContacts = [];
     camera.rotation.order = 'YXZ';
   }
   get head() { return new THREE.Vector3(this.pos.x, this.pos.y + this.eye * (1 - this.crouchT * 0.33), this.pos.z); }
@@ -32,21 +33,22 @@ export class Player {
     if (input.jump && this.onGround && !this.dead) { this.vel.y = 4.6; this.onGround = false; }
     input.jump = false;
     this.vel.y -= 14 * dt;
-    // Integrate horizontal movement in bounded pieces. This prevents a sprint
-    // frame from crossing thin geometry and preserves the unblocked component
-    // for stable wall sliding.
+    // Resolve all contacts as one iterative set. The previous per-collider,
+    // single-pass pushout could re-enter the first collider at wall joins and
+    // car overlaps, especially during diagonal mobile sprinting.
     const h = this.height * (1 - this.crouchT * 0.35);
     const moveX = this.vel.x * dt, moveZ = this.vel.z * dt;
-    const steps = movementSubsteps(moveX, moveZ);
-    const stepX = moveX / steps, stepZ = moveZ / steps;
-    for (let i = 0; i < steps; i++) {
-      const beforeX = this.pos.x, beforeZ = this.pos.z;
-      this.pos.x += stepX; this.pos.z += stepZ;
-      if (resolve(this.pos, this.radius, this.pos.y + 0.25, this.pos.y + h, this.pos.y)) {
-        const actualX = this.pos.x - beforeX, actualZ = this.pos.z - beforeZ;
-        if (Math.abs(actualX) < Math.abs(stepX) * 0.35) this.vel.x = 0;
-        if (Math.abs(actualZ) < Math.abs(stepZ) * 0.35) this.vel.z = 0;
+    this.collisionHit = moveAndSlide(this.pos, moveX, moveZ, this.radius, this.pos.y + 0.25, this.pos.y + h, this.pos.y, this.collisionContacts);
+    this.collisionNormal.set(0, 0, 0);
+    if (this.collisionHit) {
+      // Project velocity out of every inward-facing contact normal while
+      // retaining the tangent component. This is the wall-slide behavior.
+      for (const contact of this.collisionContacts) {
+        const into = this.vel.x * contact.x + this.vel.z * contact.z;
+        if (into < 0) { this.vel.x -= contact.x * into; this.vel.z -= contact.z * into; }
+        this.collisionNormal.x += contact.x; this.collisionNormal.z += contact.z;
       }
+      if (this.collisionNormal.lengthSq() > 1e-6) this.collisionNormal.normalize();
     }
     this.pos.y += this.vel.y * dt;
     const g = groundAt(this.pos.x, this.pos.z, this.pos.y);
@@ -68,8 +70,12 @@ export class Player {
       this.camera.position.set(this.pos.x + RIGHT.x * bx, this.pos.y + eye + by, this.pos.z + RIGHT.z * bx);
       this.camera.rotation.set(this.pitch + this.kick, this.yaw + this.kickYaw, Math.sin(this.bob * 0.5) * 0.006 * this.bobAmp + (this.dead ? 0.35 : 0));
     }
-    this.planar = planar; this.sprinting = sprint;
+    this.planar = planar;
+    // Input intent alone must not drive the run animation after collision has
+    // removed all motion. This was the visible "running into the wall" failure
+    // even when the physics root was already stopped at the correct boundary.
+    this.sprinting = sprint && planar > 0.35;
   }
   damage(n, time) { if (this.dead) return false; this.hp -= n; this.lastHit = time; if (this.hp <= 0) { this.hp = 0; this.dead = true; this.deaths++; return true; } return false; }
-  respawn(p) { this.pos.copy(p); this.vel.set(0, 0, 0); this.hp = this.maxHp; this.dead = false; this.yaw = p.z > 0 ? Math.PI : 0; this.pitch = 0; }
+  respawn(p) { this.pos.copy(p); this.vel.set(0, 0, 0); this.collisionHit = false; this.collisionNormal.set(0, 0, 0); this.collisionContacts.length = 0; this.hp = this.maxHp; this.dead = false; this.yaw = p.z > 0 ? Math.PI : 0; this.pitch = 0; }
 }

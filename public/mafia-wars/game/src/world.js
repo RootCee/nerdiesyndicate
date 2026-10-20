@@ -3,7 +3,7 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { mergeGeometries } from '/mafia-wars/game/vendor/three/jsm/utils/BufferGeometryUtils.js';
 import { pbr, weather, prep, loadGLB } from './assets.js';
-import { resolveCircleAabb } from './collision-math.js';
+import { moveCircleWithSubsteps, resolveCircleAabbs } from './collision-math.js';
 
 export const MAP = { minX: -43, maxX: 43, minZ: -46, maxZ: 46 };
 // front yards that get a brick wall (destructible) instead of chain-link: 'side:lotIndex'
@@ -390,12 +390,10 @@ export async function buildWorld(scene, Q, progress = () => {}) {
   // cars on the street
   const carSpots = [[-3.2, -34], [3.2, -16], [-3.2, 4], [3.2, 26], [-ALLEY_X - 0.3, 20], [ALLEY_X + 0.3, -8]];
   for (const [x, z] of carSpots) {
-    const car = placeClone(scene, P.covered_car, x, 0, z, Math.PI / 2 + rr(-0.05, 0.05) + (rnd() < 0.5 ? Math.PI : 0), 1, true);
-    car.updateMatrixWorld(true);
-    const bounds = new THREE.Box3().setFromObject(car);
-    // Vehicle meshes were previously visual-only. A boot-time AABB keeps the
-    // collision shape matched to the actual parked-car asset on every profile.
-    if (!bounds.isEmpty()) solid(bounds.min.x, bounds.min.z, bounds.max.x, bounds.max.z, Math.max(0, bounds.min.y), bounds.max.y, { vehicle: 'covered-car' });
+    // Build exactly one collider from the fully transformed clone. Milestone
+    // 4.1B accidentally registered both the generic placeClone collider and a
+    // second vehicle collider for the same mesh, creating conflicting contacts.
+    placeClone(scene, P.covered_car, x, 0, z, Math.PI / 2 + rr(-0.05, 0.05) + (rnd() < 0.5 ? Math.PI : 0), 1, { vehicle: 'covered-car' });
   }
   for (const l of lots) {
     const s = l.side, bx = s * rr(27, 31), fx = s * rr(9.5, 12.5);
@@ -476,13 +474,27 @@ export function groundAt(x, z, feetY) {
 }
 // push a circle (x,z, radius r) with vertical span [y0,y1] out of solid colliders. Returns true if blocked.
 export function resolve(p, r, y0, y1, feetY) {
-  let hit = false;
+  const active = [];
   for (const c of colliders) {
     if (c.step && c.maxY - feetY <= 0.85) continue;          // climbable
     if (y1 <= c.minY || y0 >= c.maxY) continue;
-    hit = resolveCircleAabb(p, r, c) || hit;
+    active.push(c);
   }
-  return hit;
+  return resolveCircleAabbs(p, r, active);
+}
+
+// Move and resolve against every vertically relevant world collider as one
+// contact set. Iterative projection prevents connected wall/car AABBs from
+// re-embedding the player and exposes contact normals for stable wall sliding.
+const _moveColliders = [];
+export function moveAndSlide(p, dx, dz, r, y0, y1, feetY, contacts = null) {
+  _moveColliders.length = 0;
+  for (const c of colliders) {
+    if (c.step && c.maxY - feetY <= 0.85) continue;
+    if (y1 <= c.minY || y0 >= c.maxY) continue;
+    _moveColliders.push(c);
+  }
+  return moveCircleWithSubsteps(p, dx, dz, r, _moveColliders, undefined, contacts);
 }
 // segment vs solid (non-fence) colliders; returns t in [0,1] of first hit or 1 if clear. Also normal.
 const _n = new THREE.Vector3();

@@ -3,14 +3,16 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '..', 'public', 'mafia-wars', 'game', 'src');
-const [main, assets, audio, world, characters, cityExpansion, apartment, player, collision] = await Promise.all(
-  ['main.js', 'assets.js', 'audio.js', 'world.js', 'characters.js', 'city-expansion.js', 'apartment-system.js', 'player.js', 'collision-math.js'].map((file) => readFile(path.join(root, file), 'utf8')),
+const [main, assets, audio, world, characters, cityExpansion, apartment, player, collision, weaponCycle] = await Promise.all(
+  ['main.js', 'assets.js', 'audio.js', 'world.js', 'characters.js', 'city-expansion.js', 'apartment-system.js', 'player.js', 'collision-math.js', 'weapon-cycle.js'].map((file) => readFile(path.join(root, file), 'utf8')),
 );
 
 assert.match(main, /Q\.lowMemory = Q\.mobile && qs\.get\('full'\) !== '1'/);
 assert.match(main, /renderer\.shadowMap\.enabled = !Q\.lowMemory/);
 assert.match(main, /if \(composer\) composer\.render\(\); else renderer\.render\(scene, camera\)/);
-assert.match(main, /if \(Q\.lowMemory\) await weapon\.load\(\)/);
+assert.match(main, /if \(Q\.lowMemory\) await Promise\.all\(\[weapon\.load\(\), guns\.mac10\.load\(\)\]\)/);
+assert.match(weaponCycle, /MOBILE_WEAPON_ORDER = Object\.freeze\(\['ak', 'mac10'\]\)/);
+assert.doesNotMatch(weaponCycle, /MOBILE_WEAPON_ORDER[^\n]*mp5|MOBILE_WEAPON_ORDER[^\n]*m700/);
 assert.match(main, /Q\.lowMemory \? \['blue_zip', 'navy'\]/);
 assert.match(assets, /normalMap: LOW_MEMORY \? null/);
 assert.match(assets, /roughnessMap: LOW_MEMORY \? null/);
@@ -26,8 +28,9 @@ assert.match(apartment, /TAP ENTER/);
 assert.match(apartment, /north-court-exterior-door/);
 assert.match(apartment, /north-court-interior-exit-door/);
 assert.match(world, /vehicle: 'covered-car'/);
-assert.match(player, /movementSubsteps\(moveX, moveZ\)/);
+assert.match(player, /moveAndSlide\(this\.pos, moveX, moveZ/);
 assert.match(collision, /PLAYER_COLLISION_RADIUS = 0\.62/);
+assert.match(collision, /resolveCircleAabbs/);
 
 const { CITY_BOUNDS, createCityPlan, chunkVisible } = await import(
   new URL('../public/mafia-wars/game/src/city-layout.js', import.meta.url)

@@ -82,6 +82,7 @@ export class Character {
     for (const [k, c] of Object.entries(lib.clips)) this.actions[k] = this.mixer.clipAction(c);
     this.gun = makeGun(); scene.add(this.gun);
     this.aimPitch = 0; this.ready = 1; this.dead = false;
+    this.visualOffset = new THREE.Vector3();
     // x-ray ghost: extra skinned meshes bound to the same skeleton, drawn on top
     this.ghosts = [];
     root.traverse((o) => { if (o.isSkinnedMesh) { const g = new THREE.SkinnedMesh(o.geometry, ghostMat); g.bind(o.skeleton, o.bindMatrix); g.renderOrder = 50; g.visible = false; g.frustumCulled = false; o.parent.add(g); this.ghosts.push(g); } });
@@ -97,8 +98,10 @@ export class Character {
     this.cur = key; this.curA = a;
   }
   // pos/yaw from the bot; aiming: 1 = shouldered, 0 = low ready
-  update(dt, pos, yaw, aiming, dead) {
-    this.obj.position.copy(pos); this.obj.rotation.y = yaw; this.mixer.update(dt);
+  update(dt, pos, yaw, aiming, dead, contactOffset = null) {
+    const targetOffset = contactOffset || _t.set(0, 0, 0);
+    this.visualOffset.lerp(targetOffset, 1 - Math.exp(-18 * Math.max(0, dt)));
+    this.obj.position.copy(pos).add(this.visualOffset); this.obj.rotation.y = yaw; this.mixer.update(dt);
     this.obj.updateMatrixWorld(true);
     this.ready += ((aiming ? 1 : 0) - this.ready) * Math.min(1, dt * 8);
     this.gun.visible = !dead;

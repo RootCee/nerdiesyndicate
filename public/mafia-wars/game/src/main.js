@@ -7,7 +7,7 @@ import { UnrealBloomPass } from '/mafia-wars/game/vendor/three/jsm/postprocessin
 import { ShaderPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/OutputPass.js';
 import { manager, loadHDR, loadGLB, setAniso, setLowMemoryAssets } from './assets.js';
-import { buildWorld, lamps, windowsLit, resolve, MAP } from './world.js';
+import { buildWorld, colliders, lamps, windowsLit, resolve, MAP } from './world.js';
 import { Player } from './player.js';
 import { FX, Weapon, GUN_SPECS } from './weapon.js';
 import { Bot, buildNav, rayVsBots, freeCellNear } from './bots.js';
@@ -23,6 +23,8 @@ import { unlockAudio, sfx, setListener, setMuted, isMuted } from './audio.js';
 import { GAME_MODES, isCombatMode, normalizeGameMode } from './game-mode.js';
 import { ThirdPersonCamera } from './third-person-camera.js';
 import { buildCityExpansion } from './city-expansion.js';
+import { createCollisionDebug } from './collision-debug.js';
+import { requestedWeapon, weaponOrderForProfile } from './weapon-cycle.js';
 
 const qs = new URLSearchParams(location.search);
 // weekly ladder (worker/): gamertag + optional wallet live in localStorage; results post at match end
@@ -128,11 +130,12 @@ const fx = new FX(scene);
 const weapon = new Weapon(scene, camera, player, fx);
 // the arsenal: AK (also the bots' third-person gun), MAC-10, MP5, M700 sniper, plus the RPG-7 launcher
 const guns = { ak: weapon, mac10: new Weapon(scene, camera, player, fx, GUN_SPECS.mac10), mp5: new Weapon(scene, camera, player, fx, GUN_SPECS.mp5), m700: new Weapon(scene, camera, player, fx, GUN_SPECS.m700) };
-const ORDER = Q.lowMemory ? ['ak'] : ['ak', 'mac10', 'mp5', 'm700', 'rpg'];
+const ORDER = weaponOrderForProfile(Q.lowMemory);
 const curGun = () => guns[arsenal.cur] || null;
 const launcher = new Launcher(scene, camera, player, fx);
 const arsenal = { cur: 'ak', switchT: 0 };
-const bots = []; let trooper = null, localAvatar = null, city = null;
+const bots = []; let trooper = null, localAvatar = null, city = null, collisionDebug = null;
+const avatarContactOffset = new THREE.Vector3();
 const score = { red: 0, blue: 0 }; const MATCH = { limit: 100, time: 600, left: 600, over: false, started: false, mode: GAME_MODES.FREE_ROAM };
 const developerCombat = qs.get('dev') === 'combat';
 const selectedMode = developerCombat ? GAME_MODES.COMBAT : GAME_MODES.FREE_ROAM;
@@ -279,7 +282,7 @@ async function boot() {
   // brick dust thrown off a broken wall (photographic puffs, tinted brick-brown, lit low for the night scene)
   destruction.onBlast = (p, n) => { for (let i = 0; i < Math.min(12, 4 + (n >> 3)); i++) fx.billow('puff', p.clone().add(new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 1.5, (Math.random() - 0.5) * 3)), new THREE.Vector3((Math.random() - 0.5) * 4, 0.4 + Math.random() * 1.6, (Math.random() - 0.5) * 4), 2.2 + Math.random() * 1.6, 0.9, 4 + Math.random() * 2, { op: 0.75, tint: [0.085, 0.05, 0.035], drag: 1.8, rise: 0.15 }); };
   pmsg.textContent = 'Loading the AK…';
-  if (Q.lowMemory) await weapon.load();
+  if (Q.lowMemory) await Promise.all([weapon.load(), guns.mac10.load()]);
   else { await Promise.all(Object.values(guns).map((g) => g.load())); await launcher.load(); }
   pmsg.textContent = 'Calling the homies…';
   await loadCharacters(weapon.template3p, Q.lowMemory ? ['blue_zip', 'navy'] : undefined);
@@ -301,6 +304,10 @@ async function boot() {
     sfx.rubbleAt(p);
   };
   buildNav(); initHud();
+  if (qs.get('collisionDebug') === '1') {
+    collisionDebug = createCollisionDebug(scene, colliders, player);
+    console.log('collision debug: enabled', { colliders: colliders.length, vehicles: colliders.filter((c) => c.vehicle).length });
+  }
   if (qs.get('nohud') === '1') { document.getElementById('hud').style.display = 'none'; document.getElementById('touch').style.display = 'none'; }
   pmsg.textContent = 'Warming shaders…';
   snapShadow(player.pos);
@@ -318,7 +325,7 @@ async function boot() {
   $('go').addEventListener('click', () => { startGame(selectedMode); });
   $('gname').value = ident.name || ''; $('gwallet').value = ident.wallet || ''; for (const id of ['gname', 'gwallet']) $(id).addEventListener('change', saveIdent);
   if (location.pathname.startsWith('/play/')) $('ladder').href = '../leaderboard.html';
-  if (Q.mobile && !Q.lowMemory) pmsg.textContent += ' · SWAP cycles weapons';
+  if (Q.mobile) pmsg.textContent += ' · SWAP cycles AK / MAC-10';
   if (qs.get('auto') === '1') startGame(selectedMode);
   requestAnimationFrame(loop);
 }
@@ -354,15 +361,22 @@ function loop(now) {
       city.update(player);
     } else hud.prompt('');
     thirdCamera.update(dt);
+    city?.apartment?.updateCameraVisibility(camera, player, dt);
     if (localAvatar) {
       const show = thirdCamera.enabled && !player.dead;
       if (show) localAvatar.play(player.sprinting ? 'Run' : player.planar > 0.25 ? 'Walk' : 'Idle_Gun', 0.12);
-      localAvatar.aimPitch = player.pitch; localAvatar.update(dt, player.pos, player.yaw + Math.PI, !!input.ads, player.dead);
+      // The physics root now remains outside solids; add a small visual-only
+      // contact clearance so the run clip's leaning torso/stride does not draw
+      // through the surface. This does not alter doorway or physics dimensions.
+      avatarContactOffset.set(0, 0, 0);
+      if (player.collisionHit && player.planar > 0.25) avatarContactOffset.copy(player.collisionNormal).multiplyScalar(0.14);
+      localAvatar.aimPitch = player.pitch; localAvatar.update(dt, player.pos, player.yaw + Math.PI, !!input.ads, player.dead, avatarContactOffset);
       localAvatar.obj.visible = show; localAvatar.gun.visible = show;
     }
     if (player.stepped && !player.dead) sfx.step();
+    collisionDebug?.update();
     if (input.swap && !player.dead) {
-      const i0 = ORDER.indexOf(arsenal.cur); const want = input.swap === 'next' || input.swap === 'toggle' ? ORDER[(i0 + 1) % ORDER.length] : input.swap === 'prev' ? ORDER[(i0 + ORDER.length - 1) % ORDER.length] : input.swap;
+      const want = requestedWeapon(arsenal.cur, input.swap, ORDER);
       if (ORDER.includes(want) && want !== arsenal.cur) {
         arsenal.cur = want; for (const k in guns) guns[k].holstered = k !== want;
         const g = guns[want]; hud.callout(want === 'rpg' ? 'RPG-7' : g.name, want === 'rpg' ? `${launcher.loaded + launcher.reserve} ROCKETS` : `${g.mag + g.reserve} ROUNDS`);
@@ -407,4 +421,4 @@ function loop(now) {
 }
 boot().catch((e) => { console.error(e); pmsg.textContent = 'Could not start: ' + e.message; });
 // expose for QA
-window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, destruction, score, MATCH, startMatch, startGame, useAbility, thirdCamera, Q, renderer, input, THREE, fx, get city() { return city; }, get localAvatar() { return localAvatar; } };
+window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, destruction, score, MATCH, startMatch, startGame, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };

@@ -1,5 +1,5 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
-import { insideInteractionRange, interactionCooldownReady, shouldTransitionApartment } from './city-layout.js';
+import { ceilingObstructsView, insideInteractionRange, interactionCooldownReady, shouldTransitionApartment } from './city-layout.js';
 
 const TRANSITION_COOLDOWN = 0.65;
 
@@ -75,7 +75,8 @@ export class HybridApartmentSystem {
     const doorMat = makeMaterial(0x4a3025, { roughness: 0.7 }), brass = makeMaterial(0xc49a42, { roughness: 0.3, metalness: 0.75 });
     const w = 13, d = 10, h = 3.2, cx = s.x, cz = s.z, t = 0.22;
     box(g, floor, [w, 0.18, d], [cx, y - 0.09, cz], 'apartment-floor');
-    box(g, ceiling, [w, 0.18, d], [cx, y + h + 0.09, cz], 'apartment-ceiling');
+    this.ceiling = box(g, ceiling, [w, 0.18, d], [cx, y + h + 0.09, cz], 'apartment-ceiling');
+    this.ceilingBounds = { minX: cx - w / 2, maxX: cx + w / 2, minY: y + h, maxY: y + h + 0.18, minZ: cz - d / 2, maxZ: cz + d / 2 };
     box(g, wall, [w, h, t], [cx, y + h / 2, cz - d / 2], 'apartment-wall-south');
     box(g, wall, [w, h, t], [cx, y + h / 2, cz + d / 2], 'apartment-wall-north');
     box(g, wall, [t, h, d], [cx + w / 2, y + h / 2, cz], 'apartment-wall-east');
@@ -129,5 +130,18 @@ export class HybridApartmentSystem {
     this.transitionReadyAt = now + TRANSITION_COOLDOWN;
     this.prompt = '';
     return { active: this.active, transitioned: true, prompt: '', name: this.site.name, cooldownReady: true };
+  }
+
+  updateCameraVisibility(camera, player, dt = 1 / 60) {
+    if (!this.ceiling) return false;
+    const target = { x: player.pos.x, y: player.pos.y + 1.2, z: player.pos.z };
+    const obstructed = this.active && ceilingObstructsView(camera.position, target, this.ceilingBounds);
+    const targetOpacity = obstructed ? 0 : 1;
+    const material = this.ceiling.material;
+    material.opacity += (targetOpacity - material.opacity) * (1 - Math.exp(-18 * Math.max(0, dt)));
+    material.transparent = material.opacity < 0.999;
+    material.depthWrite = material.opacity > 0.55;
+    this.ceiling.visible = material.opacity > 0.025;
+    return obstructed;
   }
 }
