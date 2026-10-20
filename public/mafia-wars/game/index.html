@@ -124,7 +124,7 @@ canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block
 #idrow input { font: 600 13px/1 'Barlow'; letter-spacing: .14em; text-transform: uppercase; color: #fff; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.25); border-radius: 8px; padding: 11px 12px; width: min(200px, 44vw); outline: none; -webkit-user-select: text; user-select: text; }
 #idrow input:focus { border-color: var(--gold); box-shadow: 0 0 0 1px rgba(217,172,88,.2); }
 #idrow input::placeholder { color: #7f92a8; }
-#ladder { display: block; margin-top: 14px; color: #ffd166 !important; text-decoration: none; pointer-events: auto; }
+#ladder { display: block; margin-top: 14px; color: #ffd166 !important; text-decoration: none; }
 @media (max-width: 520px) { #ov { padding: 14px; } #ov .presenter { letter-spacing: .24em; } #idrow { margin-top: 13px; flex-direction: column; align-items: center; } #idrow input, #go { width: min(330px, 88vw); } }
 /* end-of-match ladder: tier cards + top 10 */
 #lboard { display: none; margin: 16px auto 0; text-align: left; }
@@ -199,9 +199,9 @@ canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block
     <div id="end"></div>
     <div class="msg" id="lmsg"></div>
     <div id="lboard"></div>
-    <div id="idrow"><input id="gname" maxlength="16" placeholder="GAMERTAG" autocomplete="off" spellcheck="false"><input id="gwallet" maxlength="44" placeholder="SOLANA WALLET (OPTIONAL)" autocomplete="off" spellcheck="false"></div>
+    <div id="idrow"><input id="gname" maxlength="16" placeholder="GAMERTAG" autocomplete="off" spellcheck="false"><input id="gwallet" maxlength="42" placeholder="BASE WALLET (COMING SOON)" autocomplete="off" spellcheck="false" disabled aria-label="Base wallet integration coming soon"></div>
     <button id="go">Enter City</button>
-    <a class="hint" id="ladder" href="site/leaderboard.html">WEEKLY LEADERBOARD →</a>
+    <div class="hint" id="ladder" role="status">LEADERBOARD · COMING SOON</div>
     <div class="hint" id="hint"><b>FREE ROAM</b> · expanded city · no timer · no forced fights<br>WASD move · mouse look · Shift sprint · Space jump · E enter buildings · V camera</div>
   </div>
 </div>

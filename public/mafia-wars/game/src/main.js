@@ -27,7 +27,7 @@ import { createCollisionDebug } from './collision-debug.js';
 import { requestedWeapon, weaponOrderForProfile } from './weapon-cycle.js';
 
 const qs = new URLSearchParams(location.search);
-// weekly ladder (worker/): gamertag + optional wallet live in localStorage; results post at match end
+// Legacy ladder support remains developer-only. Public Base identity and rankings are coming later.
 const API = qs.get('api') || '';
 const ident = (() => { try { return JSON.parse(localStorage.getItem('nerdie-city-mafia-wars.identity') || '{}') || {}; } catch { return {}; } })();
 function saveIdent() { ident.name = $('gname').value.trim(); ident.wallet = $('gwallet').value.trim(); try { localStorage.setItem('nerdie-city-mafia-wars.identity', JSON.stringify(ident)); } catch {} }
@@ -324,7 +324,6 @@ async function boot() {
   $('go').addEventListener('pointerdown', unlockAudio, { passive: true });
   $('go').addEventListener('click', () => { startGame(selectedMode); });
   $('gname').value = ident.name || ''; $('gwallet').value = ident.wallet || ''; for (const id of ['gname', 'gwallet']) $(id).addEventListener('change', saveIdent);
-  if (location.pathname.startsWith('/play/')) $('ladder').href = '../leaderboard.html';
   if (Q.mobile) pmsg.textContent += ' · SWAP cycles AK / MAC-10';
   if (qs.get('auto') === '1') startGame(selectedMode);
   requestAnimationFrame(loop);
