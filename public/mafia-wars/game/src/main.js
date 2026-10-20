@@ -7,7 +7,7 @@ import { UnrealBloomPass } from '/mafia-wars/game/vendor/three/jsm/postprocessin
 import { ShaderPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/OutputPass.js';
 import { manager, loadHDR, loadGLB, setAniso, setLowMemoryAssets } from './assets.js';
-import { buildWorld, lamps, windowsLit, resolve, MAP } from './world.js';
+import { buildWorld, colliders, lamps, windowsLit, resolve, MAP } from './world.js';
 import { Player } from './player.js';
 import { FX, Weapon, GUN_SPECS } from './weapon.js';
 import { Bot, buildNav, rayVsBots, freeCellNear } from './bots.js';
@@ -22,6 +22,9 @@ import { initInput, input, poll, requestLock, TOUCH } from './input.js';
 import { unlockAudio, sfx, setListener, setMuted, isMuted } from './audio.js';
 import { GAME_MODES, isCombatMode, normalizeGameMode } from './game-mode.js';
 import { ThirdPersonCamera } from './third-person-camera.js';
+import { buildCityExpansion } from './city-expansion.js';
+import { createCollisionDebug } from './collision-debug.js';
+import { requestedWeapon, weaponOrderForProfile } from './weapon-cycle.js';
 
 const qs = new URLSearchParams(location.search);
 // weekly ladder (worker/): gamertag + optional wallet live in localStorage; results post at match end
@@ -47,11 +50,8 @@ async function submitMatch() {
   try { const r = await fetch(API + '/api/ladder?limit=10', { signal: AbortSignal.timeout(9000) }); const d = await r.json(); if (d.ok) renderLadder($('lboard'), d, me); } catch {}
 }
 const Q = { mobile: TOUCH || qs.get('mobile') === '1', silent: qs.get('silent') === '1', fps: 0, houses: qs.get('houses') !== '0' };
-// iOS Safari terminates WebContent tabs under GPU/decoded-image pressure instead
-// of surfacing a catchable JS exception. Keep the full desktop presentation, but
-// use a bounded render/asset profile on coarse-pointer devices. ?full=1 remains
-// available for device testing without changing the public default.
-Q.lowMemory = Q.mobile && qs.get('full') !== '1';
+Q.lowMemory = Q.mobile && qs.get('full') !== '1' && qs.get('dev') !== 'combat';
+Q.cityExpansion = qs.get('city') !== '0';
 setLowMemoryAssets(Q.lowMemory);
 const $ = (id) => document.getElementById(id);
 const canvas = $('gl');
@@ -130,11 +130,12 @@ const fx = new FX(scene);
 const weapon = new Weapon(scene, camera, player, fx);
 // the arsenal: AK (also the bots' third-person gun), MAC-10, MP5, M700 sniper, plus the RPG-7 launcher
 const guns = { ak: weapon, mac10: new Weapon(scene, camera, player, fx, GUN_SPECS.mac10), mp5: new Weapon(scene, camera, player, fx, GUN_SPECS.mp5), m700: new Weapon(scene, camera, player, fx, GUN_SPECS.m700) };
-const ORDER = Q.lowMemory ? ['ak'] : ['ak', 'mac10', 'mp5', 'm700', 'rpg'];
+const ORDER = weaponOrderForProfile(Q.lowMemory);
 const curGun = () => guns[arsenal.cur] || null;
 const launcher = new Launcher(scene, camera, player, fx);
 const arsenal = { cur: 'ak', switchT: 0 };
-const bots = []; let trooper = null, localAvatar = null;
+const bots = []; let trooper = null, localAvatar = null, city = null, collisionDebug = null;
+const avatarContactOffset = new THREE.Vector3();
 const score = { red: 0, blue: 0 }; const MATCH = { limit: 100, time: 600, left: 600, over: false, started: false, mode: GAME_MODES.FREE_ROAM };
 const developerCombat = qs.get('dev') === 'combat';
 const selectedMode = developerCombat ? GAME_MODES.COMBAT : GAME_MODES.FREE_ROAM;
@@ -190,7 +191,7 @@ function configureEntryUi() {
   $('go').textContent = developerCombat ? 'Launch Developer Combat' : 'Enter City';
   $('hint').innerHTML = developerCombat
     ? '<b>DEVELOPER MODE</b> · original 6v6 · 10 minutes · first to 100'
-    : '<b>FREE ROAM</b> · third-person exploration · no timer · no forced fights<br>WASD move · mouse look · Shift sprint · Space jump · C crouch · V camera';
+    : '<b>FREE ROAM</b> · expanded city · no timer · no forced fights<br>WASD move · mouse look · Shift sprint · Space jump · E enter buildings · V camera';
 }
 function setCameraMode(third, announce = false) {
   thirdCamera.setEnabled(third, true);
@@ -200,13 +201,15 @@ function setCameraMode(third, announce = false) {
 function startGame(mode = selectedMode) {
   MATCH.mode = normalizeGameMode(mode); const combat = isCombatMode(MATCH.mode);
   score.red = score.blue = 0; MATCH.left = MATCH.time; MATCH.over = false; MATCH.started = true; for (const n in ab) ab[n].have = 0; snitchUntil = 0;
+  if (city?.apartment) { city.apartment.active = false; city.apartment.interior.visible = false; }
   for (const b of bots) ctx.remove(b); bots.length = 0;
   if (combat) {
     for (let i = 0; i < 5; i++) bots.push(new Bot(ctx, trooper, 'blue', spawnPoint('blue')));
     for (let i = 0; i < 6; i++) bots.push(new Bot(ctx, trooper, 'red', spawnPoint('red')));
   }
   player.team = combat ? 'blue' : null;
-  player.respawn(combat ? spawnPoint('blue') : freeCellNear(0, 28, 5));
+  const freeRoamSpawn = city?.apartment && qs.get('spawn') === 'apartment' ? city.apartment.outsideSpawn.clone() : freeCellNear(0, 28, 5);
+  player.respawn(combat ? spawnPoint('blue') : freeRoamSpawn);
   for (const k in guns) { const g = guns[k]; g.mag = g.magSize; g.reserve = g.spec.reserve; g.holstered = k !== 'ak'; g.reloading = 0; } launcher.loaded = 1; launcher.reserve = 3; arsenal.cur = 'ak'; player.kills = 0; player.deaths = 0;
   setCameraMode(!combat);
   document.body.classList.toggle('free-roam', !combat); $('modebadge').textContent = combat ? 'Original Combat' : 'Free Roam · V Camera';
@@ -252,12 +255,11 @@ async function boot() {
     const pm = new THREE.PMREMGenerator(renderer); pm.compileEquirectangularShader();
     scene.environment = pm.fromEquirectangular(hdr).texture; scene.environmentIntensity = SKY.env; scene.environmentRotation = new THREE.Euler(0, SKY.rot, 0);
     scene.background = hdr; scene.backgroundIntensity = SKY.bg; scene.backgroundBlurriness = 0; scene.backgroundRotation = new THREE.Euler(0, SKY.rot, 0);
-  } else {
-    scene.background = new THREE.Color(SKY.fog);
-  }
+  } else scene.background = new THREE.Color(SKY.fog);
   window.__sky = SKY;
   pmsg.textContent = 'Building the block…';
   await buildWorld(scene, Q, (f) => { loadedFrac = f; pbar.style.width = Math.round(f * 100) + '%'; });
+  if (Q.cityExpansion) { city = buildCityExpansion(scene, Q); console.log('city expansion:', JSON.stringify(city.stats())); }
   // street lamp lights (real point lights) + emissive bulbs
   const bulbGeo = new THREE.SphereGeometry(0.11, 10, 8), bulbMat = new THREE.MeshBasicMaterial({ color: 0xffd9a0, toneMapped: false });
   for (const l of lamps) {
@@ -280,7 +282,7 @@ async function boot() {
   // brick dust thrown off a broken wall (photographic puffs, tinted brick-brown, lit low for the night scene)
   destruction.onBlast = (p, n) => { for (let i = 0; i < Math.min(12, 4 + (n >> 3)); i++) fx.billow('puff', p.clone().add(new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 1.5, (Math.random() - 0.5) * 3)), new THREE.Vector3((Math.random() - 0.5) * 4, 0.4 + Math.random() * 1.6, (Math.random() - 0.5) * 4), 2.2 + Math.random() * 1.6, 0.9, 4 + Math.random() * 2, { op: 0.75, tint: [0.085, 0.05, 0.035], drag: 1.8, rise: 0.15 }); };
   pmsg.textContent = 'Loading the AK…';
-  if (Q.lowMemory) await weapon.load();
+  if (Q.lowMemory) await Promise.all([weapon.load(), guns.mac10.load()]);
   else { await Promise.all(Object.values(guns).map((g) => g.load())); await launcher.load(); }
   pmsg.textContent = 'Calling the homies…';
   await loadCharacters(weapon.template3p, Q.lowMemory ? ['blue_zip', 'navy'] : undefined);
@@ -302,6 +304,10 @@ async function boot() {
     sfx.rubbleAt(p);
   };
   buildNav(); initHud();
+  if (qs.get('collisionDebug') === '1') {
+    collisionDebug = createCollisionDebug(scene, colliders, player);
+    console.log('collision debug: enabled', { colliders: colliders.length, vehicles: colliders.filter((c) => c.vehicle).length });
+  }
   if (qs.get('nohud') === '1') { document.getElementById('hud').style.display = 'none'; document.getElementById('touch').style.display = 'none'; }
   pmsg.textContent = 'Warming shaders…';
   snapShadow(player.pos);
@@ -312,15 +318,14 @@ async function boot() {
   fx.warm(false);
   for (const o of warm) o.visible = false; fx.parts[1].s.visible = false; fx.parts[2].s.visible = false; fx.parts[0].s.material = fx.parts[1].s.material = fx.parts[2].s.material = fx.dustMat;
   pbar.style.width = '100%'; pmsg.textContent = Q.mobile ? 'City ready · left thumb moves · right thumb aims' : 'City ready';
+  console.log('performance profile:', Q.lowMemory ? 'mobile-low-memory' : 'full');
   $('go').classList.add('on');
   configureEntryUi();
-  // Mobile browsers require audio to be unlocked during the earliest user
-  // gesture; waiting until click can leave Safari's AudioContext suspended.
   $('go').addEventListener('pointerdown', unlockAudio, { passive: true });
   $('go').addEventListener('click', () => { startGame(selectedMode); });
   $('gname').value = ident.name || ''; $('gwallet').value = ident.wallet || ''; for (const id of ['gname', 'gwallet']) $(id).addEventListener('change', saveIdent);
   if (location.pathname.startsWith('/play/')) $('ladder').href = '../leaderboard.html';
-  if (Q.mobile) pmsg.textContent += ' · SWAP arms the RPG';
+  if (Q.mobile) pmsg.textContent += ' · SWAP cycles AK / MAC-10';
   if (qs.get('auto') === '1') startGame(selectedMode);
   requestAnimationFrame(loop);
 }
@@ -345,16 +350,33 @@ function loop(now) {
     if (!MATCH.over && isCombatMode(MATCH.mode)) { MATCH.left -= dt; hud.timer(MATCH.left); if (MATCH.left <= 0) endMatch(); }
     if (input.ab) { if (isCombatMode(MATCH.mode)) useAbility(input.ab); input.ab = 0; }
     player.update(dt, MATCH.over ? { moveX: 0, moveY: 0 } : input, look, time, !thirdCamera.enabled);
+    if (city && MATCH.mode === GAME_MODES.FREE_ROAM) {
+      const apartmentState = city.apartment.update(player, input, time);
+      hud.prompt(apartmentState.prompt, apartmentState.active);
+      if (apartmentState.transitioned) {
+        setCameraMode(true);
+        console.log('apartment transition:', apartmentState.active ? 'inside' : 'outside');
+        hud.callout(apartmentState.active ? 'NORTH COURT APARTMENTS' : 'BACK ON THE BLOCK', apartmentState.active ? 'APARTMENT INTERIOR PROTOTYPE' : 'EXPLORE THE CITY');
+      }
+      city.update(player);
+    } else hud.prompt('');
     thirdCamera.update(dt);
+    city?.apartment?.updateCameraVisibility(camera, player, dt);
     if (localAvatar) {
       const show = thirdCamera.enabled && !player.dead;
       if (show) localAvatar.play(player.sprinting ? 'Run' : player.planar > 0.25 ? 'Walk' : 'Idle_Gun', 0.12);
-      localAvatar.aimPitch = player.pitch; localAvatar.update(dt, player.pos, player.yaw + Math.PI, !!input.ads, player.dead);
+      // The physics root now remains outside solids; add a small visual-only
+      // contact clearance so the run clip's leaning torso/stride does not draw
+      // through the surface. This does not alter doorway or physics dimensions.
+      avatarContactOffset.set(0, 0, 0);
+      if (player.collisionHit && player.planar > 0.25) avatarContactOffset.copy(player.collisionNormal).multiplyScalar(0.14);
+      localAvatar.aimPitch = player.pitch; localAvatar.update(dt, player.pos, player.yaw + Math.PI, !!input.ads, player.dead, avatarContactOffset);
       localAvatar.obj.visible = show; localAvatar.gun.visible = show;
     }
     if (player.stepped && !player.dead) sfx.step();
+    collisionDebug?.update();
     if (input.swap && !player.dead) {
-      const i0 = ORDER.indexOf(arsenal.cur); const want = input.swap === 'next' || input.swap === 'toggle' ? ORDER[(i0 + 1) % ORDER.length] : input.swap === 'prev' ? ORDER[(i0 + ORDER.length - 1) % ORDER.length] : input.swap;
+      const want = requestedWeapon(arsenal.cur, input.swap, ORDER);
       if (ORDER.includes(want) && want !== arsenal.cur) {
         arsenal.cur = want; for (const k in guns) guns[k].holstered = k !== want;
         const g = guns[want]; hud.callout(want === 'rpg' ? 'RPG-7' : g.name, want === 'rpg' ? `${launcher.loaded + launcher.reserve} ROCKETS` : `${g.mag + g.reserve} ROUNDS`);
@@ -399,4 +421,4 @@ function loop(now) {
 }
 boot().catch((e) => { console.error(e); pmsg.textContent = 'Could not start: ' + e.message; });
 // expose for QA
-window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, destruction, score, MATCH, startMatch, startGame, useAbility, thirdCamera, Q, renderer, input, THREE, fx, get localAvatar() { return localAvatar; } };
+window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, destruction, score, MATCH, startMatch, startGame, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };

@@ -10,6 +10,7 @@ const controls = [
   { keys: 'MOUSE', action: 'Look around and control the camera' },
   { keys: 'SHIFT', action: 'Run' },
   { keys: 'SPACE', action: 'Jump' },
+  { keys: 'E', action: 'Enter or exit North Court Apartments' },
   { keys: 'ESC', action: 'Release the mouse cursor' },
 ];
 

@@ -57,6 +57,9 @@ canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block
 #callout .ico { display: block; margin: 0 auto 4px; width: 26px; height: 26px; }
 #callout small { display: block; font: 500 11px/1 'Barlow'; letter-spacing: .25em; margin-top: 6px; color: #e0e7ef; }
 #callout.on { opacity: 1; }
+#interactPrompt { position: absolute; left: 50%; bottom: calc(96px + var(--sab)); transform: translateX(-50%) translateY(8px); padding: 10px 16px; border: 1px solid rgba(217,172,88,.65); border-radius: 7px; background: rgba(8,8,7,.82); color: var(--gold-bright); font: 600 12px/1 'Barlow'; letter-spacing: .16em; text-transform: uppercase; opacity: 0; transition: opacity .16s, transform .16s; pointer-events: none; white-space: nowrap; }
+#interactPrompt.on { opacity: 1; transform: translateX(-50%); }
+#interactPrompt.interior { border-color: rgba(255,255,255,.45); color: #f6f2e9; }
 #kill { font: 400 18px/1 'Marker'; color: #fff; text-shadow: 0 2px 0 #000; margin-top: 44px; opacity: 0; transition: opacity .2s; }
 #kill.on { opacity: 1; }
 #pts { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -78px); font: 400 15px/1 'Marker'; color: #fff; text-shadow: 0 2px 0 #000; opacity: 0; }
@@ -95,6 +98,8 @@ canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block
 #tReload { right: calc(118px + var(--sar)); bottom: calc(166px + var(--sab)); width: 50px; height: 50px; }
 #tFire2 { left: calc(26px + var(--sal)); bottom: calc(250px + var(--sab)); width: 60px; height: 60px; border-color: rgba(255,80,90,.6); }
 #tSwap { left: calc(96px + var(--sal)); bottom: calc(262px + var(--sab)); width: 50px; height: 50px; }
+#tInteract { right: calc(110px + var(--sar)); bottom: calc(238px + var(--sab)); width: 72px; height: 72px; border-color: rgba(217,172,88,.8); color: var(--gold-bright); opacity: 0; pointer-events: none; }
+#tInteract.on { opacity: 1; pointer-events: auto; }
 /* start / end overlays */
 #ov { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(circle at 50% 30%, rgba(87,67,31,.28), transparent 34%), radial-gradient(ellipse at 50% 45%, #1a1916 0%, #080807 68%); z-index: 5; text-align: center; padding: 20px; isolation: isolate; }
 #ov::before { content: ''; position: absolute; inset: 0; z-index: -1; opacity: .2; background: repeating-linear-gradient(115deg, transparent 0 42px, rgba(217,172,88,.08) 43px, transparent 44px 86px), linear-gradient(180deg, transparent 72%, rgba(0,0,0,.72)); mask-image: linear-gradient(to bottom, #000, transparent 70%); }
@@ -169,6 +174,7 @@ canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block
   <div id="scope"><i></i></div>
   <div id="hit"><svg viewBox="0 0 24 24"><path d="M4 4l5 5M20 4l-5 5M4 20l5-5M20 20l-5-5"/></svg></div>
   <div id="hurt"></div>
+  <div id="interactPrompt"></div>
   <div id="ammo"><div id="wname">AK-47</div><div><span class="mag" id="mag">30</span><span class="res" id="res">180</span><span class="ab" id="kills">1 ☠</span></div></div>
 </div>
 
@@ -180,6 +186,7 @@ canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block
   <div class="tb" id="tJump">JUMP</div>
   <div class="tb" id="tReload">RLD</div>
   <div class="tb" id="tSwap">SWAP</div>
+  <div class="tb" id="tInteract">ENTER</div>
 </div>
 
 <div id="ov">
@@ -195,7 +202,7 @@ canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block
     <div id="idrow"><input id="gname" maxlength="16" placeholder="GAMERTAG" autocomplete="off" spellcheck="false"><input id="gwallet" maxlength="44" placeholder="SOLANA WALLET (OPTIONAL)" autocomplete="off" spellcheck="false"></div>
     <button id="go">Enter City</button>
     <a class="hint" id="ladder" href="site/leaderboard.html">WEEKLY LEADERBOARD →</a>
-    <div class="hint" id="hint"><b>FREE ROAM</b> · third-person exploration · no timer · no forced fights<br>WASD move · mouse look · Shift sprint · Space jump · C crouch · V camera</div>
+    <div class="hint" id="hint"><b>FREE ROAM</b> · expanded city · no timer · no forced fights<br>WASD move · mouse look · Shift sprint · Space jump · E enter buildings · V camera</div>
   </div>
 </div>
 

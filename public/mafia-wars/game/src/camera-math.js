@@ -5,6 +5,15 @@ export function collisionDistance(distance, hitFraction, padding = 0.2) {
   return Math.min(distance, Math.max(0.35, distance * hit - padding));
 }
 
+export function cameraFloorHeight(feetY, clearance = 0.24) {
+  const floor = Number.isFinite(feetY) ? feetY : 0;
+  return floor + Math.max(0, clearance);
+}
+
+export function clampCameraHeight(cameraY, feetY, clearance = 0.24) {
+  return Math.max(cameraFloorHeight(feetY, clearance), Number.isFinite(cameraY) ? cameraY : cameraFloorHeight(feetY, clearance));
+}
+
 export function dampFactor(speed, dt) {
   return 1 - Math.exp(-Math.max(0, speed) * Math.max(0, dt));
 }

@@ -3,6 +3,7 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { mergeGeometries } from '/mafia-wars/game/vendor/three/jsm/utils/BufferGeometryUtils.js';
 import { pbr, weather, prep, loadGLB } from './assets.js';
+import { moveCircleWithSubsteps, resolveCircleAabbs } from './collision-math.js';
 
 export const MAP = { minX: -43, maxX: 43, minZ: -46, maxZ: 46 };
 // front yards that get a brick wall (destructible) instead of chain-link: 'side:lotIndex'
@@ -70,7 +71,8 @@ export const colliders = [];   // {minX,maxX,minY,maxY,minZ,maxZ,step,fence}
 export const mapRects = [];    // minimap: {x,z,w,h,type}
 export const lamps = [];       // {x,y,z, warm}
 export const windowsLit = [];
-function solid(minX, minZ, maxX, maxZ, minY, maxY, extra = {}) { const c = { minX, maxX, minY, maxY, minZ, maxZ, ...extra }; colliders.push(c); return c; }
+export function addCollider(minX, minZ, maxX, maxZ, minY, maxY, extra = {}) { const c = { minX, maxX, minY, maxY, minZ, maxZ, ...extra }; colliders.push(c); return c; }
+const solid = addCollider;
 export const houseDescs = [];   // destructible houses (see destruction.js addHouse)
 let curWindows = null;
 
@@ -242,6 +244,7 @@ function wire(scene, a, b, mat, sag = 0.9) {
 // ---------- main build ----------
 export async function buildWorld(scene, Q, progress = () => {}) {
   seed = 1337;
+  colliders.length = 0; mapRects.length = 0; lamps.length = 0; windowsLit.length = 0; houseDescs.length = 0;
   const materials = {
     siding: weather(pbr('white_planks_clean', { vertexColors: true, normalScale: 0.8 }), 0.07),
     siding2: weather(pbr('weathered_plank_siding', { vertexColors: true, color: 0xd8d0c4, normalScale: 0.9 }), 0.05),
@@ -272,7 +275,7 @@ export async function buildWorld(scene, Q, progress = () => {}) {
     }
   }
   // backdrop rows beyond the cross streets (not reachable)
-  for (let i = 0; i < 9; i++) for (const s of [-1, 1]) {
+  if (!Q.cityExpansion) for (let i = 0; i < 9; i++) for (const s of [-1, 1]) {
     const x = -36 + i * 9 + rr(-0.5, 0.5);
     buildHouse(b, mat(x, 0, s * 60, s < 0 ? Math.PI / 2 : -Math.PI / 2), { floors: 2, brick: rnd() < 0.4, tint: pick(TINTS), ridgeX: rnd() < 0.6, porch: true, chimney: rnd() < 0.5, collide: false, litChance: 0.3 });
   }
@@ -380,11 +383,18 @@ export async function buildWorld(scene, Q, progress = () => {}) {
   placeClone(scene, P.fire_hydrant, 5.6, 0, -20, 0.3, 1, true); placeClone(scene, P.fire_hydrant, -5.6, 0, 18, 2.1, 1, true);
   for (const z of [-30, -6, 14, 34]) placeClone(scene, P.water_manhole_cover, rr(-2.5, 2.5), 0.03, z, rnd() * 6);
   // road blocked at the ends by barriers (map edge)
-  for (const s of [-1, 1]) for (const x of [-3, 0, 3]) placeClone(scene, P.concrete_road_barrier, x, 0, s * 45.5, Math.PI / 2, 1, true);
-  for (const s of [-1, 1]) for (const x of [-ALLEY_X, ALLEY_X]) placeClone(scene, P.concrete_road_barrier, x, 0, s * 45.5, Math.PI / 2, 1, true);
+  if (!Q.cityExpansion) {
+    for (const s of [-1, 1]) for (const x of [-3, 0, 3]) placeClone(scene, P.concrete_road_barrier, x, 0, s * 45.5, Math.PI / 2, 1, true);
+    for (const s of [-1, 1]) for (const x of [-ALLEY_X, ALLEY_X]) placeClone(scene, P.concrete_road_barrier, x, 0, s * 45.5, Math.PI / 2, 1, true);
+  }
   // cars on the street
   const carSpots = [[-3.2, -34], [3.2, -16], [-3.2, 4], [3.2, 26], [-ALLEY_X - 0.3, 20], [ALLEY_X + 0.3, -8]];
-  for (const [x, z] of carSpots) placeClone(scene, P.covered_car, x, 0, z, Math.PI / 2 + rr(-0.05, 0.05) + (rnd() < 0.5 ? Math.PI : 0), 1, true);
+  for (const [x, z] of carSpots) {
+    // Build exactly one collider from the fully transformed clone. Milestone
+    // 4.1B accidentally registered both the generic placeClone collider and a
+    // second vehicle collider for the same mesh, creating conflicting contacts.
+    placeClone(scene, P.covered_car, x, 0, z, Math.PI / 2 + rr(-0.05, 0.05) + (rnd() < 0.5 ? Math.PI : 0), 1, { vehicle: 'covered-car' });
+  }
   for (const l of lots) {
     const s = l.side, bx = s * rr(27, 31), fx = s * rr(9.5, 12.5);
     // backyard clutter
@@ -411,9 +421,6 @@ export async function buildWorld(scene, Q, progress = () => {}) {
   progress(0.78);
 
   // ---------- vegetation ----------
-  // The detailed vegetation GLBs are the largest world models (about 19 MB
-  // compressed and considerably more once decoded). Omit them from the bounded
-  // mobile profile; buildings, roads, props, collisions, and exploration remain.
   if (!Q.lowMemory) {
   const trees = {};
   for (const n of ['island_tree_01', 'tree_small_02', 'jacaranda_tree']) trees[n] = await prop(n);
@@ -451,8 +458,10 @@ export async function buildWorld(scene, Q, progress = () => {}) {
   progress(0.9);
 
   // ---------- map boundary ----------
-  solid(MAP.minX - 2, MAP.minZ - 2, MAP.minX, MAP.maxZ + 2, 0, 6); solid(MAP.maxX, MAP.minZ - 2, MAP.maxX + 2, MAP.maxZ + 2, 0, 6);
-  solid(MAP.minX - 2, MAP.minZ - 2, MAP.maxX + 2, MAP.minZ, 0, 6); solid(MAP.minX - 2, MAP.maxZ, MAP.maxX + 2, MAP.maxZ + 2, 0, 6);
+  if (!Q.cityExpansion) {
+    solid(MAP.minX - 2, MAP.minZ - 2, MAP.minX, MAP.maxZ + 2, 0, 6); solid(MAP.maxX, MAP.minZ - 2, MAP.maxX + 2, MAP.maxZ + 2, 0, 6);
+    solid(MAP.minX - 2, MAP.minZ - 2, MAP.maxX + 2, MAP.minZ, 0, 6); solid(MAP.minX - 2, MAP.maxZ, MAP.maxX + 2, MAP.maxZ + 2, 0, 6);
+  }
   // backdrop house row blockers
   return { kit, materials, lots };
 }
@@ -465,21 +474,27 @@ export function groundAt(x, z, feetY) {
 }
 // push a circle (x,z, radius r) with vertical span [y0,y1] out of solid colliders. Returns true if blocked.
 export function resolve(p, r, y0, y1, feetY) {
-  let hit = false;
+  const active = [];
   for (const c of colliders) {
     if (c.step && c.maxY - feetY <= 0.85) continue;          // climbable
     if (y1 <= c.minY || y0 >= c.maxY) continue;
-    const nx = Math.max(c.minX, Math.min(p.x, c.maxX)), nz = Math.max(c.minZ, Math.min(p.z, c.maxZ));
-    const dx = p.x - nx, dz = p.z - nz, d2 = dx * dx + dz * dz;
-    if (d2 >= r * r) continue;
-    hit = true;
-    if (d2 > 1e-6) { const d = Math.sqrt(d2); p.x += dx / d * (r - d); p.z += dz / d * (r - d); }
-    else { // inside: push along smallest penetration
-      const px = Math.min(p.x - c.minX, c.maxX - p.x), pz = Math.min(p.z - c.minZ, c.maxZ - p.z);
-      if (px < pz) p.x += (p.x - c.minX < c.maxX - p.x ? -(px + r) : (px + r)); else p.z += (p.z - c.minZ < c.maxZ - p.z ? -(pz + r) : (pz + r));
-    }
+    active.push(c);
   }
-  return hit;
+  return resolveCircleAabbs(p, r, active);
+}
+
+// Move and resolve against every vertically relevant world collider as one
+// contact set. Iterative projection prevents connected wall/car AABBs from
+// re-embedding the player and exposes contact normals for stable wall sliding.
+const _moveColliders = [];
+export function moveAndSlide(p, dx, dz, r, y0, y1, feetY, contacts = null) {
+  _moveColliders.length = 0;
+  for (const c of colliders) {
+    if (c.step && c.maxY - feetY <= 0.85) continue;
+    if (y1 <= c.minY || y0 >= c.maxY) continue;
+    _moveColliders.push(c);
+  }
+  return moveCircleWithSubsteps(p, dx, dz, r, _moveColliders, undefined, contacts);
 }
 // segment vs solid (non-fence) colliders; returns t in [0,1] of first hit or 1 if clear. Also normal.
 const _n = new THREE.Vector3();
