@@ -128,6 +128,21 @@ export function buildCityExpansion(scene, Q = {}) {
 
   const city = {
     plan, chunks, apartment, combatVenue, infrastructure, mode: 'free-roam',
+    beginPrewarm() {
+      const state = chunks.map((chunk) => chunk.group.visible);
+      const culling = [];
+      for (const chunk of chunks) {
+        chunk.group.visible = true;
+        chunk.group.traverse((object) => {
+          if (!object.isMesh && !object.isSprite) return;
+          culling.push([object, object.frustumCulled]); object.frustumCulled = false;
+        });
+      }
+      return () => {
+        chunks.forEach((chunk, index) => { chunk.group.visible = state[index]; });
+        for (const [object, frustumCulled] of culling) object.frustumCulled = frustumCulled;
+      };
+    },
     setMode(mode) {
       this.mode = mode;
       if (mode === 'combat') for (const chunk of chunks) { chunk.visible = false; chunk.group.visible = false; }

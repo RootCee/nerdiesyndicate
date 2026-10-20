@@ -144,6 +144,11 @@ let combatAssetsReady = !Q.lowMemory, combatAssetsLoading = false;
 const ab = { 4: { need: 3, have: 0, name: 'SNITCH', sub: 'PRESS [4]' }, 5: { need: 5, have: 0, name: 'HOMIES', sub: 'PRESS [5]' }, 6: { need: 4, have: 0, name: 'SUICIDE BOMBER', sub: 'PRESS [6]' } };
 let snitchUntil = 0, killStreak = 0, streakT = 0, time = 0, hurtK = 0, respawnAt = 0;
 const ghostMat = new THREE.MeshBasicMaterial({ color: 0xff3040, transparent: true, opacity: 0.4, depthTest: false, depthWrite: false, toneMapped: false });
+function setApartmentRenderLayer(active) {
+  const layer = active ? 1 : 0;
+  camera.layers.set(layer);
+  localAvatar?.obj?.traverse((object) => object.layers.set(layer));
+}
 const ctx = {
   scene, fx, player, bots, ghostMat, difficulty: 1,
   enemiesOf: (team) => (team === 'red' ? [player, ...bots.filter((b) => b.team === 'blue')] : bots.filter((b) => b.team === 'red')),
@@ -326,6 +331,7 @@ async function boot() {
   await loadCharacters(weapon.template3p, Q.lowMemory ? ['blue_zip', 'navy'] : undefined);
   localAvatar = new Character(scene, 'navy', ghostMat);
   localAvatar.obj.visible = false; localAvatar.gun.visible = false;
+  setApartmentRenderLayer(false);
   for (const g of Object.values(guns)) {
     g.rayTargets = (o, d, maxT) => rayVsBots(o, d, maxT, bots.filter((b) => b.team === 'red' || b.kind === 'bomber'));
     g.onHit = (bot, dmg, point, dir) => { hud.hit(false); sfx.hit(); if (bot.damage(dmg, player, time, point, dir)) onDeath(bot, player); };
@@ -349,10 +355,18 @@ async function boot() {
   if (qs.get('nohud') === '1') { document.getElementById('hud').style.display = 'none'; document.getElementById('touch').style.display = 'none'; }
   pmsg.textContent = 'Warming shaders…';
   snapShadow(player.pos);
+  const restoreCityVisibility = !Q.lowMemory ? city?.beginPrewarm() : null;
+  const warmCulling = [];
+  if (!Q.lowMemory) scene.traverse((object) => {
+    if (!object.isMesh && !object.isSprite) return;
+    warmCulling.push([object, object.frustumCulled]); object.frustumCulled = false;
+  });
   const warm = [fx.tracers[0].m, fx.flashes[0].s, fx.parts[0].s, fx.decals[0], ...launcher.pool.map((p) => p.obj)];
   for (const o of warm) o.visible = true; fx.parts[0].s.material = fx.boomMat; fx.parts[1].s.material = fx.bloodMat; fx.parts[1].s.visible = true; fx.parts[2].s.material = fx.sparkMat; fx.parts[2].s.visible = true;
   fx.cam = camera; fx.warm(true);
   renderer.compile(scene, camera); if (composer) composer.render(); else renderer.render(scene, camera);
+  for (const [object, frustumCulled] of warmCulling) object.frustumCulled = frustumCulled;
+  restoreCityVisibility?.(); city?.update(player);
   fx.warm(false);
   for (const o of warm) o.visible = false; fx.parts[1].s.visible = false; fx.parts[2].s.visible = false; fx.parts[0].s.material = fx.parts[1].s.material = fx.parts[2].s.material = fx.dustMat;
   pbar.style.width = '100%'; pmsg.textContent = Q.mobile ? 'City ready · left thumb moves · right thumb aims' : 'City ready';
@@ -402,6 +416,7 @@ function loop(now) {
       hud.prompt(prompt, apartmentState.active, venueState.prompt ? 'ENTER COMBAT' : '');
       input.interact = false;
       if (apartmentState.transitioned) {
+        setApartmentRenderLayer(apartmentState.active);
         setCameraMode(true);
         console.log('apartment transition:', apartmentState.active ? 'inside' : 'outside');
         hud.callout(apartmentState.active ? 'NORTH COURT APARTMENTS' : 'BACK ON THE BLOCK', apartmentState.active ? 'APARTMENT INTERIOR PROTOTYPE' : 'EXPLORE THE CITY');

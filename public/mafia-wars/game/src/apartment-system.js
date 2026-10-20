@@ -1,5 +1,5 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
-import { ceilingObstructsView, insideInteractionRange, interactionCooldownReady, shouldTransitionApartment } from './city-layout.js';
+import { ceilingIntersection, insideInteractionRange, interactionCooldownReady, shouldTransitionApartment } from './city-layout.js';
 
 const TRANSITION_COOLDOWN = 0.65;
 
@@ -29,6 +29,7 @@ export class HybridApartmentSystem {
     scene.add(this.interior);
     this.buildExterior();
     this.buildInterior();
+    this.interior.traverse((object) => object.layers.set(1));
     const frontX = site.x - site.width / 2;
     const interiorFrontX = site.x - 13 / 2;
     this.entry = new THREE.Vector3(frontX - 1.4, 0, site.z);
@@ -74,8 +75,20 @@ export class HybridApartmentSystem {
     const floor = makeMaterial(0x5c4638), wall = makeMaterial(0xb6aa91), ceiling = makeMaterial(0x77736b), accent = makeMaterial(0x4e3028), metal = makeMaterial(0x3d4147, { metalness: 0.4 });
     const doorMat = makeMaterial(0x4a3025, { roughness: 0.7 }), brass = makeMaterial(0xc49a42, { roughness: 0.3, metalness: 0.75 });
     const w = 13, d = 10, h = 3.2, cx = s.x, cz = s.z, t = 0.22;
+    // A staging deck masks the exterior city while the separately loaded
+    // interior camera is using its isolated render layer.
+    this.backdrop = box(g, makeMaterial(0x25231f), [34, 0.08, 30], [cx, y - 0.17, cz], 'apartment-cutaway-backdrop');
     box(g, floor, [w, 0.18, d], [cx, y - 0.09, cz], 'apartment-floor');
-    this.ceiling = box(g, ceiling, [w, 0.18, d], [cx, y + h + 0.09, cz], 'apartment-ceiling');
+    this.ceilingPanels = [];
+    const columns = 3, rows = 2, panelW = w / columns, panelD = d / rows;
+    for (let row = 0; row < rows; row++) for (let column = 0; column < columns; column++) {
+      const px = cx - w / 2 + panelW * (column + 0.5), pz = cz - d / 2 + panelD * (row + 0.5);
+      const panel = box(g, ceiling.clone(), [panelW + 0.025, 0.18, panelD + 0.025], [px, y + h + 0.09, pz], `apartment-ceiling-panel-${column}-${row}`);
+      panel.userData.cutawayBounds = { minX: px - panelW / 2, maxX: px + panelW / 2, minZ: pz - panelD / 2, maxZ: pz + panelD / 2 };
+      this.ceilingPanels.push(panel);
+    }
+    this.ceiling = this.ceilingPanels[0];
+    this.cutawayPanel = null;
     this.ceilingBounds = { minX: cx - w / 2, maxX: cx + w / 2, minY: y + h, maxY: y + h + 0.18, minZ: cz - d / 2, maxZ: cz + d / 2 };
     box(g, wall, [w, h, t], [cx, y + h / 2, cz - d / 2], 'apartment-wall-south');
     box(g, wall, [w, h, t], [cx, y + h / 2, cz + d / 2], 'apartment-wall-north');
@@ -132,15 +145,22 @@ export class HybridApartmentSystem {
   }
 
   updateCameraVisibility(camera, player, dt = 1 / 60) {
-    if (!this.ceiling) return false;
+    if (!this.ceilingPanels?.length) return false;
     const target = { x: player.pos.x, y: player.pos.y + 1.2, z: player.pos.z };
-    const obstructed = this.active && ceilingObstructsView(camera.position, target, this.ceilingBounds);
-    const targetOpacity = obstructed ? 0 : 1;
-    const material = this.ceiling.material;
-    material.opacity += (targetOpacity - material.opacity) * (1 - Math.exp(-18 * Math.max(0, dt)));
-    material.transparent = material.opacity < 0.999;
-    material.depthWrite = material.opacity > 0.55;
-    this.ceiling.visible = material.opacity > 0.025;
-    return obstructed;
+    const intersection = this.active ? ceilingIntersection(camera.position, target, this.ceilingBounds) : null;
+    this.cutawayPanel = intersection ? this.ceilingPanels.find((panel) => {
+      const bounds = panel.userData.cutawayBounds;
+      return intersection.x >= bounds.minX && intersection.x <= bounds.maxX && intersection.z >= bounds.minZ && intersection.z <= bounds.maxZ;
+    }) || null : null;
+    const blend = 1 - Math.exp(-18 * Math.max(0, dt));
+    for (const panel of this.ceilingPanels) {
+      const targetOpacity = panel === this.cutawayPanel ? 0.06 : 1;
+      const material = panel.material;
+      material.opacity += (targetOpacity - material.opacity) * blend;
+      material.transparent = material.opacity < 0.999;
+      material.depthWrite = material.opacity > 0.55;
+      panel.visible = material.opacity > 0.1;
+    }
+    return !!this.cutawayPanel;
   }
 }

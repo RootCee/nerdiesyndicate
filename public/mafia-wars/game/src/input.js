@@ -39,7 +39,14 @@ function initTouch() {
   canvas.addEventListener('touchstart', (e) => {
     onFirst?.();
     for (const t of e.changedTouches) {
-      if (t.clientX < innerWidth * 0.42 && t.clientY > innerHeight * 0.35 && stick.id === null) { stick.id = t.identifier; stick.x0 = t.clientX; stick.y0 = t.clientY; sEl.style.left = (t.clientX - 55) + 'px'; sEl.style.top = (t.clientY - 55) + 'px'; sEl.style.display = 'block'; knob.style.transform = ''; }
+      if (t.clientX < innerWidth * 0.42 && t.clientY > innerHeight * 0.35 && stick.id === null) {
+        stick.id = t.identifier;
+        if (innerWidth > innerHeight) {
+          const safeLeft = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sal')) || 0;
+          stick.x0 = safeLeft + 82; stick.y0 = innerHeight - 78;
+        } else { stick.x0 = t.clientX; stick.y0 = t.clientY; }
+        sEl.style.left = (stick.x0 - 55) + 'px'; sEl.style.top = (stick.y0 - 55) + 'px'; sEl.style.display = 'block'; knob.style.transform = '';
+      }
       else if (look.id === null) { look.id = t.identifier; look.x = t.clientX; look.y = t.clientY; }
     }
     e.preventDefault();

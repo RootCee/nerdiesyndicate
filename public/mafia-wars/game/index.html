@@ -102,6 +102,19 @@ canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block
 #tSwap { left: calc(96px + var(--sal)); bottom: calc(262px + var(--sab)); width: 50px; height: 50px; }
 #tInteract { right: calc(110px + var(--sar)); bottom: calc(238px + var(--sab)); width: 72px; height: 72px; border-color: rgba(217,172,88,.8); color: var(--gold-bright); opacity: 0; pointer-events: none; }
 #tInteract.on { opacity: 1; pointer-events: auto; }
+@media (pointer: coarse) and (orientation: landscape) {
+  #mapwrap { width: 112px; height: 112px; }
+  #score { left: calc(12px + var(--sal)); top: calc(148px + var(--sat)); bottom: auto; }
+  #ammo { right: calc(18px + var(--sar)); bottom: auto; top: calc(92px + var(--sat)); transform: scale(.78); transform-origin: top right; }
+  #interactPrompt { bottom: calc(74px + var(--sab)); }
+  #tFire { right: calc(18px + var(--sar)); bottom: calc(18px + var(--sab)); width: 76px; height: 76px; }
+  #tAds { right: calc(108px + var(--sar)); bottom: calc(22px + var(--sab)); width: 52px; height: 52px; }
+  #tJump { right: calc(24px + var(--sar)); bottom: calc(108px + var(--sab)); width: 52px; height: 52px; }
+  #tReload { right: calc(104px + var(--sar)); bottom: calc(94px + var(--sab)); width: 46px; height: 46px; }
+  #tSwap { left: auto; right: calc(176px + var(--sar)); bottom: calc(22px + var(--sab)); width: 56px; height: 56px; }
+  #tInteract { right: calc(104px + var(--sar)); bottom: calc(156px + var(--sab)); width: 118px; height: 46px; border-radius: 23px; }
+  #tFire2 { display: none; }
+}
 /* The Underground lobby reuses the running game instead of creating another scene or render loop. */
 #combatLobby { position: fixed; inset: 0; z-index: 7; display: none; place-items: center; padding: 20px; background: rgba(3,4,5,.82); backdrop-filter: blur(8px); }
 #combatLobby.on { display: grid; }

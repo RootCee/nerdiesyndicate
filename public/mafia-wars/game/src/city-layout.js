@@ -147,21 +147,26 @@ export function shouldTransitionApartment(near, wantsInteract, cooldownReady) {
   return !!near && !!wantsInteract && !!cooldownReady;
 }
 
-// Test the camera-to-character segment against the underside of the separately
-// loaded ceiling slab. This avoids per-frame geometry raycasts or mutations.
-export function ceilingObstructsView(camera, target, bounds, nearClearance = 1.05) {
-  if (!camera || !target || !bounds || target.y >= bounds.minY) return false;
+// Intersect the camera-to-character segment with the underside of the separately
+// loaded ceiling slab. The point lets the apartment fade one cutaway panel
+// instead of making the whole roof disappear.
+export function ceilingIntersection(camera, target, bounds, nearClearance = 1.05) {
+  if (!camera || !target || !bounds || target.y >= bounds.minY) return null;
   const cameraInside = camera.x >= bounds.minX && camera.x <= bounds.maxX && camera.z >= bounds.minZ && camera.z <= bounds.maxZ;
   // A perspective camera can have its center just below the slab while the
   // near-plane/frustum is already inside it. Treat that upper indoor band as
   // obstructed rather than waiting for the center ray to cross the ceiling.
-  if (cameraInside && camera.y >= bounds.minY - Math.max(0, nearClearance)) return true;
-  if (camera.y <= bounds.minY) return false;
+  if (cameraInside && camera.y < bounds.minY && camera.y >= bounds.minY - Math.max(0, nearClearance)) return { x: camera.x, z: camera.z };
+  if (camera.y <= bounds.minY) return null;
   const dy = camera.y - target.y;
-  if (dy <= 1e-6) return false;
+  if (dy <= 1e-6) return null;
   const t = (camera.y - bounds.minY) / dy;
-  if (t < 0 || t > 1) return false;
+  if (t < 0 || t > 1) return null;
   const x = camera.x + (target.x - camera.x) * t;
   const z = camera.z + (target.z - camera.z) * t;
-  return x >= bounds.minX && x <= bounds.maxX && z >= bounds.minZ && z <= bounds.maxZ;
+  return x >= bounds.minX && x <= bounds.maxX && z >= bounds.minZ && z <= bounds.maxZ ? { x, z } : null;
+}
+
+export function ceilingObstructsView(camera, target, bounds, nearClearance = 1.05) {
+  return !!ceilingIntersection(camera, target, bounds, nearClearance);
 }
