@@ -8,12 +8,12 @@ export function initHud() {
   // bake the block map once: 4 px per metre on a 100x100 m canvas
   const W = MAP.maxX - MAP.minX, H = MAP.maxZ - MAP.minZ, S = Math.min(4, 512 / Math.max(W, H)); const off = document.createElement('canvas'); off.width = Math.ceil(W * S); off.height = Math.ceil(H * S); const g = off.getContext('2d');
   g.fillStyle = '#39482c'; g.fillRect(0, 0, off.width, off.height);
-  const col = { road: '#2a2f38', alley: '#35383d', walk: '#737a80', house: '#d8d2c5', apartment: '#b88a4a', garage: '#b3ada2', fence: '#8a9a88', tree: '#2c5a2e', pole: '#9a9a9a' };
-  const order = ['road', 'alley', 'walk', 'fence', 'tree', 'garage', 'house', 'apartment', 'pole'];
+  const col = { road: '#2a2f38', alley: '#35383d', walk: '#737a80', house: '#d8d2c5', apartment: '#b88a4a', venue: '#d9ac58', garage: '#b3ada2', fence: '#8a9a88', tree: '#2c5a2e', pole: '#9a9a9a' };
+  const order = ['road', 'alley', 'walk', 'fence', 'tree', 'garage', 'house', 'apartment', 'venue', 'pole'];
   for (const t of order) for (const r of mapRects) if (r.type === t) {
     g.fillStyle = col[t];
     if (t === 'tree') { g.beginPath(); g.arc((r.x + r.w / 2 - MAP.minX) * S, (r.z + r.h / 2 - MAP.minZ) * S, r.w / 2 * S, 0, 6.3); g.fill(); }
-    else { g.fillRect((r.x - MAP.minX) * S, (r.z - MAP.minZ) * S, Math.max(1, r.w * S), Math.max(1, r.h * S)); if (t === 'house' || t === 'apartment') { g.strokeStyle = '#8c8578'; g.lineWidth = 1; g.strokeRect((r.x - MAP.minX) * S, (r.z - MAP.minZ) * S, r.w * S, r.h * S); } }
+    else { g.fillRect((r.x - MAP.minX) * S, (r.z - MAP.minZ) * S, Math.max(1, r.w * S), Math.max(1, r.h * S)); if (t === 'house' || t === 'apartment' || t === 'venue') { g.strokeStyle = t === 'venue' ? '#ffe29a' : '#8c8578'; g.lineWidth = t === 'venue' ? 2 : 1; g.strokeRect((r.x - MAP.minX) * S, (r.z - MAP.minZ) * S, r.w * S, r.h * S); } }
   }
   el.off = off; el.S = S; el.W = W; el.H = H;
   el.hud.classList.add('on');
@@ -31,10 +31,10 @@ export const hud = {
     el.callout.querySelector('.t').textContent = text; el.callout.querySelector('small').textContent = sub; el.callout.querySelector('.ico').innerHTML = icon;
     el.callout.classList.add('on'); clearTimeout(el.calloutT); el.calloutT = setTimeout(() => el.callout.classList.remove('on'), 2600);
   },
-  prompt(text = '', interior = false) {
+  prompt(text = '', interior = false, mobileLabel = '') {
     if (!el.interactPrompt) return;
     el.interactPrompt.textContent = text; el.interactPrompt.classList.toggle('on', !!text); el.interactPrompt.classList.toggle('interior', interior);
-    if (el.tInteract) { el.tInteract.classList.toggle('on', !!text); el.tInteract.textContent = interior ? 'EXIT' : 'ENTER'; }
+    if (el.tInteract) { el.tInteract.classList.toggle('on', !!text); el.tInteract.textContent = mobileLabel || (interior ? 'EXIT' : 'ENTER'); }
   },
   killText(t) { el.kill.textContent = t; el.kill.classList.add('on'); clearTimeout(el.killT); el.killT = setTimeout(() => el.kill.classList.remove('on'), 1800); },
   points(t = '+100') { el.pts.textContent = t; el.pts.classList.remove('on'); void el.pts.offsetWidth; el.pts.classList.add('on'); },

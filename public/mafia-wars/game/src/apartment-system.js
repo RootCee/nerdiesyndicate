@@ -115,7 +115,6 @@ export class HybridApartmentSystem {
 
   update(player, input, now = 0) {
     const wantsInteract = !!input.interact;
-    input.interact = false;
     const target = this.active ? this.exit : this.entry;
     const near = insideInteractionRange(player.pos, target, this.active ? 2.7 : 2.8);
     const action = this.mobile ? (this.active ? 'TAP EXIT' : 'TAP ENTER') : (this.active ? '[E] EXIT' : '[E] ENTER');

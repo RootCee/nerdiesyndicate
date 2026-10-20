@@ -15,7 +15,7 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; background: #080807; color: var(--ink); font-family: 'Barlow', 'Segoe UI', sans-serif; overflow: hidden; overscroll-behavior: none; touch-action: none; -webkit-user-select: none; user-select: none; }
 canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
-#hud { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity .4s; }
+#hud { position: fixed; inset: 0; z-index: 2; pointer-events: none; opacity: 0; transition: opacity .4s; }
 #hud.on { opacity: 1; }
 .fps { position: absolute; left: calc(10px + var(--sal)); top: calc(6px + var(--sat)); font: 500 11px/1 'Barlow'; letter-spacing: .08em; color: #9fb3c8; }
 /* minimap */
@@ -34,6 +34,8 @@ canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block
 .free-roam #score .team, .free-roam #abil, .free-roam #feed { display: none; }
 .free-roam #score { padding: 10px 12px; border-radius: 8px; background: rgba(10,16,26,.55); }
 #modebadge { position: absolute; right: calc(16px + var(--sar)); top: calc(20px + var(--sat)); padding: 8px 12px; border: 1px solid rgba(255,255,255,.22); border-radius: 999px; background: rgba(10,16,26,.58); color: #dfe7f0; font: 600 11px/1 'Barlow'; letter-spacing: .18em; text-transform: uppercase; }
+#combatExit { position: fixed; z-index: 4; right: calc(16px + var(--sar)); top: calc(62px + var(--sat)); display: none; pointer-events: auto; border: 1px solid rgba(217,172,88,.7); border-radius: 6px; background: rgba(8,8,7,.82); color: var(--gold-bright); padding: 10px 13px; font: 600 11px/1 'Barlow'; letter-spacing: .14em; text-transform: uppercase; cursor: pointer; }
+#combatExit.on { display: block; }
 /* ammo bottom-right */
 #ammo { position: absolute; right: calc(18px + var(--sar)); bottom: calc(18px + var(--sab)); display: flex; align-items: flex-end; gap: 12px; }
 #wname { font: 600 12px/1 'Barlow'; letter-spacing: .2em; color: #c9d4e0; margin: 0 10px 6px 0; text-transform: uppercase; }
@@ -100,6 +102,15 @@ canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block
 #tSwap { left: calc(96px + var(--sal)); bottom: calc(262px + var(--sab)); width: 50px; height: 50px; }
 #tInteract { right: calc(110px + var(--sar)); bottom: calc(238px + var(--sab)); width: 72px; height: 72px; border-color: rgba(217,172,88,.8); color: var(--gold-bright); opacity: 0; pointer-events: none; }
 #tInteract.on { opacity: 1; pointer-events: auto; }
+/* The Underground lobby reuses the running game instead of creating another scene or render loop. */
+#combatLobby { position: fixed; inset: 0; z-index: 7; display: none; place-items: center; padding: 20px; background: rgba(3,4,5,.82); backdrop-filter: blur(8px); }
+#combatLobby.on { display: grid; }
+#combatLobby .panel { width: min(520px, 92vw); padding: 34px 26px 28px; text-align: center; border: 1px solid rgba(217,172,88,.6); border-radius: 10px; background: linear-gradient(160deg, rgba(42,44,47,.98), rgba(9,10,11,.98)); box-shadow: 0 24px 70px rgba(0,0,0,.65); }
+#combatLobby .eyebrow { color: var(--gold); font: 600 12px/1 'Barlow'; letter-spacing: .3em; text-transform: uppercase; }
+#combatLobby h2 { margin: 12px 0 4px; color: #fff; font: 400 clamp(36px, 9vw, 58px)/1 'Marker'; text-transform: uppercase; }
+#combatLobby p { margin: 10px auto 24px; max-width: 390px; color: #aeb7c2; font: 500 13px/1.5 'Barlow'; letter-spacing: .1em; text-transform: uppercase; }
+#combatLobby button { width: min(330px, 100%); margin: 6px auto; display: block; padding: 15px 18px; border-radius: 6px; border: 1px solid rgba(255,255,255,.24); background: rgba(255,255,255,.07); color: #fff; font: 600 15px/1 'Barlow'; letter-spacing: .2em; text-transform: uppercase; cursor: pointer; }
+#combatLobby button.primary { border-color: #ffe6ad; background: linear-gradient(135deg, var(--gold-bright), var(--gold)); color: #15120d; }
 /* start / end overlays */
 #ov { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(circle at 50% 30%, rgba(87,67,31,.28), transparent 34%), radial-gradient(ellipse at 50% 45%, #1a1916 0%, #080807 68%); z-index: 5; text-align: center; padding: 20px; isolation: isolate; }
 #ov::before { content: ''; position: absolute; inset: 0; z-index: -1; opacity: .2; background: repeating-linear-gradient(115deg, transparent 0 42px, rgba(217,172,88,.08) 43px, transparent 44px 86px), linear-gradient(180deg, transparent 72%, rgba(0,0,0,.72)); mask-image: linear-gradient(to bottom, #000, transparent 70%); }
@@ -178,6 +189,8 @@ canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block
   <div id="ammo"><div id="wname">AK-47</div><div><span class="mag" id="mag">30</span><span class="res" id="res">180</span><span class="ab" id="kills">1 ☠</span></div></div>
 </div>
 
+<button id="combatExit" type="button">Return to City · X</button>
+
 <div id="touch">
   <div id="stick"><div id="knob"></div></div>
   <div class="tb" id="tFire">FIRE</div>
@@ -187,6 +200,16 @@ canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block
   <div class="tb" id="tReload">RLD</div>
   <div class="tb" id="tSwap">SWAP</div>
   <div class="tb" id="tInteract">ENTER</div>
+</div>
+
+<div id="combatLobby" role="dialog" aria-modal="true" aria-labelledby="combatLobbyTitle">
+  <div class="panel">
+    <div class="eyebrow">AI Combat Venue</div>
+    <h2 id="combatLobbyTitle">The Underground</h2>
+    <p>Practice against 11 AI opponents and teammates. Ten-minute match. First side to 100.</p>
+    <button class="primary" id="practiceMatch" type="button">Practice Match</button>
+    <button id="backToCity" type="button">Back to City</button>
+  </div>
 </div>
 
 <div id="ov">

@@ -1,10 +1,11 @@
-// Pure, deterministic Milestone 4 city plan. Rendering code consumes this data
-// so desktop and mobile share one collision/layout topology.
-export const CITY_BOUNDS = Object.freeze({ minX: -68, maxX: 68, minZ: -148, maxZ: 148 });
+// Pure, deterministic city plan. Rendering code consumes this data so desktop
+// and mobile share one collision/layout topology while choosing different
+// visibility and detail budgets.
+export const CITY_BOUNDS = Object.freeze({ minX: -140, maxX: 140, minZ: -148, maxZ: 148 });
 
 export const CITY_PROFILES = Object.freeze({
-  desktop: Object.freeze({ key: 'desktop', activeRadius: 170, windowStride: 1, roofDetails: true }),
-  mobile: Object.freeze({ key: 'mobile', activeRadius: 88, windowStride: 2, roofDetails: false }),
+  desktop: Object.freeze({ key: 'desktop', activeRadius: 92, windowStride: 1, roofDetails: true, streetLights: true }),
+  mobile: Object.freeze({ key: 'mobile', activeRadius: 60, windowStride: 2, roofDetails: false, streetLights: false }),
 });
 
 export const APARTMENT_SITE = Object.freeze({
@@ -16,6 +17,16 @@ export const APARTMENT_SITE = Object.freeze({
   depth: 13,
   height: 15,
   interiorY: 40,
+});
+
+export const COMBAT_VENUE_SITE = Object.freeze({
+  id: 'the-underground',
+  name: 'The Underground',
+  x: -112,
+  z: -72,
+  width: 27,
+  depth: 19,
+  height: 10.5,
 });
 
 const BUILDING_TINTS = [0x8d654c, 0x6d7884, 0x75604e, 0x7f7467, 0x665f58, 0x73514a];
@@ -40,7 +51,52 @@ function district(id, centerZ, seedOffset) {
       });
     }
   }
-  return { id, center: { x: 0, z: centerZ }, buildings };
+  return { id, kind: 'legacy', center: { x: 0, z: centerZ }, radius: 48, buildings, vehicles: [] };
+}
+
+function eastResidential(id, centerZ, seedOffset) {
+  const buildings = [];
+  const zSlots = centerZ > 0 ? [62, 78, 114, 132] : [-62, -78, -114, -132];
+  const xSlots = [65, 111, 127];
+  let index = 0;
+  for (const x of xSlots) for (const z of zSlots) {
+    const hash = (seedOffset + index * 29) >>> 0;
+    const apartment = x === 127 && index % 2 === 0;
+    buildings.push({
+      id: `${id}-${index++}`,
+      kind: apartment ? 'apartment' : 'house',
+      x, z,
+      width: apartment ? 15 : 11 + (hash % 3),
+      depth: apartment ? 11 : 9 + ((hash >> 2) % 3),
+      height: apartment ? 12.5 : 6.2 + ((hash >> 4) % 2) * 1.1,
+      tint: BUILDING_TINTS[hash % BUILDING_TINTS.length],
+    });
+  }
+  const vehicles = zSlots.slice(0, 3).map((z, i) => ({ id: `${id}-car-${i}`, x: 82, z: z + (i % 2 ? 3 : -3), yaw: 0 }));
+  return { id, kind: 'residential', center: { x: 98, z: centerZ }, radius: 62, buildings, vehicles };
+}
+
+function westMixedUse(id, centerZ, seedOffset, industrial = false) {
+  const buildings = [];
+  const zSlots = centerZ > 0 ? [62, 78, 114, 132] : [-58, -88, -114, -132];
+  const xSlots = [-65, -112, -128];
+  let index = 0;
+  for (const x of xSlots) for (const z of zSlots) {
+    if (industrial && x < -100 && z > -96) continue; // reserve The Underground lot
+    const hash = (seedOffset + index * 37) >>> 0;
+    const kind = industrial && x < -100 ? 'warehouse' : x > -90 ? 'storefront' : 'mixed';
+    buildings.push({
+      id: `${id}-${index++}`,
+      kind,
+      x, z,
+      width: kind === 'warehouse' ? 19 : 13 + (hash % 4),
+      depth: kind === 'warehouse' ? 14 : 10 + ((hash >> 2) % 4),
+      height: kind === 'mixed' ? 14 + ((hash >> 4) % 3) * 2.4 : kind === 'warehouse' ? 8.5 : 8 + ((hash >> 4) % 2) * 1.8,
+      tint: BUILDING_TINTS[(hash + 2) % BUILDING_TINTS.length],
+    });
+  }
+  const vehicles = zSlots.slice(0, 3).map((z, i) => ({ id: `${id}-car-${i}`, x: -82, z: z + (i % 2 ? -3 : 3), yaw: 0 }));
+  return { id, kind: industrial ? 'industrial' : 'mixed', center: { x: -98, z: centerZ }, radius: 64, buildings, vehicles };
 }
 
 export function createCityPlan(profileName = 'desktop') {
@@ -50,13 +106,23 @@ export function createCityPlan(profileName = 'desktop') {
     profile,
     roads: [
       { id: 'main', x: 0, z: 0, width: 9, depth: 296 },
-      { id: 'north-cross', x: 0, z: 48.5, width: 136, depth: 9 },
-      { id: 'north-market', x: 0, z: 96, width: 136, depth: 9 },
-      { id: 'south-cross', x: 0, z: -48.5, width: 136, depth: 9 },
-      { id: 'south-market', x: 0, z: -96, width: 136, depth: 9 },
+      { id: 'west-avenue', x: -88, z: 0, width: 10, depth: 296 },
+      { id: 'east-avenue', x: 88, z: 0, width: 10, depth: 296 },
+      { id: 'central-cross', x: 0, z: 0, width: 280, depth: 10 },
+      { id: 'north-cross', x: 0, z: 48.5, width: 280, depth: 9 },
+      { id: 'north-market', x: 0, z: 96, width: 280, depth: 9 },
+      { id: 'south-cross', x: 0, z: -48.5, width: 280, depth: 9 },
+      { id: 'south-market', x: 0, z: -96, width: 280, depth: 9 },
     ],
-    districts: [district('north', 100, 401), district('south', -100, 809)],
+    districts: [
+      district('north', 100, 401), district('south', -100, 809),
+      eastResidential('east-residential-north', 96, 1201),
+      eastResidential('east-residential-south', -96, 1601),
+      westMixedUse('west-mixed-north', 96, 2203),
+      westMixedUse('west-industrial-south', -96, 2801, true),
+    ],
     apartment: { ...APARTMENT_SITE },
+    combatVenue: { ...COMBAT_VENUE_SITE },
   };
 }
 

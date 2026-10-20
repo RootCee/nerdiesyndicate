@@ -139,6 +139,8 @@ const avatarContactOffset = new THREE.Vector3();
 const score = { red: 0, blue: 0 }; const MATCH = { limit: 100, time: 600, left: 600, over: false, started: false, mode: GAME_MODES.FREE_ROAM };
 const developerCombat = qs.get('dev') === 'combat';
 const selectedMode = developerCombat ? GAME_MODES.COMBAT : GAME_MODES.FREE_ROAM;
+let practiceCombat = false, combatLobbyOpen = false;
+let combatAssetsReady = !Q.lowMemory, combatAssetsLoading = false;
 const ab = { 4: { need: 3, have: 0, name: 'SNITCH', sub: 'PRESS [4]' }, 5: { need: 5, have: 0, name: 'HOMIES', sub: 'PRESS [5]' }, 6: { need: 4, have: 0, name: 'SUICIDE BOMBER', sub: 'PRESS [6]' } };
 let snitchUntil = 0, killStreak = 0, streakT = 0, time = 0, hurtK = 0, respawnAt = 0;
 const ghostMat = new THREE.MeshBasicMaterial({ color: 0xff3040, transparent: true, opacity: 0.4, depthTest: false, depthWrite: false, toneMapped: false });
@@ -182,7 +184,7 @@ function useAbility(n) {
 function endMatch() {
   if (!isCombatMode(MATCH.mode)) return;
   MATCH.over = true; const win = score.blue > score.red; if (win) sfx.victory(); else sfx.defeat(); $('ov').classList.remove('off'); $('end').textContent = win ? 'VICTORY' : score.blue === score.red ? 'DRAW' : 'DEFEAT';
-  $('pmsg').textContent = `BLUE ${score.blue} · RED ${score.red} · YOU ${player.kills} KILLS / ${player.deaths} DEATHS`; $('go').textContent = 'Run it back'; $('go').classList.add('on'); $('hint').textContent = '';
+  $('pmsg').textContent = `BLUE ${score.blue} · RED ${score.red} · YOU ${player.kills} KILLS / ${player.deaths} DEATHS`; $('go').textContent = practiceCombat ? 'Return to City' : 'Run it back'; $('go').classList.add('on'); $('hint').textContent = practiceCombat ? 'AI PRACTICE COMPLETE · RETURN TO THE UNDERGROUND' : '';
   submitMatch();
   if (document.exitPointerLock) document.exitPointerLock();
 }
@@ -198,21 +200,35 @@ function setCameraMode(third, announce = false) {
   document.body.classList.toggle('third-person', thirdCamera.enabled);
   if (announce && MATCH.started) hud.callout(thirdCamera.enabled ? 'THIRD-PERSON CAMERA' : 'FIRST-PERSON CAMERA', 'PRESS [V] TO SWITCH');
 }
-function startGame(mode = selectedMode) {
+function setCombatLobby(open) {
+  combatLobbyOpen = !!open;
+  $('combatLobby').classList.toggle('on', combatLobbyOpen);
+  if (combatLobbyOpen) {
+    input.moveX = input.moveY = 0; input.fire = input.ads = input.sprint = false;
+    if (document.exitPointerLock) document.exitPointerLock();
+  } else if (MATCH.started && !MATCH.over) requestLock();
+}
+function startGame(mode = selectedMode, options = {}) {
   MATCH.mode = normalizeGameMode(mode); const combat = isCombatMode(MATCH.mode);
+  practiceCombat = combat && !!options.practice;
+  setCombatLobby(false);
   score.red = score.blue = 0; MATCH.left = MATCH.time; MATCH.over = false; MATCH.started = true; for (const n in ab) ab[n].have = 0; snitchUntil = 0;
   if (city?.apartment) { city.apartment.active = false; city.apartment.interior.visible = false; }
-  for (const b of bots) ctx.remove(b); bots.length = 0;
+  while (bots.length) ctx.remove(bots[bots.length - 1]);
   if (combat) {
     for (let i = 0; i < 5; i++) bots.push(new Bot(ctx, trooper, 'blue', spawnPoint('blue')));
     for (let i = 0; i < 6; i++) bots.push(new Bot(ctx, trooper, 'red', spawnPoint('red')));
   }
   player.team = combat ? 'blue' : null;
-  const freeRoamSpawn = city?.apartment && qs.get('spawn') === 'apartment' ? city.apartment.outsideSpawn.clone() : freeCellNear(0, 28, 5);
+  city?.setMode(combat ? 'combat' : 'free-roam');
+  const freeRoamSpawn = options.spawn?.clone?.() || (city?.apartment && qs.get('spawn') === 'apartment' ? city.apartment.outsideSpawn.clone() : freeCellNear(0, 28, 5));
   player.respawn(combat ? spawnPoint('blue') : freeRoamSpawn);
+  if (!combat && Number.isFinite(options.yaw)) player.yaw = options.yaw;
   for (const k in guns) { const g = guns[k]; g.mag = g.magSize; g.reserve = g.spec.reserve; g.holstered = k !== 'ak'; g.reloading = 0; } launcher.loaded = 1; launcher.reserve = 3; arsenal.cur = 'ak'; player.kills = 0; player.deaths = 0;
   setCameraMode(!combat);
   document.body.classList.toggle('free-roam', !combat); $('modebadge').textContent = combat ? 'Original Combat' : 'Free Roam · V Camera';
+  if (practiceCombat) $('modebadge').textContent = 'AI Practice Match';
+  $('combatExit').classList.toggle('on', practiceCombat);
   $('state').textContent = combat ? 'TIED' : 'FREE ROAM'; $('timer').textContent = combat ? '10:00' : 'NO TIME LIMIT';
   hud.score(0, 0); if (!combat) { $('state').textContent = 'FREE ROAM'; $('timer').textContent = 'NO TIME LIMIT'; }
   $('ov').classList.add('off'); $('lmsg').textContent = ''; $('lboard').classList.remove('on'); requestLock(); unlockAudio();
@@ -223,7 +239,29 @@ function startGame(mode = selectedMode) {
     else hud.callout('FREE ROAM', 'NO TIMER · NO FORCED COMBAT · PRESS [V] TO SWITCH CAMERA');
   }, 1200);
 }
+function returnToCity() {
+  const venue = city?.combatVenue;
+  startGame(GAME_MODES.FREE_ROAM, { spawn: venue?.outsideSpawn, yaw: venue?.outsideYaw });
+  if (venue) venue.transitionReadyAt = time + 0.8;
+  hud.callout('BACK IN NERDIE CITY', 'THE UNDERGROUND · WEST INDUSTRIAL DISTRICT');
+}
 const startMatch = () => startGame(GAME_MODES.COMBAT);
+async function startPracticeMatch() {
+  if (combatAssetsLoading) return;
+  const button = $('practiceMatch');
+  try {
+    if (!combatAssetsReady) {
+      combatAssetsLoading = true; button.disabled = true; button.textContent = 'Loading AI Fighters…';
+      await loadCharacters(weapon.template3p, ['red_hoodie', 'red_jersey']);
+      combatAssetsReady = true;
+    }
+    button.textContent = 'Practice Match'; button.disabled = false; combatAssetsLoading = false;
+    startGame(GAME_MODES.COMBAT, { practice: true });
+  } catch (error) {
+    combatAssetsLoading = false; button.disabled = false; button.textContent = 'Practice Match';
+    console.error('practice combat assets:', error); hud.callout('COULD NOT START PRACTICE', 'TRY AGAIN');
+  }
+}
 
 // ---------- loading ----------
 const pbar = $('pbar'), pmsg = $('pmsg');
@@ -322,7 +360,10 @@ async function boot() {
   $('go').classList.add('on');
   configureEntryUi();
   $('go').addEventListener('pointerdown', unlockAudio, { passive: true });
-  $('go').addEventListener('click', () => { startGame(selectedMode); });
+  $('go').addEventListener('click', () => { if (MATCH.over && practiceCombat) returnToCity(); else startGame(selectedMode); });
+  $('practiceMatch').addEventListener('click', startPracticeMatch);
+  $('backToCity').addEventListener('click', () => setCombatLobby(false));
+  $('combatExit').addEventListener('click', returnToCity);
   $('gname').value = ident.name || ''; $('gwallet').value = ident.wallet || ''; for (const id of ['gname', 'gwallet']) $(id).addEventListener('change', saveIdent);
   if (Q.mobile) pmsg.textContent += ' · SWAP cycles AK / MAC-10';
   if (qs.get('auto') === '1') startGame(selectedMode);
@@ -333,6 +374,8 @@ async function boot() {
 let last = performance.now(), fpsAcc = 0, fpsN = 0, nextDistant = 12;
 addEventListener('keydown', (e) => {
   if (e.target && e.target.tagName === 'INPUT') return;
+  if (e.code === 'Escape' && combatLobbyOpen) { setCombatLobby(false); return; }
+  if (e.code === 'KeyX' && practiceCombat && MATCH.started) { returnToCity(); return; }
   if (e.code === 'KeyM') { setMuted(!isMuted()); hud.callout(isMuted() ? 'SOUND OFF' : 'SOUND ON', 'PRESS [M]'); }
   if (e.code === 'KeyV' && MATCH.started && MATCH.mode === GAME_MODES.FREE_ROAM) setCameraMode(!thirdCamera.enabled, true);
 });
@@ -342,23 +385,29 @@ function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now; time += dt;
   fpsAcc += dt; fpsN++; if (fpsAcc > 0.5) { hud.fps(Math.round(fpsN / fpsAcc)); fpsAcc = 0; fpsN = 0; }
   const look = poll();
-  if (!MATCH.started || (!input.locked && !TOUCH && !MATCH.over && MATCH.started)) { look.dx = look.dy = 0; }
+  if (!MATCH.started || combatLobbyOpen || (!input.locked && !TOUCH && !MATCH.over && MATCH.started)) { look.dx = look.dy = 0; }
   if (!MATCH.started) { // idle camera drift on the title
     player.yaw += dt * 0.03; player.update(dt, { moveX: 0, moveY: 0 }, { dx: 0, dy: 0 }, time);
   } else {
     if (!MATCH.over && isCombatMode(MATCH.mode)) { MATCH.left -= dt; hud.timer(MATCH.left); if (MATCH.left <= 0) endMatch(); }
     if (input.ab) { if (isCombatMode(MATCH.mode)) useAbility(input.ab); input.ab = 0; }
-    player.update(dt, MATCH.over ? { moveX: 0, moveY: 0 } : input, look, time, !thirdCamera.enabled);
+    player.update(dt, MATCH.over || combatLobbyOpen ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
     if (city && MATCH.mode === GAME_MODES.FREE_ROAM) {
       const apartmentState = city.apartment.update(player, input, time);
-      hud.prompt(apartmentState.prompt, apartmentState.active);
+      const venueState = apartmentState.active || apartmentState.transitioned
+        ? { prompt: '', requestedLobby: false }
+        : city.combatVenue.update(player, !!input.interact, time, combatLobbyOpen);
+      if (venueState.requestedLobby) setCombatLobby(true);
+      const prompt = apartmentState.prompt || venueState.prompt;
+      hud.prompt(prompt, apartmentState.active, venueState.prompt ? 'ENTER COMBAT' : '');
+      input.interact = false;
       if (apartmentState.transitioned) {
         setCameraMode(true);
         console.log('apartment transition:', apartmentState.active ? 'inside' : 'outside');
         hud.callout(apartmentState.active ? 'NORTH COURT APARTMENTS' : 'BACK ON THE BLOCK', apartmentState.active ? 'APARTMENT INTERIOR PROTOTYPE' : 'EXPLORE THE CITY');
       }
       city.update(player);
-    } else hud.prompt('');
+    } else { hud.prompt(''); input.interact = false; }
     thirdCamera.update(dt);
     city?.apartment?.updateCameraVisibility(camera, player, dt);
     if (localAvatar) {
@@ -420,4 +469,4 @@ function loop(now) {
 }
 boot().catch((e) => { console.error(e); pmsg.textContent = 'Could not start: ' + e.message; });
 // expose for QA
-window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, destruction, score, MATCH, startMatch, startGame, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };
+window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, destruction, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };
