@@ -3,8 +3,8 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '..', 'public', 'mafia-wars', 'game', 'src');
-const [main, assets, audio, world, characters, cityExpansion, apartment] = await Promise.all(
-  ['main.js', 'assets.js', 'audio.js', 'world.js', 'characters.js', 'city-expansion.js', 'apartment-system.js'].map((file) => readFile(path.join(root, file), 'utf8')),
+const [main, assets, audio, world, characters, cityExpansion, apartment, player, collision] = await Promise.all(
+  ['main.js', 'assets.js', 'audio.js', 'world.js', 'characters.js', 'city-expansion.js', 'apartment-system.js', 'player.js', 'collision-math.js'].map((file) => readFile(path.join(root, file), 'utf8')),
 );
 
 assert.match(main, /Q\.lowMemory = Q\.mobile && qs\.get\('full'\) !== '1'/);
@@ -23,6 +23,11 @@ assert.match(main, /apartmentState = city\.apartment\.update/);
 assert.match(cityExpansion, /from '\/mafia-wars\/game\/vendor\/three\/three\.module\.js'/);
 assert.match(cityExpansion, /chunkVisible\(chunk\.center, player\.pos, plan\.profile\.activeRadius\)/);
 assert.match(apartment, /TAP ENTER/);
+assert.match(apartment, /north-court-exterior-door/);
+assert.match(apartment, /north-court-interior-exit-door/);
+assert.match(world, /vehicle: 'covered-car'/);
+assert.match(player, /movementSubsteps\(moveX, moveZ\)/);
+assert.match(collision, /PLAYER_COLLISION_RADIUS = 0\.62/);
 
 const { CITY_BOUNDS, createCityPlan, chunkVisible } = await import(
   new URL('../public/mafia-wars/game/src/city-layout.js', import.meta.url)

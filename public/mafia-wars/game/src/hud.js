@@ -34,7 +34,7 @@ export const hud = {
   prompt(text = '', interior = false) {
     if (!el.interactPrompt) return;
     el.interactPrompt.textContent = text; el.interactPrompt.classList.toggle('on', !!text); el.interactPrompt.classList.toggle('interior', interior);
-    if (el.tInteract) el.tInteract.classList.toggle('on', !!text);
+    if (el.tInteract) { el.tInteract.classList.toggle('on', !!text); el.tInteract.textContent = interior ? 'EXIT' : 'ENTER'; }
   },
   killText(t) { el.kill.textContent = t; el.kill.classList.add('on'); clearTimeout(el.killT); el.killT = setTimeout(() => el.kill.classList.remove('on'), 1800); },
   points(t = '+100') { el.pts.textContent = t; el.pts.classList.remove('on'); void el.pts.offsetWidth; el.pts.classList.add('on'); },

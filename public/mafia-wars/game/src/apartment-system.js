@@ -1,5 +1,5 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
-import { insideInteractionRange, interactionCooldownReady } from './city-layout.js';
+import { insideInteractionRange, interactionCooldownReady, shouldTransitionApartment } from './city-layout.js';
 
 const TRANSITION_COOLDOWN = 0.65;
 
@@ -40,6 +40,7 @@ export class HybridApartmentSystem {
   buildExterior() {
     const s = this.site, g = this.exterior;
     const brick = makeMaterial(0x715042), trim = makeMaterial(0xc7b998), glass = makeMaterial(0x182331, { roughness: 0.2, metalness: 0.35 });
+    const doorMat = makeMaterial(0x35241d, { roughness: 0.68 }), brass = makeMaterial(0xc49a42, { roughness: 0.3, metalness: 0.75 });
     const frontX = s.x - s.width / 2, backX = s.x + s.width / 2, wall = 0.35, door = 2.2;
     box(g, brick, [s.width, s.height, wall], [s.x, s.height / 2, s.z - s.depth / 2], 'apartment-side-south');
     box(g, brick, [s.width, s.height, wall], [s.x, s.height / 2, s.z + s.depth / 2], 'apartment-side-north');
@@ -52,6 +53,8 @@ export class HybridApartmentSystem {
     box(g, trim, [0.18, 2.65, 0.16], [frontX - 0.2, 1.325, s.z - door / 2 - 0.08], 'apartment-entry-trim-south');
     box(g, trim, [0.18, 2.65, 0.16], [frontX - 0.2, 1.325, s.z + door / 2 + 0.08], 'apartment-entry-trim-north');
     box(g, trim, [0.18, 0.16, door + 0.35], [frontX - 0.2, 2.57, s.z], 'apartment-entry-trim-top');
+    box(g, doorMat, [0.18, 2.42, door - 0.16], [frontX - 0.12, 1.21, s.z], 'north-court-exterior-door');
+    box(g, brass, [0.11, 0.11, 0.11], [frontX - 0.24, 1.05, s.z - 0.68], 'north-court-exterior-handle');
     const stride = this.mobile ? 2 : 1;
     for (let floor = 0; floor < 4; floor++) for (let i = -2; i <= 2; i += stride) {
       if (floor === 0 && i === 0) continue;
@@ -63,11 +66,13 @@ export class HybridApartmentSystem {
     wallCollider(this.addCollider, frontX, s.height / 2, s.z - door / 2 - wing / 2, wall, s.height, wing);
     wallCollider(this.addCollider, frontX, s.height / 2, s.z + door / 2 + wing / 2, wall, s.height, wing);
     wallCollider(this.addCollider, frontX, 2.7 + (s.height - 2.7) / 2, s.z, wall, s.height - 2.7, door);
+    wallCollider(this.addCollider, frontX - 0.12, 1.21, s.z, 0.18, 2.42, door - 0.16, { door: 'north-court-exterior' });
   }
 
   buildInterior() {
     const s = this.site, g = this.interior, y = s.interiorY;
     const floor = makeMaterial(0x5c4638), wall = makeMaterial(0xb6aa91), ceiling = makeMaterial(0x77736b), accent = makeMaterial(0x4e3028), metal = makeMaterial(0x3d4147, { metalness: 0.4 });
+    const doorMat = makeMaterial(0x4a3025, { roughness: 0.7 }), brass = makeMaterial(0xc49a42, { roughness: 0.3, metalness: 0.75 });
     const w = 13, d = 10, h = 3.2, cx = s.x, cz = s.z, t = 0.22;
     box(g, floor, [w, 0.18, d], [cx, y - 0.09, cz], 'apartment-floor');
     box(g, ceiling, [w, 0.18, d], [cx, y + h + 0.09, cz], 'apartment-ceiling');
@@ -78,6 +83,8 @@ export class HybridApartmentSystem {
     box(g, wall, [t, h, wing], [frontX, y + h / 2, cz - door / 2 - wing / 2], 'apartment-wall-west-south');
     box(g, wall, [t, h, wing], [frontX, y + h / 2, cz + door / 2 + wing / 2], 'apartment-wall-west-north');
     box(g, wall, [t, h - 2.45, door], [frontX, y + 2.45 + (h - 2.45) / 2, cz], 'apartment-wall-west-header');
+    box(g, doorMat, [0.16, 2.35, door - 0.14], [frontX + 0.1, y + 1.175, cz], 'north-court-interior-exit-door');
+    box(g, brass, [0.1, 0.1, 0.1], [frontX + 0.21, y + 1.02, cz + 0.65], 'north-court-interior-handle');
     // A reusable compact apartment: hall, living room, kitchenette, and bedroom.
     box(g, wall, [t, h, 3.4], [cx + 0.4, y + h / 2, cz - 3.3], 'apartment-partition-a');
     box(g, wall, [t, h, 3.4], [cx + 0.4, y + h / 2, cz + 3.3], 'apartment-partition-b');
@@ -93,6 +100,7 @@ export class HybridApartmentSystem {
     wallCollider(this.addCollider, frontX, y + h / 2, cz - door / 2 - wing / 2, t, h, wing, { interior: s.id });
     wallCollider(this.addCollider, frontX, y + h / 2, cz + door / 2 + wing / 2, t, h, wing, { interior: s.id });
     wallCollider(this.addCollider, frontX, y + 2.45 + (h - 2.45) / 2, cz, t, h - 2.45, door, { interior: s.id });
+    wallCollider(this.addCollider, frontX + 0.1, y + 1.175, cz, 0.16, 2.35, door - 0.14, { interior: s.id, door: 'north-court-interior' });
     wallCollider(this.addCollider, cx + 0.4, y + h / 2, cz - 3.3, t, h, 3.4, { interior: s.id });
     wallCollider(this.addCollider, cx + 0.4, y + h / 2, cz + 3.3, t, h, 3.4, { interior: s.id });
     // Furniture uses inexpensive AABBs so the visible avatar cannot walk
@@ -109,14 +117,15 @@ export class HybridApartmentSystem {
     input.interact = false;
     const target = this.active ? this.exit : this.entry;
     const near = insideInteractionRange(player.pos, target, this.active ? 2.7 : 2.8);
-    const action = this.mobile ? 'TAP ENTER' : '[E]';
+    const action = this.mobile ? (this.active ? 'TAP EXIT' : 'TAP ENTER') : (this.active ? '[E] EXIT' : '[E] ENTER');
     this.prompt = near ? (this.active ? `EXIT NORTH COURT · ${action}` : `ENTER NORTH COURT · ${action}`) : '';
     const cooldownReady = interactionCooldownReady(now, this.transitionReadyAt);
-    if (!near || !wantsInteract || !cooldownReady) return { active: this.active, transitioned: false, prompt: this.prompt, cooldownReady };
+    if (!shouldTransitionApartment(near, wantsInteract, cooldownReady)) return { active: this.active, transitioned: false, prompt: this.prompt, cooldownReady };
     this.active = !this.active;
     this.interior.visible = this.active;
     player.pos.copy(this.active ? this.insideSpawn : this.outsideSpawn);
     player.vel.set(0, 0, 0); player.onGround = true;
+    if (!this.active) player.yaw = Math.PI / 2;
     this.transitionReadyAt = now + TRANSITION_COOLDOWN;
     this.prompt = '';
     return { active: this.active, transitioned: true, prompt: '', name: this.site.name, cooldownReady: true };

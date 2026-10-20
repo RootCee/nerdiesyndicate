@@ -3,6 +3,7 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { mergeGeometries } from '/mafia-wars/game/vendor/three/jsm/utils/BufferGeometryUtils.js';
 import { pbr, weather, prep, loadGLB } from './assets.js';
+import { resolveCircleAabb } from './collision-math.js';
 
 export const MAP = { minX: -43, maxX: 43, minZ: -46, maxZ: 46 };
 // front yards that get a brick wall (destructible) instead of chain-link: 'side:lotIndex'
@@ -388,7 +389,14 @@ export async function buildWorld(scene, Q, progress = () => {}) {
   }
   // cars on the street
   const carSpots = [[-3.2, -34], [3.2, -16], [-3.2, 4], [3.2, 26], [-ALLEY_X - 0.3, 20], [ALLEY_X + 0.3, -8]];
-  for (const [x, z] of carSpots) placeClone(scene, P.covered_car, x, 0, z, Math.PI / 2 + rr(-0.05, 0.05) + (rnd() < 0.5 ? Math.PI : 0), 1, true);
+  for (const [x, z] of carSpots) {
+    const car = placeClone(scene, P.covered_car, x, 0, z, Math.PI / 2 + rr(-0.05, 0.05) + (rnd() < 0.5 ? Math.PI : 0), 1, true);
+    car.updateMatrixWorld(true);
+    const bounds = new THREE.Box3().setFromObject(car);
+    // Vehicle meshes were previously visual-only. A boot-time AABB keeps the
+    // collision shape matched to the actual parked-car asset on every profile.
+    if (!bounds.isEmpty()) solid(bounds.min.x, bounds.min.z, bounds.max.x, bounds.max.z, Math.max(0, bounds.min.y), bounds.max.y, { vehicle: 'covered-car' });
+  }
   for (const l of lots) {
     const s = l.side, bx = s * rr(27, 31), fx = s * rr(9.5, 12.5);
     // backyard clutter
@@ -472,15 +480,7 @@ export function resolve(p, r, y0, y1, feetY) {
   for (const c of colliders) {
     if (c.step && c.maxY - feetY <= 0.85) continue;          // climbable
     if (y1 <= c.minY || y0 >= c.maxY) continue;
-    const nx = Math.max(c.minX, Math.min(p.x, c.maxX)), nz = Math.max(c.minZ, Math.min(p.z, c.maxZ));
-    const dx = p.x - nx, dz = p.z - nz, d2 = dx * dx + dz * dz;
-    if (d2 >= r * r) continue;
-    hit = true;
-    if (d2 > 1e-6) { const d = Math.sqrt(d2); p.x += dx / d * (r - d); p.z += dz / d * (r - d); }
-    else { // inside: push along smallest penetration
-      const px = Math.min(p.x - c.minX, c.maxX - p.x), pz = Math.min(p.z - c.minZ, c.maxZ - p.z);
-      if (px < pz) p.x += (p.x - c.minX < c.maxX - p.x ? -(px + r) : (px + r)); else p.z += (p.z - c.minZ < c.maxZ - p.z ? -(pz + r) : (pz + r));
-    }
+    hit = resolveCircleAabb(p, r, c) || hit;
   }
   return hit;
 }

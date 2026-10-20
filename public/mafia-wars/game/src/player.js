@@ -1,8 +1,11 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { groundAt, resolve, MAP } from './world.js';
+import { movementSubsteps, PLAYER_COLLISION_RADIUS } from './collision-math.js';
+export { PLAYER_COLLISION_RADIUS } from './collision-math.js';
 
 const FWD = new THREE.Vector3(), RIGHT = new THREE.Vector3(), WISH = new THREE.Vector3();
-export const PLAYER_COLLISION_RADIUS = 0.48;
+// Matches the visible hoodie avatar's torso/arm footprint. The old 0.48 m
+// circle stopped the root correctly but let the animated shoulders enter walls.
 export class Player {
   constructor(camera) {
     this.camera = camera; this.pos = new THREE.Vector3(0, 0, 40); this.vel = new THREE.Vector3();
@@ -29,10 +32,22 @@ export class Player {
     if (input.jump && this.onGround && !this.dead) { this.vel.y = 4.6; this.onGround = false; }
     input.jump = false;
     this.vel.y -= 14 * dt;
-    // integrate + collide
-    this.pos.x += this.vel.x * dt; this.pos.z += this.vel.z * dt;
+    // Integrate horizontal movement in bounded pieces. This prevents a sprint
+    // frame from crossing thin geometry and preserves the unblocked component
+    // for stable wall sliding.
     const h = this.height * (1 - this.crouchT * 0.35);
-    resolve(this.pos, this.radius, this.pos.y + 0.25, this.pos.y + h, this.pos.y);
+    const moveX = this.vel.x * dt, moveZ = this.vel.z * dt;
+    const steps = movementSubsteps(moveX, moveZ);
+    const stepX = moveX / steps, stepZ = moveZ / steps;
+    for (let i = 0; i < steps; i++) {
+      const beforeX = this.pos.x, beforeZ = this.pos.z;
+      this.pos.x += stepX; this.pos.z += stepZ;
+      if (resolve(this.pos, this.radius, this.pos.y + 0.25, this.pos.y + h, this.pos.y)) {
+        const actualX = this.pos.x - beforeX, actualZ = this.pos.z - beforeZ;
+        if (Math.abs(actualX) < Math.abs(stepX) * 0.35) this.vel.x = 0;
+        if (Math.abs(actualZ) < Math.abs(stepZ) * 0.35) this.vel.z = 0;
+      }
+    }
     this.pos.y += this.vel.y * dt;
     const g = groundAt(this.pos.x, this.pos.z, this.pos.y);
     if (this.pos.y <= g + 0.001 && this.vel.y <= 0) { this.pos.y = g; this.vel.y = 0; this.onGround = true; } else this.onGround = false;

@@ -76,3 +76,7 @@ export function insideInteractionRange(playerPosition, target, radius = 2.4) {
 export function interactionCooldownReady(now, readyAt) {
   return Number.isFinite(now) && Number.isFinite(readyAt) && now >= readyAt;
 }
+
+export function shouldTransitionApartment(near, wantsInteract, cooldownReady) {
+  return !!near && !!wantsInteract && !!cooldownReady;
+}
