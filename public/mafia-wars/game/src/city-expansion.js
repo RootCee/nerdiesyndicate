@@ -88,7 +88,8 @@ export function buildCityExpansion(scene, Q = {}) {
     tire: material(0x111214), driveway: material(0x888984), bulb: new THREE.MeshBasicMaterial({ color: 0xffd39a, toneMapped: false }),
   };
   const infrastructure = new THREE.Group(); infrastructure.name = 'city-infrastructure'; scene.add(infrastructure);
-  addBox(infrastructure, mats.ground, 280, 0.12, 296, 0, -0.08, 0, 'city-ground');
+  const cityWidth = plan.bounds.maxX - plan.bounds.minX, cityCenterX = (plan.bounds.minX + plan.bounds.maxX) / 2;
+  addBox(infrastructure, mats.ground, cityWidth, 0.12, 296, cityCenterX, -0.08, 0, 'city-ground');
   for (const road of plan.roads) {
     addBox(infrastructure, mats.road, road.width, 0.08, road.depth, road.x, 0.01, road.z, `city-road-${road.id}`);
     mapRects.push({ x: road.x - road.width / 2, z: road.z - road.depth / 2, w: road.width, h: road.depth, type: 'road' });
@@ -108,7 +109,7 @@ export function buildCityExpansion(scene, Q = {}) {
   }
 
   const chunks = [];
-  let apartment = null, house = null, originalHouse = null, combatVenue = null;
+  let apartment = null, house = null, originalHouse = null, duplicatedHouse = null, combatVenue = null;
   for (const district of plan.districts) {
     const group = new THREE.Group(); group.name = `city-chunk-${district.id}`; scene.add(group);
     for (const spec of district.buildings) addBuilding(group, spec, plan.profile, mats);
@@ -128,6 +129,12 @@ export function buildCityExpansion(scene, Q = {}) {
       house = new HybridHouseSystem(scene, plan.enterableHouse, { addCollider, mobile: plan.profile.key === 'mobile' });
       group.add(house.exterior);
     }
+    if (district.id === plan.duplicatedOriginalNeighborhood.id) {
+      const duplicatedWorld = scene.getObjectByName('hood-duplicate-world');
+      if (duplicatedWorld) group.add(duplicatedWorld);
+      duplicatedHouse = new HybridHouseSystem(scene, plan.duplicatedEnterableHouse, { addCollider, mobile: plan.profile.key === 'mobile' });
+      group.add(duplicatedHouse.exterior);
+    }
     if (district.id === 'west-industrial-south') {
       addBox(group, mats.sidewalk, 42, 0.08, 34, -112, 0.02, -72, 'underground-parking-lot');
       combatVenue = new CombatVenueSystem(scene, plan.combatVenue, { addCollider, mobile: plan.profile.key === 'mobile' });
@@ -145,7 +152,7 @@ export function buildCityExpansion(scene, Q = {}) {
   addCollider(MAP.minX - 2, MAP.maxZ, MAP.maxX + 2, MAP.maxZ + 2, 0, 12, { boundary: true });
 
   const city = {
-    plan, chunks, apartment, house, originalHouse, combatVenue, infrastructure, mode: 'free-roam',
+    plan, chunks, apartment, house, originalHouse, duplicatedHouse, combatVenue, infrastructure, mode: 'free-roam',
     beginPrewarm() {
       const state = chunks.map((chunk) => chunk.group.visible);
       const culling = [];
@@ -170,7 +177,7 @@ export function buildCityExpansion(scene, Q = {}) {
       for (const chunk of chunks) {
         const visible = apartment?.active && chunk.id === 'north'
           ? true
-          : (house?.active && chunk.id === plan.enterableHouse.districtId) || (originalHouse?.active && chunk.id === 'north')
+          : (house?.active && chunk.id === plan.enterableHouse.districtId) || (originalHouse?.active && chunk.id === 'north') || (duplicatedHouse?.active && chunk.id === plan.duplicatedOriginalNeighborhood.id)
             ? true
           : chunkVisible(chunk.center, player.pos, plan.profile.activeRadius + chunk.radius * 0.35);
         if (visible !== chunk.visible) { chunk.visible = visible; chunk.group.visible = visible; }
@@ -186,6 +193,8 @@ export function buildCityExpansion(scene, Q = {}) {
         apartment: apartment?.site.id || null,
         enterableHouse: house?.site.id || null,
         originalEnterableHouse: originalHouse?.site.id || null,
+        duplicatedEnterableHouse: duplicatedHouse?.site.id || null,
+        duplicatedOriginalHouses: plan.duplicatedOriginalNeighborhood.houseCount,
         combatVenue: combatVenue?.site.id || null,
         bounds: { ...MAP },
       };

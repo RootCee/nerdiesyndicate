@@ -1,7 +1,35 @@
 // Pure, deterministic city plan. Rendering code consumes this data so desktop
 // and mobile share one collision/layout topology while choosing different
 // visibility and detail budgets.
-export const CITY_BOUNDS = Object.freeze({ minX: -140, maxX: 140, minZ: -148, maxZ: 148 });
+// Milestone 5.2C adds a complete 86 m-wide copy of the original Hood Warfare
+// block east of the approved 280 m city. Its 120 m ground/street staging area
+// reaches x=244 without overlapping the existing x=112 residential row.
+export const CITY_BOUNDS = Object.freeze({ minX: -140, maxX: 244, minZ: -148, maxZ: 148 });
+
+export const ORIGINAL_NEIGHBORHOOD_LAYOUT = Object.freeze({
+  id: 'hood-original-neighborhood', centerX: 0, centerZ: 0,
+  lotsPerSide: 10, houseCount: 20, lotSpacing: 8,
+  footprint: Object.freeze({ minX: -43, maxX: 43, minZ: -46, maxZ: 46 }),
+});
+
+export const DUPLICATED_ORIGINAL_NEIGHBORHOOD = Object.freeze({
+  id: 'hood-duplicate-neighborhood', centerX: 184, centerZ: 0,
+  houseCount: ORIGINAL_NEIGHBORHOOD_LAYOUT.houseCount,
+  footprint: Object.freeze({ minX: 141, maxX: 227, minZ: -46, maxZ: 46 }),
+  renderRadius: Object.freeze({ desktop: 112, mobile: 82 }),
+  enterableHouseId: 'hood-duplicate-west-5',
+});
+
+export const DUPLICATED_ENTERABLE_HOUSE_SITE = Object.freeze({
+  id: DUPLICATED_ORIGINAL_NEIGHBORHOOD.enterableHouseId,
+  name: '184 East Block House',
+  districtId: DUPLICATED_ORIGINAL_NEIGHBORHOOD.id,
+  x: 165, z: 4, width: 12, depth: 10, height: 6.8, interiorY: 85,
+  facing: 'east', useExistingExterior: true,
+  entry: Object.freeze({ x: 173.25, y: 0, z: 5.55 }),
+  outsideSpawn: Object.freeze({ x: 173.55, y: 0, z: 5.55 }),
+  outsideYaw: -Math.PI / 2,
+});
 
 export const CITY_PROFILES = Object.freeze({
   desktop: Object.freeze({ key: 'desktop', activeRadius: 92, windowStride: 1, roofDetails: true, streetLights: true }),
@@ -142,6 +170,8 @@ function westMixedUse(id, centerZ, seedOffset, industrial = false) {
 
 export function createCityPlan(profileName = 'desktop') {
   const profile = CITY_PROFILES[profileName] || CITY_PROFILES.desktop;
+  const horizontalCenter = (CITY_BOUNDS.minX + CITY_BOUNDS.maxX) / 2;
+  const horizontalWidth = CITY_BOUNDS.maxX - CITY_BOUNDS.minX;
   return {
     bounds: { ...CITY_BOUNDS },
     profile,
@@ -149,11 +179,14 @@ export function createCityPlan(profileName = 'desktop') {
       { id: 'main', x: 0, z: 0, width: 9, depth: 296 },
       { id: 'west-avenue', x: -88, z: 0, width: 10, depth: 296 },
       { id: 'east-avenue', x: 88, z: 0, width: 10, depth: 296 },
-      { id: 'central-cross', x: 0, z: 0, width: 280, depth: 10 },
-      { id: 'north-cross', x: 0, z: 48.5, width: 280, depth: 9 },
-      { id: 'north-market', x: 0, z: 96, width: 280, depth: 9 },
-      { id: 'south-cross', x: 0, z: -48.5, width: 280, depth: 9 },
-      { id: 'south-market', x: 0, z: -96, width: 280, depth: 9 },
+      { id: 'hood-duplicate-main', x: DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX, z: 0, width: 9, depth: 140 },
+      { id: 'hood-duplicate-west-alley', x: DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX - 35.5, z: 0, width: 4, depth: 90 },
+      { id: 'hood-duplicate-east-alley', x: DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX + 35.5, z: 0, width: 4, depth: 90 },
+      { id: 'central-cross', x: horizontalCenter, z: 0, width: horizontalWidth, depth: 10 },
+      { id: 'north-cross', x: horizontalCenter, z: 48.5, width: horizontalWidth, depth: 9 },
+      { id: 'north-market', x: horizontalCenter, z: 96, width: horizontalWidth, depth: 9 },
+      { id: 'south-cross', x: horizontalCenter, z: -48.5, width: horizontalWidth, depth: 9 },
+      { id: 'south-market', x: horizontalCenter, z: -96, width: horizontalWidth, depth: 9 },
     ],
     districts: [
       district('north', 100, 401), district('south', -100, 809),
@@ -161,10 +194,13 @@ export function createCityPlan(profileName = 'desktop') {
       eastResidential('east-residential-south', -96, 1601),
       westMixedUse('west-mixed-north', 96, 2203),
       westMixedUse('west-industrial-south', -96, 2801, true),
+      { id: DUPLICATED_ORIGINAL_NEIGHBORHOOD.id, kind: 'original-copy', center: { x: DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX, z: 0 }, radius: 58, buildings: [], vehicles: [] },
     ],
     apartment: { ...APARTMENT_SITE },
     enterableHouse: { ...ENTERABLE_HOUSE_SITE },
     originalExpansionHouses: ORIGINAL_EXPANSION_HOUSES.map((site) => ({ ...site, entry: site.entry ? { ...site.entry } : null, outsideSpawn: site.outsideSpawn ? { ...site.outsideSpawn } : null, spec: { ...site.spec } })),
+    duplicatedOriginalNeighborhood: { ...DUPLICATED_ORIGINAL_NEIGHBORHOOD, footprint: { ...DUPLICATED_ORIGINAL_NEIGHBORHOOD.footprint }, renderRadius: { ...DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius } },
+    duplicatedEnterableHouse: { ...DUPLICATED_ENTERABLE_HOUSE_SITE, entry: { ...DUPLICATED_ENTERABLE_HOUSE_SITE.entry }, outsideSpawn: { ...DUPLICATED_ENTERABLE_HOUSE_SITE.outsideSpawn } },
     combatVenue: { ...COMBAT_VENUE_SITE },
   };
 }

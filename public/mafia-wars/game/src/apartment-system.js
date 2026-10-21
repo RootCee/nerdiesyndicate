@@ -15,6 +15,19 @@ export function wallCollider(addCollider, x, y, z, sx, sy, sz, extra = {}) {
   return addCollider(x - sx / 2, z - sz / 2, x + sx / 2, z + sz / 2, y - sy / 2, y + sy / 2, extra);
 }
 
+// Camera layers hide ordinary exterior meshes, but scene.background and the
+// HDR environment are scene-level resources. This inexpensive inward-facing
+// shell gives every separately loaded interior a neutral enclosed backdrop
+// when a ceiling panel is cut away. It uses an unlit material so it cannot pick
+// up outdoor sunlight or generate extra shadow work on mobile.
+export function addInteriorIsolationShell(parent, center, size, name) {
+  const material = new THREE.MeshBasicMaterial({ color: 0x201e1b, side: THREE.BackSide, fog: false });
+  const shell = new THREE.Mesh(new THREE.BoxGeometry(...size), material);
+  shell.position.set(...center); shell.name = name; shell.renderOrder = -100;
+  shell.castShadow = false; shell.receiveShadow = false;
+  parent.add(shell); return shell;
+}
+
 export class HybridApartmentSystem {
   constructor(scene, site, { addCollider, mobile = false } = {}) {
     this.scene = scene;
@@ -75,6 +88,7 @@ export class HybridApartmentSystem {
     const floor = makeMaterial(0x5c4638), wall = makeMaterial(0xb6aa91), ceiling = makeMaterial(0x77736b), accent = makeMaterial(0x4e3028), metal = makeMaterial(0x3d4147, { metalness: 0.4 });
     const doorMat = makeMaterial(0x4a3025, { roughness: 0.7 }), brass = makeMaterial(0xc49a42, { roughness: 0.3, metalness: 0.75 });
     const w = 13, d = 10, h = 3.2, cx = s.x, cz = s.z, t = 0.22;
+    this.isolationShell = addInteriorIsolationShell(g, [cx, y + 5.5, cz], [34, 14, 30], 'apartment-interior-isolation-shell');
     // A staging deck masks the exterior city while the separately loaded
     // interior camera is using its isolated render layer.
     this.backdrop = box(g, makeMaterial(0x25231f), [34, 0.08, 30], [cx, y - 0.17, cz], 'apartment-cutaway-backdrop');
@@ -106,7 +120,8 @@ export class HybridApartmentSystem {
     box(g, metal, [1.2, 1.8, 0.75], [cx + 5.4, y + 0.9, cz - 4.25], 'apartment-fridge');
     box(g, accent, [3.4, 0.65, 1.8], [cx + 3.4, y + 0.325, cz + 2.7], 'apartment-sofa');
     box(g, floor, [2.8, 0.45, 4.2], [cx - 2.4, y + 0.225, cz - 2.25], 'apartment-bed');
-    const light = new THREE.PointLight(0xffd19a, this.mobile ? 35 : 55, 14, 2); light.position.set(cx, y + 2.7, cz); g.add(light);
+    const fill = new THREE.AmbientLight(0xffead6, this.mobile ? 0.62 : 0.78); fill.name = 'apartment-interior-fill'; g.add(fill);
+    const light = new THREE.PointLight(0xffd19a, this.mobile ? 35 : 55, 14, 2); light.position.set(cx, y + 2.7, cz); light.name = 'apartment-interior-key'; g.add(light);
     wallCollider(this.addCollider, cx, y - 0.05, cz, w, 0.2, d, { step: true, interior: s.id });
     wallCollider(this.addCollider, cx, y + h / 2, cz - d / 2, w, h, t, { interior: s.id });
     wallCollider(this.addCollider, cx, y + h / 2, cz + d / 2, w, h, t, { interior: s.id });

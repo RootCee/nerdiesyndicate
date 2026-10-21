@@ -4,7 +4,7 @@ import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { mergeGeometries } from '/mafia-wars/game/vendor/three/jsm/utils/BufferGeometryUtils.js';
 import { pbr, weather, prep, loadGLB } from './assets.js';
 import { moveCircleWithSubsteps, resolveCircleAabbs } from './collision-math.js';
-import { ORIGINAL_EXPANSION_HOUSES } from './city-layout.js';
+import { DUPLICATED_ORIGINAL_NEIGHBORHOOD, ORIGINAL_EXPANSION_HOUSES, ORIGINAL_NEIGHBORHOOD_LAYOUT } from './city-layout.js';
 
 export const MAP = { minX: -43, maxX: 43, minZ: -46, maxZ: 46 };
 // front yards that get a brick wall (destructible) instead of chain-link: 'side:lotIndex'
@@ -72,6 +72,7 @@ export const colliders = [];   // {minX,maxX,minY,maxY,minZ,maxZ,step,fence}
 export const mapRects = [];    // minimap: {x,z,w,h,type}
 export const lamps = [];       // {x,y,z, warm}
 export const windowsLit = [];
+export const collisionBroadphaseStats = { lastCandidates: 0, maxCandidates: 0 };
 export function addCollider(minX, minZ, maxX, maxZ, minY, maxY, extra = {}) { const c = { minX, maxX, minY, maxY, minZ, maxZ, ...extra }; colliders.push(c); return c; }
 const solid = addCollider;
 export const houseDescs = [];   // destructible houses (see destruction.js addHouse)
@@ -112,6 +113,7 @@ function addWindow(b, M, wallX, wallZ, nx, nz, y, lit, brick) {
 
 // Local frame: house centred at origin, front wall faces +X. M places it in the world.
 function buildHouse(b, M, spec, hb = null) {
+  const colliderStart = colliders.length;
   const { w = HOUSE_W, d = HOUSE_DEPTH, floors = 2, brick = false, tint = 0xffffff, ridgeX = true, porch = true, chimney = true, collide = true, litChance = 0.4 } = spec;
   const H = floors * 3, base = 0.8, top = base + H, wallKey = brick ? 'brick' : (spec.worn ? 'siding2' : 'siding'), wallTint = brick ? 0xffffff : tint;
   // blocks: the walls, gables and roof are physics bodies (destruction.js); the kit keeps the base, porch, chimney,
@@ -185,11 +187,16 @@ function buildHouse(b, M, spec, hb = null) {
   if (blocks) {
     const hT = top + Rh0 + 0.2;
     const faces = [solidLocal(M, d / 2 - 0.1, hT / 2, 0, 0.2, hT, w), solidLocal(M, -d / 2 + 0.1, hT / 2, 0, 0.2, hT, w), solidLocal(M, 0, hT / 2, w / 2 - 0.1, d, hT, 0.2), solidLocal(M, 0, hT / 2, -w / 2 + 0.1, d, hT, 0.2)];
+    faces.forEach((face, index) => Object.assign(face, { destructionId: spec.id || null, destructionFace: index }));
     solidLocal(M, 0, base / 2, 0, d, base, w, { step: true });                  // the floor: walk in once a wall is open
     const roofC = solidLocal(M, 0, top + Rh0 / 2, 0, d, Rh0, w);               // keeps rockets from flying through the roof
-    houseDescs.push({ id: spec.id || null, name: spec.name || null, M: M.clone(), d, w, base, top, H, brick, tint: wallTint, worn: !!spec.worn, ridgeX, Rh: Rh0, pitch, windows: curWindows, door: { u: dz, y: base + 1.15, w: 1.2, h: 2.3 }, faces, roofC, statics: [] });
+    Object.assign(roofC, { destructionId: spec.id || null, destructionRoof: true });
+    houseDescs.push({ id: spec.id || null, name: spec.name || null, streaming: spec.streaming ? { ...spec.streaming } : null, M: M.clone(), d, w, base, top, H, brick, tint: wallTint, worn: !!spec.worn, ridgeX, Rh: Rh0, pitch, windows: curWindows, door: { u: dz, y: base + 1.15, w: 1.2, h: 2.3 }, faces, roofC, statics: [] });
   }
   curWindows = null;
+  if (blocks && spec.id) colliders.slice(colliderStart).forEach((collider, index) => {
+    if (!collider.destructionId) Object.assign(collider, { destructionId: spec.id, destructionCollider: index });
+  });
   const c = new THREE.Vector3(0, 0, 0).applyMatrix4(M); const e = new THREE.Vector3(d / 2 + (porch ? 2.4 : 0), 0, w / 2).applyMatrix4(M); const o = new THREE.Vector3(-d / 2, 0, -w / 2).applyMatrix4(M);
   mapRects.push({ x: Math.min(e.x, o.x), z: Math.min(e.z, o.z), w: Math.abs(e.x - o.x), h: Math.abs(e.z - o.z), type: 'house' });
 }
@@ -261,20 +268,41 @@ export async function buildWorld(scene, Q, progress = () => {}) {
   };
   materials.siding.map.repeat.set(1, 1);
   const b = new Bucket();
+  const duplicateWorldGroup = new THREE.Group(); duplicateWorldGroup.name = 'hood-duplicate-world'; scene.add(duplicateWorldGroup);
 
   // houses: west row faces +x, east row faces -x
   const lots = [], houseBuckets = [];
   for (let i = 0; i < 10; i++) {
     const zc = -40 + i * LOT + LOT / 2;
     for (const side of [-1, 1]) {
-      const spec = { floors: rnd() < 0.2 ? 1.5 : 2, brick: rnd() < 0.35, worn: rnd() < 0.22, tint: pick(TINTS), ridgeX: rnd() < 0.7, porch: rnd() < 0.85, chimney: rnd() < 0.5 };
+      const row = side < 0 ? 'west' : 'east';
+      const spec = { id: `hood-original-${row}-${i}`, floors: rnd() < 0.2 ? 1.5 : 2, brick: rnd() < 0.35, worn: rnd() < 0.22, tint: pick(TINTS), ridgeX: rnd() < 0.7, porch: rnd() < 0.85, chimney: rnd() < 0.5 };
       if (spec.floors === 1.5) spec.floors = 1.4;
       const M = mat(side * (HOUSE_FRONT + HOUSE_DEPTH / 2), 0, zc, side < 0 ? 0 : Math.PI);
-      spec.blocks = Q.houses !== false; const hb = new Bucket(); buildHouse(b, M, spec, hb); houseBuckets.push(hb);
-      lots.push({ side, zc, spec });
-      if (rnd() < 0.75) buildGarage(b, mat(side * (ALLEY_X + 2 + 2.8 + 0.3), 0, zc + rr(-0.6, 0.6), side < 0 ? Math.PI : 0));
+      spec.blocks = Q.houses !== false; spec.streaming = { id: ORIGINAL_NEIGHBORHOOD_LAYOUT.id, centerX: 0, centerZ: 0 };
+      const hb = new Bucket(); buildHouse(b, M, spec, hb); houseBuckets.push(hb);
+      const garage = rnd() < 0.75 ? { zOffset: rr(-0.6, 0.6) } : null;
+      lots.push({ centerX: 0, side, row, index: i, zc, spec, garage });
+      if (garage) buildGarage(b, mat(side * (ALLEY_X + 2 + 2.8 + 0.3), 0, zc + garage.zOffset, side < 0 ? Math.PI : 0));
     }
   }
+  // Reuse the exact deterministic original lot definitions through one world
+  // transform. Every copied house still receives its own descriptor, panel
+  // meshes, face colliders and static trim bucket.
+  const duplicatedLots = lots.map((lot) => {
+    const centerX = DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX;
+    const spec = {
+      ...lot.spec,
+      id: `hood-duplicate-${lot.row}-${lot.index}`,
+      name: `Hood East ${lot.row === 'west' ? 'West' : 'East'} ${lot.index + 1}`,
+      streaming: { id: DUPLICATED_ORIGINAL_NEIGHBORHOOD.id, centerX, centerZ: 0 },
+    };
+    const hb = new Bucket();
+    buildHouse(b, mat(centerX + lot.side * (HOUSE_FRONT + HOUSE_DEPTH / 2), 0, lot.zc, lot.side < 0 ? 0 : Math.PI), spec, hb);
+    houseBuckets.push(hb);
+    if (lot.garage) buildGarage(b, mat(centerX + lot.side * (ALLEY_X + 2 + 2.8 + 0.3), 0, lot.zc + lot.garage.zOffset, lot.side < 0 ? Math.PI : 0));
+    return { ...lot, centerX, spec };
+  });
   // Limited lateral extension: exactly two independent instances of the
   // original destructible house kit, facing the existing North Cross road.
   // Each receives its own descriptor, face colliders, panel bodies and static
@@ -290,7 +318,12 @@ export async function buildWorld(scene, Q, progress = () => {}) {
     buildHouse(b, mat(x, 0, s * 60, s < 0 ? Math.PI / 2 : -Math.PI / 2), { floors: 2, brick: rnd() < 0.4, tint: pick(TINTS), ridgeX: rnd() < 0.6, porch: true, chimney: rnd() < 0.5, collide: false, litChance: 0.3 });
   }
   const kit = b.build(materials, scene, true);
-  houseBuckets.forEach((hb, i) => { if (houseDescs[i]) houseDescs[i].statics = Object.values(hb.build(materials, scene, true)); });
+  houseBuckets.forEach((hb, i) => {
+    const descriptor = houseDescs[i]; if (!descriptor) return;
+    const built = hb.build(materials, scene, true);
+    for (const [key, object] of Object.entries(built)) object.name = `destructible-${descriptor.id || i}-static-${key}`;
+    descriptor.statics = Object.values(built);
+  });
   progress(0.3);
 
   // ---------- ground ----------
@@ -310,11 +343,11 @@ export async function buildWorld(scene, Q, progress = () => {}) {
   }
   mapRects.push({ x: -ROAD_HALF, z: -70, w: ROAD_HALF * 2, h: 140, type: 'road' });
   for (const s of [-1, 1]) mapRects.push({ x: -50, z: s * 48.5 - 4.5, w: 100, h: 9, type: 'road' });
-  for (const l of lots) {
-    const fx = l.side * (HOUSE_FRONT - 0.2);
-    ground.add('walk', planeGeo(1.2, 6.4, 2).translate(l.side * (ROAD_HALF + SIDEWALK + 3.2), 0.035, l.zc + (l.side < 0 ? HOUSE_W / 4 : -HOUSE_W / 4)));
-    if (rnd() < 0.5) ground.add(rnd() < 0.5 ? 'dirt' : 'grass2', planeGeo(rr(4, 8), rr(4, 6), 3).translate(l.side * rr(26, 31), 0.012, l.zc + rr(-2, 2)));
-    if (rnd() < 0.35) ground.add('grass2', planeGeo(rr(3, 5), rr(3, 6), 3).translate(l.side * rr(9, 12), 0.012, l.zc + rr(-2, 2)));
+  for (const l of [...lots, ...duplicatedLots]) {
+    const fx = l.centerX + l.side * (HOUSE_FRONT - 0.2);
+    ground.add('walk', planeGeo(1.2, 6.4, 2).translate(l.centerX + l.side * (ROAD_HALF + SIDEWALK + 3.2), 0.035, l.zc + (l.side < 0 ? HOUSE_W / 4 : -HOUSE_W / 4)));
+    if (rnd() < 0.5) ground.add(rnd() < 0.5 ? 'dirt' : 'grass2', planeGeo(rr(4, 8), rr(4, 6), 3).translate(l.centerX + l.side * rr(26, 31), 0.012, l.zc + rr(-2, 2)));
+    if (rnd() < 0.35) ground.add('grass2', planeGeo(rr(3, 5), rr(3, 6), 3).translate(l.centerX + l.side * rr(9, 12), 0.012, l.zc + rr(-2, 2)));
   }
   const gmesh = ground.build(gm, scene, false);
   for (const k in gmesh) gmesh[k].castShadow = false;
@@ -340,19 +373,19 @@ export async function buildWorld(scene, Q, progress = () => {}) {
   colliders.length = colliders.length; // (no-op, keep simple)
   for (let i = 0; i <= 10; i++) {
     const z = -40 + i * LOT;
-    for (const s of [-1, 1]) {
+    for (const centerX of [0, DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX]) for (const s of [-1, 1]) {
       // backyard side lines from house back to alley fence
-      fenceLine(s * (HOUSE_FRONT + HOUSE_DEPTH + 0.3), z, s * (ALLEY_X - 2.2), z, 0.72);
+      fenceLine(centerX + s * (HOUSE_FRONT + HOUSE_DEPTH + 0.3), z, centerX + s * (ALLEY_X - 2.2), z, 0.72);
     }
   }
   for (let i = 0; i < 10; i++) {
     const z0 = -40 + i * LOT, z1 = z0 + LOT;
-    for (const s of [-1, 1]) {
+    for (const centerX of [0, DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX]) for (const s of [-1, 1]) {
       // alley-side fence with a gate gap in the middle
-      const gx = s * (ALLEY_X - 2.2);
+      const gx = centerX + s * (ALLEY_X - 2.2);
       fenceLine(gx, z0, gx, z0 + 3, 0.72); fenceLine(gx, z1 - 3, gx, z1, 0.72);
       // some front-yard low fences along the sidewalk edge with an opening at the walkway
-      if (rnd() < 0.45 && !WALL_LOTS.has(s + ':' + i)) { const fx = s * (ROAD_HALF + SIDEWALK + 1.4); const wz = (z0 + z1) / 2 + (s < 0 ? HOUSE_W / 4 : -HOUSE_W / 4); fenceLine(fx, z0 + 0.3, fx, wz - 0.9, 0.5); fenceLine(fx, wz + 0.9, fx, z1 - 0.3, 0.5); }
+      if (rnd() < 0.45 && !WALL_LOTS.has(s + ':' + i)) { const fx = centerX + s * (ROAD_HALF + SIDEWALK + 1.4); const wz = (z0 + z1) / 2 + (s < 0 ? HOUSE_W / 4 : -HOUSE_W / 4); fenceLine(fx, z0 + 0.3, fx, wz - 0.9, 0.5); fenceLine(fx, wz + 0.9, fx, z1 - 0.3, 0.5); }
     }
   }
   // fix: the alley/front fence colliders were added per segment already; remove the fence 'gap' helper entries
@@ -365,23 +398,24 @@ export async function buildWorld(scene, Q, progress = () => {}) {
   const pole = findNode(poleKit, 'pole_large'), cross = findNode(poleKit, 'connection_large_01'), cross2 = findNode(poleKit, 'support_large_01');
   const poleItems = [], crossItems = [], cross2Items = [];
   const wireMat = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.8 });
-  const poleTops = { '-1': [], '1': [] };
-  for (const s of [-1, 1]) for (let z = -44; z <= 44; z += 22) {
-    const x = s * (ALLEY_X + 2.3); poleItems.push({ x, z, r: Math.PI / 2 }); crossItems.push({ x, y: 1.9, z, r: Math.PI / 2 }); cross2Items.push({ x, y: 1.9, z, r: Math.PI / 2 });
-    solid(x - 0.12, z - 0.12, x + 0.12, z + 0.12, 0, 7); poleTops[s].push(new THREE.Vector3(x, 6.9, z));
+  const poleTops = {};
+  for (const centerX of [0, DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX]) for (const s of [-1, 1]) for (let z = -44; z <= 44; z += 22) {
+    const key = `${centerX}:${s}`; if (!poleTops[key]) poleTops[key] = [];
+    const x = centerX + s * (ALLEY_X + 2.3); poleItems.push({ x, z, r: Math.PI / 2 }); crossItems.push({ x, y: 1.9, z, r: Math.PI / 2 }); cross2Items.push({ x, y: 1.9, z, r: Math.PI / 2 });
+    solid(x - 0.12, z - 0.12, x + 0.12, z + 0.12, 0, 7); poleTops[key].push(new THREE.Vector3(x, 6.9, z));
     mapRects.push({ x: x - 0.15, z: z - 0.15, w: 0.3, h: 0.3, type: 'pole' });
   }
   instanced(scene, pole, poleItems); instanced(scene, cross, crossItems); instanced(scene, cross2, cross2Items);
-  for (const s of [-1, 1]) { const arr = poleTops[s]; for (let i = 0; i + 1 < arr.length; i++) for (const off of [-0.5, 0, 0.5]) wire(scene, arr[i].clone().add(new THREE.Vector3(0, 0, off)), arr[i + 1].clone().add(new THREE.Vector3(0, 0, off)), wireMat, 0.8); }
+  for (const [key, arr] of Object.entries(poleTops)) for (let i = 0; i + 1 < arr.length; i++) for (const off of [-0.5, 0, 0.5]) wire(key.startsWith('0:') ? scene : duplicateWorldGroup, arr[i].clone().add(new THREE.Vector3(0, 0, off)), arr[i + 1].clone().add(new THREE.Vector3(0, 0, off)), wireMat, 0.8);
   // service drops to a few houses
-  for (const s of [-1, 1]) { const arr = poleTops[s]; for (let i = 0; i < arr.length; i++) { const z = arr[i].z + rr(-3, 3); wire(scene, arr[i], new THREE.Vector3(s * (HOUSE_FRONT + HOUSE_DEPTH - 0.5), 6.2, THREE.MathUtils.clamp(z, -40, 40)), wireMat, 0.5); } }
+  for (const centerX of [0, DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX]) for (const s of [-1, 1]) { const arr = poleTops[`${centerX}:${s}`], target = centerX ? duplicateWorldGroup : scene; for (let i = 0; i < arr.length; i++) { const z = arr[i].z + rr(-3, 3); wire(target, arr[i], new THREE.Vector3(centerX + s * (HOUSE_FRONT + HOUSE_DEPTH - 0.5), 6.2, THREE.MathUtils.clamp(z, -40, 40)), wireMat, 0.5); } }
   // alley security lights on poles
   const secLight = await prop('security_light');
-  for (const s of [-1, 1]) for (let i = 0; i < poleTops[s].length; i += 2) { const p = poleTops[s][i]; placeClone(scene, secLight, p.x - s * 0.1, 5.4, p.z, s < 0 ? Math.PI / 2 : -Math.PI / 2, 1); lamps.push({ x: p.x - s * 0.6, y: 5.2, z: p.z, warm: true, alley: true }); }
+  for (const centerX of [0, DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX]) for (const s of [-1, 1]) for (let i = 0; i < poleTops[`${centerX}:${s}`].length; i += 2) { const p = poleTops[`${centerX}:${s}`][i], target = centerX ? duplicateWorldGroup : scene; placeClone(target, secLight, p.x - s * 0.1, 5.4, p.z, s < 0 ? Math.PI / 2 : -Math.PI / 2, 1); lamps.push({ x: p.x - s * 0.6, y: 5.2, z: p.z, warm: true, alley: true, cityChunk: centerX ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.id : null }); }
   // street lamps (victorian style, Poly Haven)
   const lamp = await prop('street_lamp_01');
   const lampZ = { '-1': [-36, -12, 12, 36], '1': [-24, 0, 24] };
-  for (const s of [-1, 1]) for (const z of lampZ[s]) { const x = s * (ROAD_HALF + SIDEWALK - 0.4); placeClone(scene, lamp, x, 0, z, 0, 1.15, true); lamps.push({ x, y: 4.1, z, warm: true }); mapRects.push({ x: x - 0.2, z: z - 0.2, w: 0.4, h: 0.4, type: 'pole' }); }
+  for (const centerX of [0, DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX]) for (const s of [-1, 1]) for (const z of lampZ[s]) { const x = centerX + s * (ROAD_HALF + SIDEWALK - 0.4), target = centerX ? duplicateWorldGroup : scene; placeClone(target, lamp, x, 0, z, 0, 1.15, true); lamps.push({ x, y: 4.1, z, warm: true, cityChunk: centerX ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.id : null }); mapRects.push({ x: x - 0.2, z: z - 0.2, w: 0.4, h: 0.4, type: 'pole' }); }
   // lamps over the cross streets (backdrop)
   for (const s of [-1, 1]) for (const x of [-30, 0, 30]) { placeClone(scene, lamp, x, 0, s * 44.2, 0, 1.15, true); lamps.push({ x, y: 4.1, z: s * 44.2, warm: true, far: true }); }
   progress(0.6);
@@ -399,32 +433,32 @@ export async function buildWorld(scene, Q, progress = () => {}) {
   }
   // cars on the street
   const carSpots = [[-3.2, -34], [3.2, -16], [-3.2, 4], [3.2, 26], [-ALLEY_X - 0.3, 20], [ALLEY_X + 0.3, -8]];
-  for (const [x, z] of carSpots) {
+  for (const centerX of [0, DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX]) for (const [x, z] of carSpots) {
     // Build exactly one collider from the fully transformed clone. Milestone
     // 4.1B accidentally registered both the generic placeClone collider and a
     // second vehicle collider for the same mesh, creating conflicting contacts.
-    placeClone(scene, P.covered_car, x, 0, z, Math.PI / 2 + rr(-0.05, 0.05) + (rnd() < 0.5 ? Math.PI : 0), 1, { vehicle: 'covered-car' });
+    placeClone(centerX ? duplicateWorldGroup : scene, P.covered_car, centerX + x, 0, z, Math.PI / 2 + rr(-0.05, 0.05) + (rnd() < 0.5 ? Math.PI : 0), 1, { vehicle: centerX ? 'hood-duplicate-covered-car' : 'covered-car' });
   }
-  for (const l of lots) {
-    const s = l.side, bx = s * rr(27, 31), fx = s * rr(9.5, 12.5);
+  for (const l of [...lots, ...duplicatedLots]) {
+    const s = l.side, bx = l.centerX + s * rr(27, 31), fx = l.centerX + s * rr(9.5, 12.5), target = l.centerX ? duplicateWorldGroup : scene;
     // backyard clutter
     const k = rnd();
-    if (k < 0.3) { placeClone(scene, P.old_tyre, bx, 0, l.zc + rr(-2.5, 2.5), rnd() * 6, 1, true); placeClone(scene, P.old_tyre, bx + 0.5, 0, l.zc + rr(-2.5, 2.5), rnd() * 6, 1); }
-    else if (k < 0.5) placeClone(scene, P.old_bed_frame, bx, 0, l.zc + rr(-2, 2), rnd() * 6, 1, true);
-    else if (k < 0.7) { placeClone(scene, P.plastic_monobloc_chair_01, bx, 0, l.zc - 0.6, rnd() * 6, 1, true); placeClone(scene, P.plastic_monobloc_chair_01, bx + 0.7, 0, l.zc + 0.6, rnd() * 6, 1, true); }
-    else placeClone(scene, P.wooden_crate_01, bx, 0, l.zc + rr(-2, 2), rnd() * 6, 1, true);
-    if (rnd() < 0.5) placeClone(scene, P.metal_trash_can, s * (ALLEY_X - 2.9), 0, l.zc + rr(2.2, 3.4), rnd() * 6, 1, true);
-    if (rnd() < 0.35) placeClone(scene, P.trashbag, s * (ALLEY_X - 2.6), 0, l.zc - rr(2.2, 3.2), rnd() * 6, 1);
-    if (rnd() < 0.3) placeClone(scene, P.cardboard_box_01, s * (ALLEY_X - 1.2), 0, l.zc + rr(-3, 3), rnd() * 6, 1, true);
-    if (rnd() < 0.25) placeClone(scene, P.propane_tank, s * (HOUSE_FRONT + HOUSE_DEPTH + 0.6), 0, l.zc + rr(-2, 2), rnd() * 6, 1, true);
-    if (rnd() < 0.3) placeClone(scene, P.plastic_crate_01, s * (ALLEY_X - 2.6), 0, l.zc + rr(-1, 1), rnd() * 6, 1, true);
-    if (rnd() < 0.2) placeClone(scene, P.metal_jerrycan, s * (HOUSE_FRONT + HOUSE_DEPTH + 0.5), 0, l.zc + rr(-2, 2), rnd() * 6, 1);
+    if (k < 0.3) { placeClone(target, P.old_tyre, bx, 0, l.zc + rr(-2.5, 2.5), rnd() * 6, 1, true); placeClone(target, P.old_tyre, bx + 0.5, 0, l.zc + rr(-2.5, 2.5), rnd() * 6, 1); }
+    else if (k < 0.5) placeClone(target, P.old_bed_frame, bx, 0, l.zc + rr(-2, 2), rnd() * 6, 1, true);
+    else if (k < 0.7) { placeClone(target, P.plastic_monobloc_chair_01, bx, 0, l.zc - 0.6, rnd() * 6, 1, true); placeClone(target, P.plastic_monobloc_chair_01, bx + 0.7, 0, l.zc + 0.6, rnd() * 6, 1, true); }
+    else placeClone(target, P.wooden_crate_01, bx, 0, l.zc + rr(-2, 2), rnd() * 6, 1, true);
+    if (rnd() < 0.5) placeClone(target, P.metal_trash_can, l.centerX + s * (ALLEY_X - 2.9), 0, l.zc + rr(2.2, 3.4), rnd() * 6, 1, true);
+    if (rnd() < 0.35) placeClone(target, P.trashbag, l.centerX + s * (ALLEY_X - 2.6), 0, l.zc - rr(2.2, 3.2), rnd() * 6, 1);
+    if (rnd() < 0.3) placeClone(target, P.cardboard_box_01, l.centerX + s * (ALLEY_X - 1.2), 0, l.zc + rr(-3, 3), rnd() * 6, 1, true);
+    if (rnd() < 0.25) placeClone(target, P.propane_tank, l.centerX + s * (HOUSE_FRONT + HOUSE_DEPTH + 0.6), 0, l.zc + rr(-2, 2), rnd() * 6, 1, true);
+    if (rnd() < 0.3) placeClone(target, P.plastic_crate_01, l.centerX + s * (ALLEY_X - 2.6), 0, l.zc + rr(-1, 1), rnd() * 6, 1, true);
+    if (rnd() < 0.2) placeClone(target, P.metal_jerrycan, l.centerX + s * (HOUSE_FRONT + HOUSE_DEPTH + 0.5), 0, l.zc + rr(-2, 2), rnd() * 6, 1);
     // front yard lawn chairs / junk
-    if (rnd() < 0.4) { placeClone(scene, P.plastic_monobloc_chair_01, fx, 0, l.zc + rr(-2.5, 2.5), rnd() * 6, 1, true); }
-    if (rnd() < 0.25) placeClone(scene, P.old_tyre, fx, 0, l.zc + rr(-2.5, 2.5), rnd() * 6, 1, true);
+    if (rnd() < 0.4) { placeClone(target, P.plastic_monobloc_chair_01, fx, 0, l.zc + rr(-2.5, 2.5), rnd() * 6, 1, true); }
+    if (rnd() < 0.25) placeClone(target, P.old_tyre, fx, 0, l.zc + rr(-2.5, 2.5), rnd() * 6, 1, true);
     // wall mounted bits
-    const wx = s * (HOUSE_FRONT + 0.1), wz = l.zc + (s < 0 ? -HOUSE_W / 2 : HOUSE_W / 2);
-    if (rnd() < 0.5) placeClone(scene, P.utility_box_01, s * (HOUSE_FRONT + rr(2, 8)), 1.2, wz - s * 0 + (s < 0 ? -0.15 : 0.15), s < 0 ? Math.PI : 0, 1);
+    const wx = l.centerX + s * (HOUSE_FRONT + 0.1), wz = l.zc + (s < 0 ? -HOUSE_W / 2 : HOUSE_W / 2);
+    if (rnd() < 0.5) placeClone(target, P.utility_box_01, l.centerX + s * (HOUSE_FRONT + rr(2, 8)), 1.2, wz - s * 0 + (s < 0 ? -0.15 : 0.15), s < 0 ? Math.PI : 0, 1);
   }
   placeClone(scene, P.dead_tree_trunk, -29, 0, 25, 0.4, 1, true); placeClone(scene, P.power_box_01, 7.2, 0, -2, Math.PI, 1, true);
   for (const [x, z] of [[-ALLEY_X + 1.3, -42], [ALLEY_X - 1.3, 40]]) placeClone(scene, P.ammo_box, x, 0, z, rnd() * 6, 1);
@@ -488,6 +522,7 @@ export function resolve(p, r, y0, y1, feetY) {
   for (const c of colliders) {
     if (c.step && c.maxY - feetY <= 0.85) continue;          // climbable
     if (y1 <= c.minY || y0 >= c.maxY) continue;
+    if (c.maxX < p.x - r || c.minX > p.x + r || c.maxZ < p.z - r || c.minZ > p.z + r) continue;
     active.push(c);
   }
   return resolveCircleAabbs(p, r, active);
@@ -499,11 +534,16 @@ export function resolve(p, r, y0, y1, feetY) {
 const _moveColliders = [];
 export function moveAndSlide(p, dx, dz, r, y0, y1, feetY, contacts = null) {
   _moveColliders.length = 0;
+  const minX = Math.min(p.x, p.x + dx) - r, maxX = Math.max(p.x, p.x + dx) + r;
+  const minZ = Math.min(p.z, p.z + dz) - r, maxZ = Math.max(p.z, p.z + dz) + r;
   for (const c of colliders) {
     if (c.step && c.maxY - feetY <= 0.85) continue;
     if (y1 <= c.minY || y0 >= c.maxY) continue;
+    if (c.maxX < minX || c.minX > maxX || c.maxZ < minZ || c.minZ > maxZ) continue;
     _moveColliders.push(c);
   }
+  collisionBroadphaseStats.lastCandidates = _moveColliders.length;
+  collisionBroadphaseStats.maxCandidates = Math.max(collisionBroadphaseStats.maxCandidates, _moveColliders.length);
   return moveCircleWithSubsteps(p, dx, dz, r, _moveColliders, undefined, contacts);
 }
 // segment vs solid (non-fence) colliders; returns t in [0,1] of first hit or 1 if clear. Also normal.

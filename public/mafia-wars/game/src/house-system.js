@@ -1,5 +1,5 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
-import { HybridApartmentSystem, box, makeMaterial, wallCollider } from './apartment-system.js';
+import { HybridApartmentSystem, addInteriorIsolationShell, box, makeMaterial, wallCollider } from './apartment-system.js';
 import { insideInteractionRange, interactionCooldownReady, shouldTransitionApartment } from './city-layout.js';
 
 const TRANSITION_COOLDOWN = 0.65;
@@ -45,6 +45,7 @@ export class HybridHouseSystem extends HybridApartmentSystem {
     const porcelain = makeMaterial(0xd7d9d7), door = makeMaterial(0x462e23), brass = makeMaterial(0xc49a42, { metalness: 0.75 });
     const w = 12, d = 10, h = 3.2, cx = s.x, cz = s.z, t = 0.22, frontX = cx - w / 2;
 
+    this.isolationShell = addInteriorIsolationShell(g, [cx, y + 5.5, cz], [32, 14, 28], `house-interior-isolation-shell-${s.id}`);
     this.backdrop = box(g, makeMaterial(0x25231f), [32, 0.08, 28], [cx, y - 0.17, cz], `house-cutaway-backdrop-${s.id}`);
     box(g, floor, [w, 0.18, d], [cx, y - 0.09, cz], `house-floor-${s.id}`);
     this.ceilingPanels = [];
@@ -102,7 +103,8 @@ export class HybridHouseSystem extends HybridApartmentSystem {
       [cx + 4.75, y + 0.425, cz + 4.35, 1.3, 0.85, 0.65, 'vanity'], [cx + 2.75, y + 0.36, cz + 4.25, 0.75, 0.72, 0.9, 'toilet'],
     ];
     for (const [x, cy, z, sx, sy, sz, name] of furniture) wallCollider(this.addCollider, x, cy, z, sx, sy, sz, { interior: s.id, house: s.id, furniture: name });
-    const light = new THREE.PointLight(0xffd19a, this.mobile ? 32 : 50, 14, 2); light.position.set(cx, y + 2.7, cz); g.add(light);
+    const fill = new THREE.AmbientLight(0xffead6, this.mobile ? 0.58 : 0.74); fill.name = `house-interior-fill-${s.id}`; g.add(fill);
+    const light = new THREE.PointLight(0xffd19a, this.mobile ? 32 : 50, 14, 2); light.position.set(cx, y + 2.7, cz); light.name = `house-interior-key-${s.id}`; g.add(light);
   }
 
   update(player, input, now = 0) {

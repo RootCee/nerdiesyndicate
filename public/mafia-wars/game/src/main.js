@@ -7,13 +7,13 @@ import { UnrealBloomPass } from '/mafia-wars/game/vendor/three/jsm/postprocessin
 import { ShaderPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/OutputPass.js';
 import { manager, loadHDR, loadGLB, setAniso, setLowMemoryAssets } from './assets.js';
-import { buildWorld, colliders, lamps, windowsLit, resolve, MAP } from './world.js';
+import { buildWorld, colliders, collisionBroadphaseStats, lamps, windowsLit, resolve, MAP } from './world.js';
 import { Player } from './player.js';
 import { FX, Weapon, GUN_SPECS } from './weapon.js';
 import { Bot, buildNav, rayVsBots, freeCellNear } from './bots.js';
 import { Character, loadCharacters } from './characters.js';
 import { Launcher } from './rocket.js';
-import { addWall, wallSpec, initDestruction, updateDestruction, destruction, blast } from './destruction.js';
+import { addWall, wallSpec, initDestruction, updateDestruction, updateDestructionStreaming, beginDestructionPrewarm, destruction, blast } from './destruction.js';
 import { WALL_LOTS, GEO, houseDescs } from './world.js';
 import { addHouse } from './destruction.js';
 import { initHud, hud } from './hud.js';
@@ -25,6 +25,7 @@ import { ThirdPersonCamera } from './third-person-camera.js';
 import { buildCityExpansion } from './city-expansion.js';
 import { createCollisionDebug } from './collision-debug.js';
 import { requestedWeapon, weaponOrderForProfile } from './weapon-cycle.js';
+import { DUPLICATED_ORIGINAL_NEIGHBORHOOD, ORIGINAL_NEIGHBORHOOD_LAYOUT } from './city-layout.js';
 
 const qs = new URLSearchParams(location.search);
 // Legacy ladder support remains developer-only. Public Base identity and rankings are coming later.
@@ -140,14 +141,43 @@ const score = { red: 0, blue: 0 }; const MATCH = { limit: 100, time: 600, left: 
 const developerCombat = qs.get('dev') === 'combat';
 const selectedMode = developerCombat ? GAME_MODES.COMBAT : GAME_MODES.FREE_ROAM;
 let practiceCombat = false, combatLobbyOpen = false;
+let destructionStreamingStats = { activeStructures: 0, activeHouses: 0, activePanels: 0 };
 let combatAssetsReady = !Q.lowMemory, combatAssetsLoading = false;
 const ab = { 4: { need: 3, have: 0, name: 'SNITCH', sub: 'PRESS [4]' }, 5: { need: 5, have: 0, name: 'HOMIES', sub: 'PRESS [5]' }, 6: { need: 4, have: 0, name: 'SUICIDE BOMBER', sub: 'PRESS [6]' } };
 let snitchUntil = 0, killStreak = 0, streakT = 0, time = 0, hurtK = 0, respawnAt = 0;
 const ghostMat = new THREE.MeshBasicMaterial({ color: 0xff3040, transparent: true, opacity: 0.4, depthTest: false, depthWrite: false, toneMapped: false });
+const interiorSceneState = { active: false, outdoor: null };
 function setInteriorRenderLayer(active) {
   const layer = active ? 1 : 0;
   camera.layers.set(layer);
   localAvatar?.obj?.traverse((object) => object.layers.set(layer));
+  if (active && !interiorSceneState.active) {
+    interiorSceneState.outdoor = {
+      background: scene.background,
+      environment: scene.environment,
+      fog: scene.fog,
+      backgroundIntensity: scene.backgroundIntensity,
+      environmentIntensity: scene.environmentIntensity,
+    };
+    // Camera layers do not filter scene.background or scene.environment. Use
+    // an indoor-only background and remove outdoor image-based lighting while
+    // the interior layer is active; per-interior layer-1 lights remain.
+    scene.background = new THREE.Color(0x201e1b);
+    scene.environment = null;
+    scene.fog = null;
+    scene.backgroundIntensity = 1;
+    scene.environmentIntensity = 0;
+    interiorSceneState.active = true;
+  } else if (!active && interiorSceneState.active) {
+    const outdoor = interiorSceneState.outdoor;
+    scene.background = outdoor.background;
+    scene.environment = outdoor.environment;
+    scene.fog = outdoor.fog;
+    scene.backgroundIntensity = outdoor.backgroundIntensity;
+    scene.environmentIntensity = outdoor.environmentIntensity;
+    interiorSceneState.active = false;
+    interiorSceneState.outdoor = null;
+  }
 }
 const ctx = {
   scene, fx, player, bots, ghostMat, difficulty: 1,
@@ -218,7 +248,8 @@ function startGame(mode = selectedMode, options = {}) {
   practiceCombat = combat && !!options.practice;
   setCombatLobby(false);
   score.red = score.blue = 0; MATCH.left = MATCH.time; MATCH.over = false; MATCH.started = true; for (const n in ab) ab[n].have = 0; snitchUntil = 0;
-  if (city?.apartment) { city.apartment.active = false; city.apartment.interior.visible = false; }
+  for (const interior of [city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = false; interior.interior.visible = false; }
+  setInteriorRenderLayer(false);
   while (bots.length) ctx.remove(bots[bots.length - 1]);
   if (combat) {
     for (let i = 0; i < 5; i++) bots.push(new Bot(ctx, trooper, 'blue', spawnPoint('blue')));
@@ -306,18 +337,25 @@ async function boot() {
   // street lamp lights (real point lights) + emissive bulbs
   const bulbGeo = new THREE.SphereGeometry(0.11, 10, 8), bulbMat = new THREE.MeshBasicMaterial({ color: 0xffd9a0, toneMapped: false });
   for (const l of lamps) {
-    if (!l.far) { const pl = new THREE.PointLight(l.alley ? 0xffc27a : 0xffb46a, l.alley ? 90 : 150, l.alley ? 20 : 28, 2); pl.position.set(l.x, l.y, l.z); scene.add(pl); }
-    const bulb = new THREE.Mesh(bulbGeo, bulbMat); bulb.position.set(l.x, l.y + 0.05, l.z); bulb.scale.set(1, 1.3, 1); scene.add(bulb);
-    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: fx.flashMat.map, color: 0xffb060, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.55, toneMapped: false })); glow.position.copy(bulb.position); glow.scale.setScalar(1.6); scene.add(glow);
+    const parent = l.cityChunk ? scene.getObjectByName(`city-chunk-${l.cityChunk}`) || scene : scene;
+    if (!l.far) { const pl = new THREE.PointLight(l.alley ? 0xffc27a : 0xffb46a, l.alley ? 90 : 150, l.alley ? 20 : 28, 2); pl.position.set(l.x, l.y, l.z); parent.add(pl); }
+    const bulb = new THREE.Mesh(bulbGeo, bulbMat); bulb.position.set(l.x, l.y + 0.05, l.z); bulb.scale.set(1, 1.3, 1); parent.add(bulb);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: fx.flashMat.map, color: 0xffb060, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.55, toneMapped: false })); glow.position.copy(bulb.position); glow.scale.setScalar(1.6); parent.add(glow);
   }
   // destructible brick walls: front-yard walls on the WALL_LOTS lots (two segments each, a gap at the walkway) + two free-standing ones
-  for (const key of WALL_LOTS) {
-    const [s, i] = key.split(':').map(Number); const z0 = -40 + i * GEO.LOT, z1 = z0 + GEO.LOT, x = s * (GEO.ROAD_HALF + GEO.SIDEWALK + 1.4);
+  for (const neighborhood of [ORIGINAL_NEIGHBORHOOD_LAYOUT, DUPLICATED_ORIGINAL_NEIGHBORHOOD]) for (const key of WALL_LOTS) {
+    const [s, i] = key.split(':').map(Number); const z0 = -40 + i * GEO.LOT, z1 = z0 + GEO.LOT, x = neighborhood.centerX + s * (GEO.ROAD_HALF + GEO.SIDEWALK + 1.4);
     const wz = (z0 + z1) / 2 + (s < 0 ? GEO.HOUSE_W / 4 : -GEO.HOUSE_W / 4);
     const a0 = z0 + 0.3, a1 = wz - 0.9, b0 = wz + 0.9, b1 = z1 - 0.3;
-    addWall(scene, wallSpec(x, (a0 + a1) / 2, a1 - a0, 7, 1)); addWall(scene, wallSpec(x, (b0 + b1) / 2, b1 - b0, 7, 1));
+    const streaming = { id: neighborhood.id, centerX: neighborhood.centerX, centerZ: neighborhood.centerZ };
+    addWall(scene, wallSpec(x, (a0 + a1) / 2, a1 - a0, 7, 1, { id: `${neighborhood.id}-wall-${s}-${i}-a`, streaming }));
+    addWall(scene, wallSpec(x, (b0 + b1) / 2, b1 - b0, 7, 1, { id: `${neighborhood.id}-wall-${s}-${i}-b`, streaming }));
   }
-  addWall(scene, wallSpec(-12, 42.2, 6.4, 8, 0)); addWall(scene, wallSpec(12, -42.2, 6.4, 8, 0));
+  for (const neighborhood of [ORIGINAL_NEIGHBORHOOD_LAYOUT, DUPLICATED_ORIGINAL_NEIGHBORHOOD]) {
+    const streaming = { id: neighborhood.id, centerX: neighborhood.centerX, centerZ: neighborhood.centerZ };
+    addWall(scene, wallSpec(neighborhood.centerX - 12, 42.2, 6.4, 8, 0, { id: `${neighborhood.id}-freestanding-north`, streaming }));
+    addWall(scene, wallSpec(neighborhood.centerX + 12, -42.2, 6.4, 8, 0, { id: `${neighborhood.id}-freestanding-south`, streaming }));
+  }
   const houseStructures = new Map();
   const nh = qs.get('nhouses') ? +qs.get('nhouses') : houseDescs.length;
   for (let i = 0; i < houseDescs.length; i++) if (i < nh) {
@@ -325,6 +363,8 @@ async function boot() {
     if (houseDescs[i].id) houseStructures.set(houseDescs[i].id, spec);
   }
   city?.originalHouse?.bindDestruction(houseStructures.get(city.originalHouse.site.id));
+  city?.duplicatedHouse?.bindDestruction(houseStructures.get(city.duplicatedHouse.site.id));
+  destructionStreamingStats = updateDestructionStreaming(player.pos, Q.lowMemory ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.mobile : DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.desktop);
   pmsg.textContent = 'Welding the bricks…';
   const physMode = await initDestruction(scene, { enabled: qs.get('phys') !== '0' });
   console.log('destruction mode:', physMode, 'blocks:', destruction.blocks);
@@ -362,6 +402,7 @@ async function boot() {
   pmsg.textContent = 'Warming shaders…';
   snapShadow(player.pos);
   const restoreCityVisibility = !Q.lowMemory ? city?.beginPrewarm() : null;
+  const restoreDestructionVisibility = beginDestructionPrewarm();
   const warmCulling = [];
   if (!Q.lowMemory) scene.traverse((object) => {
     if (!object.isMesh && !object.isSprite) return;
@@ -372,7 +413,9 @@ async function boot() {
   fx.cam = camera; fx.warm(true);
   renderer.compile(scene, camera); if (composer) composer.render(); else renderer.render(scene, camera);
   for (const [object, frustumCulled] of warmCulling) object.frustumCulled = frustumCulled;
+  restoreDestructionVisibility();
   restoreCityVisibility?.(); city?.update(player);
+  destructionStreamingStats = updateDestructionStreaming(player.pos, Q.lowMemory ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.mobile : DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.desktop);
   fx.warm(false);
   for (const o of warm) o.visible = false; fx.parts[1].s.visible = false; fx.parts[2].s.visible = false; fx.parts[0].s.material = fx.parts[1].s.material = fx.parts[2].s.material = fx.dustMat;
   pbar.style.width = '100%'; pmsg.textContent = Q.mobile ? 'City ready · left thumb moves · right thumb aims' : 'City ready';
@@ -417,20 +460,23 @@ function loop(now) {
       const originalHouseState = apartmentState.active || apartmentState.transitioned
         ? { active: false, transitioned: false, prompt: '' }
         : city.originalHouse.update(player, input, time);
-      const houseState = apartmentState.active || apartmentState.transitioned || originalHouseState.active || originalHouseState.transitioned
+      const duplicatedHouseState = apartmentState.active || apartmentState.transitioned || originalHouseState.active || originalHouseState.transitioned
+        ? { active: false, transitioned: false, prompt: '' }
+        : city.duplicatedHouse.update(player, input, time);
+      const houseState = apartmentState.active || apartmentState.transitioned || originalHouseState.active || originalHouseState.transitioned || duplicatedHouseState.active || duplicatedHouseState.transitioned
         ? { active: false, transitioned: false, prompt: '' }
         : city.house.update(player, input, time);
-      const interiorActive = apartmentState.active || originalHouseState.active || houseState.active;
-      const venueState = interiorActive || apartmentState.transitioned || originalHouseState.transitioned || houseState.transitioned
+      const interiorActive = apartmentState.active || originalHouseState.active || duplicatedHouseState.active || houseState.active;
+      const venueState = interiorActive || apartmentState.transitioned || originalHouseState.transitioned || duplicatedHouseState.transitioned || houseState.transitioned
         ? { prompt: '', requestedLobby: false }
         : city.combatVenue.update(player, !!input.interact, time, combatLobbyOpen);
       if (venueState.requestedLobby) setCombatLobby(true);
-      const prompt = apartmentState.prompt || originalHouseState.prompt || houseState.prompt || venueState.prompt;
-      const activeHouseState = originalHouseState.prompt ? originalHouseState : houseState;
+      const prompt = apartmentState.prompt || originalHouseState.prompt || duplicatedHouseState.prompt || houseState.prompt || venueState.prompt;
+      const activeHouseState = [originalHouseState, duplicatedHouseState, houseState].find((state) => state.prompt) || houseState;
       const mobileLabel = venueState.prompt ? 'ENTER COMBAT' : activeHouseState.prompt && !activeHouseState.blocked ? (activeHouseState.active ? 'EXIT HOUSE' : 'ENTER HOUSE') : '';
       hud.prompt(prompt, interiorActive, mobileLabel);
       input.interact = false;
-      const transition = apartmentState.transitioned ? { type: 'apartment', state: apartmentState } : originalHouseState.transitioned ? { type: 'house', state: originalHouseState } : houseState.transitioned ? { type: 'house', state: houseState } : null;
+      const transition = apartmentState.transitioned ? { type: 'apartment', state: apartmentState } : originalHouseState.transitioned ? { type: 'house', state: originalHouseState } : duplicatedHouseState.transitioned ? { type: 'house', state: duplicatedHouseState } : houseState.transitioned ? { type: 'house', state: houseState } : null;
       if (transition) {
         setInteriorRenderLayer(transition.state.active);
         setCameraMode(true);
@@ -438,10 +484,12 @@ function loop(now) {
         hud.callout(transition.state.active ? transition.state.name.toUpperCase() : 'BACK ON THE BLOCK', transition.state.active ? (transition.type === 'house' ? 'PRIVATE HOUSE INTERIOR' : 'APARTMENT INTERIOR PROTOTYPE') : 'EXPLORE THE CITY');
       }
       city.update(player);
+      destructionStreamingStats = updateDestructionStreaming(player.pos, Q.lowMemory ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.mobile : DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.desktop);
     } else { hud.prompt(''); input.interact = false; }
     thirdCamera.update(dt);
     city?.apartment?.updateCameraVisibility(camera, player, dt);
     city?.originalHouse?.updateCameraVisibility(camera, player, dt);
+    city?.duplicatedHouse?.updateCameraVisibility(camera, player, dt);
     city?.house?.updateCameraVisibility(camera, player, dt);
     if (localAvatar) {
       const show = thirdCamera.enabled && !player.dead;
@@ -502,4 +550,4 @@ function loop(now) {
 }
 boot().catch((e) => { console.error(e); pmsg.textContent = 'Could not start: ' + e.message; });
 // expose for QA
-window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, destruction, blast, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };
+window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, destruction, blast, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };

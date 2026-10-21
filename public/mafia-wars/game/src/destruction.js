@@ -56,22 +56,29 @@ function makeStructure(scene, items, geo, mat, extra) {
   const unit = extra.kind === 'house' ? PANEL.x : BLOCK.x;
   const solid = items.filter((it) => !it.pane), panes = items.filter((it) => it.pane);
   const mesh = new THREE.InstancedMesh(geo, mat, Math.max(1, solid.length)); mesh.castShadow = true; mesh.receiveShadow = true; mesh.frustumCulled = false; mesh.count = solid.length;
+  mesh.name = extra.id ? `destructible-${extra.id}-solid-panels` : `destructible-${extra.kind}-solid-panels`;
   const m = new THREE.Matrix4(), s = new THREE.Vector3(1, 1, 1);
   solid.forEach((it, i) => { it.mesh = mesh; it.mi = i; s.set(it.size.x / unit, 1, 1); mesh.setMatrixAt(i, m.compose(it.p, it.q, s)); });
   mesh.instanceMatrix.needsUpdate = true; scene.add(mesh);
   let paneMesh = null;
   if (panes.length) {
     paneMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(PANEL.x, PANEL.y, 0.1), paneMaterial(), panes.length); paneMesh.castShadow = false; paneMesh.receiveShadow = true; paneMesh.frustumCulled = false;
+    paneMesh.name = extra.id ? `destructible-${extra.id}-pane-panels` : `destructible-${extra.kind}-pane-panels`;
     panes.forEach((it, i) => { it.mesh = paneMesh; it.mi = i; s.set(it.size.x / unit, 1, 1); paneMesh.setMatrixAt(i, m.compose(it.p, it.q, s)); });
     paneMesh.instanceMatrix.needsUpdate = true; scene.add(paneMesh);
   }
-  const spec = { items, mesh, paneMesh, unit, bodies: null, standing: true, touched: false, colliders: [], slabs: [], statics: null, ...extra };
+  const bounds = items.reduce((box, item) => ({
+    minX: Math.min(box.minX, item.p.x - item.size.x / 2), maxX: Math.max(box.maxX, item.p.x + item.size.x / 2),
+    minY: Math.min(box.minY, item.p.y - item.size.y / 2), maxY: Math.max(box.maxY, item.p.y + item.size.y / 2),
+    minZ: Math.min(box.minZ, item.p.z - item.size.x / 2), maxZ: Math.max(box.maxZ, item.p.z + item.size.x / 2),
+  }), { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, minZ: Infinity, maxZ: -Infinity });
+  const spec = { items, mesh, paneMesh, unit, bounds, bodies: null, standing: true, touched: false, colliders: [], slabs: [], statics: null, ...extra };
   D.walls.push(spec); D.blocks += items.length;
   return spec;
 }
 
 // --- garden wall: `len` m long, `courses` high, centred at (x,z), along x (dir 0) or z (dir 1)
-export function wallSpec(x, z, len, courses, dir) { const cols = Math.max(1, Math.round(len / BLOCK.x)); return { x, z, len: cols * BLOCK.x, cols, courses, dir }; }
+export function wallSpec(x, z, len, courses, dir, extra = {}) { const cols = Math.max(1, Math.round(len / BLOCK.x)); return { x, z, len: cols * BLOCK.x, cols, courses, dir, ...extra }; }
 export function addWall(scene, w) {
   const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), w.dir === 0 ? 0 : -Math.PI / 2); // -90°: a block's local +x runs along +z
   const items = [];
@@ -79,9 +86,9 @@ export function addWall(scene, w) {
     const u = c * BLOCK.x - w.len / 2 + BLOCK.x / 2 + ((r % 2) ? BLOCK.x / 2 : 0), y = BLOCK.y / 2 + r * BLOCK.y;
     items.push({ p: w.dir === 0 ? new THREE.Vector3(w.x + u, y, w.z) : new THREE.Vector3(w.x, y, w.z + u), q, size: BLOCK, face: 0 });
   }
-  const spec = makeStructure(scene, items, blockGeometry(BLOCK, 1.6, false), wallMaterial('brick', 0xffffff), { kind: 'wall', mass: BLOCK.x * BLOCK.y * BLOCK.z * DENSITY });
+  const spec = makeStructure(scene, items, blockGeometry(BLOCK, 1.6, false), wallMaterial('brick', 0xffffff), { kind: 'wall', id: w.id || null, streaming: w.streaming || null, mass: BLOCK.x * BLOCK.y * BLOCK.z * DENSITY });
   const hx = w.dir === 0 ? w.len / 2 : BLOCK.z / 2, hz = w.dir === 0 ? BLOCK.z / 2 : w.len / 2;
-  const c = { minX: w.x - hx, maxX: w.x + hx, minZ: w.z - hz, maxZ: w.z + hz, minY: 0, maxY: w.courses * BLOCK.y, face: 0 };
+  const c = { minX: w.x - hx, maxX: w.x + hx, minZ: w.z - hz, maxZ: w.z + hz, minY: 0, maxY: w.courses * BLOCK.y, face: 0, destructionId: w.id || null };
   colliders.push(c); spec.colliders = [c];
   return spec;
 }
@@ -127,9 +134,10 @@ export function addHouse(scene, h) {
   else { const L = Math.hypot(d / 2 + 0.35, Rh) - 0.16, ang = Math.atan2(Rh, d / 2 + 0.35); for (const s of [-1, 1]) { const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -s * ang); const c = new THREE.Vector3(s * (d / 4 + 0.18), top + Rh / 2 - 0.14, 0).add(new THREE.Vector3(s * 0.08, 0, 0).applyQuaternion(q)); slabs.push({ size: new THREE.Vector3(L, 0.14, w + 0.7), c, q }); } }
   const items = local.map((b) => ({ p: b.c.clone().applyMatrix4(M), q: b.rot ? Mrot.clone().multiply(rotZ) : Mrot.clone(), size: b.size, face: b.face, pane: b.pane }));
   const kind = h.brick ? 'brick' : (h.worn ? 'siding2' : 'siding');
-  const spec = makeStructure(scene, items, blockGeometry(PANEL, h.brick ? 1.6 : 1.25, !h.brick), wallMaterial(kind, h.tint), { kind: 'house', mass: PANEL.x * PANEL.y * PANEL.z * DENSITY, house: h, Mrot });
-  for (const s of slabs) {
+  const spec = makeStructure(scene, items, blockGeometry(PANEL, h.brick ? 1.6 : 1.25, !h.brick), wallMaterial(kind, h.tint), { kind: 'house', id: h.id || null, streaming: h.streaming || null, mass: PANEL.x * PANEL.y * PANEL.z * DENSITY, house: h, Mrot });
+  for (const [slabIndex, s] of slabs.entries()) {
     const mesh = new THREE.Mesh(blockGeometry(s.size, 1.4, false), wallMaterial('roof', 0)); mesh.castShadow = true; mesh.receiveShadow = true;
+    mesh.name = h.id ? `destructible-${h.id}-roof-${slabIndex}` : `destructible-house-roof-${slabIndex}`;
     mesh.position.copy(s.c).applyMatrix4(M); mesh.quaternion.copy(Mrot).multiply(s.q); scene.add(mesh);
     spec.slabs.push({ mesh, size: s.size, p: mesh.position.clone(), q: mesh.quaternion.clone(), body: null });
   }
@@ -237,12 +245,51 @@ export function updateDestruction(dt) {
   }
 }
 
+// Destructible panels are independent structures rather than members of the
+// city chunk groups. Apply the same distance-based activation principle here
+// so only the nearby original block (or its complete copy) is submitted to the
+// renderer. Physics/collision state stays deterministic and is restored when
+// the player returns.
+export function updateDestructionStreaming(playerPosition, radius = 112) {
+  let activeStructures = 0, activeHouses = 0, activePanels = 0;
+  for (const spec of D.walls) {
+    const stream = spec.streaming;
+    const visible = !stream || Math.hypot(playerPosition.x - stream.centerX, playerPosition.z - stream.centerZ) <= radius;
+    if (visible !== spec.streamVisible) {
+      spec.streamVisible = visible;
+      spec.mesh.visible = visible;
+      if (spec.paneMesh) spec.paneMesh.visible = visible;
+      for (const slab of spec.slabs) slab.mesh.visible = visible;
+      if (spec.statics) for (const object of spec.statics) object.visible = visible && !spec.touched;
+    }
+    if (!visible) continue;
+    activeStructures++; activePanels += spec.items.length;
+    if (spec.kind === 'house') activeHouses++;
+  }
+  return { activeStructures, activeHouses, activePanels };
+}
+
+export function beginDestructionPrewarm() {
+  const state = [];
+  for (const spec of D.walls) {
+    for (const object of [spec.mesh, spec.paneMesh, ...spec.slabs.map((slab) => slab.mesh), ...(spec.statics || [])]) {
+      if (!object) continue;
+      state.push([object, object.visible, object.frustumCulled]);
+      object.visible = true; object.frustumCulled = false;
+    }
+  }
+  return () => {
+    for (const [object, visible, frustumCulled] of state) { object.visible = visible; object.frustumCulled = frustumCulled; }
+  };
+}
+
 // A blast at `p`: push every block within `radius`, scaled by mass so blocks leave at up to `speed` m/s.
 // A face that loses blocks loses its collider: the hole can be walked and shot through.
 export function blast(p, radius = 3.6, speed = 7.5) {
   D.last = { p: p.toArray().map((v) => +v.toFixed(2)), hits: [] };
   for (const spec of D.walls) {
-    const near = spec.items.some((it) => Math.abs(it.p.x - p.x) < radius + 1 && Math.abs(it.p.z - p.z) < radius + 1 && Math.abs(it.p.y - p.y) < radius + 3);
+    const b = spec.bounds;
+    const near = p.x >= b.minX - radius && p.x <= b.maxX + radius && p.z >= b.minZ - radius && p.z <= b.maxZ + radius && p.y >= b.minY - radius && p.y <= b.maxY + radius;
     if (!near) continue;
     const faceHits = [0, 0, 0, 0]; let hit = 0;
     if (D.mode === 'gpu' && spec.bodies) {
@@ -253,12 +300,12 @@ export function blast(p, radius = 3.6, speed = 7.5) {
       });
       for (const s of spec.slabs) { const q = s.body.position; const d = Math.hypot(q[0] - p.x, q[1] - p.y, q[2] - p.z); if (d < radius + 2) { const m = s.size.x * s.size.y * s.size.z * ROOF_DENSITY; s.body.applyImpulse([(q[0] - p.x) / d * 2 * m, 3 * m, (q[2] - p.z) / d * 2 * m]); hit++; } }
     } else {
-      spec.lite = spec.lite || [];
+      spec.lite = spec.lite || []; spec.liteIndices = spec.liteIndices || new Set(spec.lite.map((entry) => entry.i));
       spec.items.forEach((it, i) => {
         const dx = it.p.x - p.x, dy = it.p.y - p.y, dz = it.p.z - p.z; const d = Math.hypot(dx, dy, dz);
-        if (d > radius || spec.lite.some((k) => k.i === i)) return;
+        if (d > radius || spec.liteIndices.has(i)) return;
         const k = 1 - d / radius, inv = 1 / Math.max(d, 0.2);
-        spec.lite.push({ i, size: it.size, p: it.p.clone(), v: new THREE.Vector3(dx * inv * speed * k, dy * inv * speed * k + 3 * k, dz * inv * speed * k), w: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(8), q: it.q.clone(), life: 4 }); hit++; faceHits[it.face]++;
+        spec.lite.push({ i, size: it.size, p: it.p.clone(), v: new THREE.Vector3(dx * inv * speed * k, dy * inv * speed * k + 3 * k, dz * inv * speed * k), w: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(8), q: it.q.clone(), life: 4 }); spec.liteIndices.add(i); hit++; faceHits[it.face]++;
       });
     }
     if (hit) { D.last.hits.push([spec.kind, hit, faceHits]); shatter(spec); faceHits.forEach((n, fi) => { if (n >= 2) openFace(spec, fi); }); D.onBlast?.(p, hit); }
