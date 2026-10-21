@@ -16,10 +16,17 @@ export class HybridHouseSystem extends HybridApartmentSystem {
     this.insideSpawn.set(interiorFrontX + 1.3, site.interiorY, site.z);
     this.exit.set(interiorFrontX + 0.9, site.interiorY, site.z);
     this.outsideSpawn.set(frontX - 1.45, 0, site.z);
+    if (site.entry) this.entry.set(site.entry.x, site.entry.y, site.entry.z);
+    if (site.outsideSpawn) this.outsideSpawn.set(site.outsideSpawn.x, site.outsideSpawn.y, site.outsideSpawn.z);
+    this.destruction = null;
   }
 
   buildExterior() {
     const s = this.site, g = this.exterior;
+    // Original-kit houses already supply their visible door, porch, walls and
+    // destruction-aware face colliders. Reusing that exterior avoids a fake
+    // shell and prevents duplicate collision geometry.
+    if (s.useExistingExterior) return;
     const door = makeMaterial(0x3d261d, { roughness: 0.72 });
     const trim = makeMaterial(0xd1c4a4), brass = makeMaterial(0xc49a42, { roughness: 0.3, metalness: 0.75 });
     const concrete = makeMaterial(0x8b8982), frontX = s.x - s.width / 2;
@@ -99,18 +106,28 @@ export class HybridHouseSystem extends HybridApartmentSystem {
   }
 
   update(player, input, now = 0) {
+    const exteriorDamaged = !!this.destruction?.touched;
+    if (exteriorDamaged && this.active) {
+      this.active = false; this.interior.visible = false;
+      player.pos.copy(this.outsideSpawn); player.vel.set(0, 0, 0); player.onGround = true;
+      this.transitionReadyAt = now + TRANSITION_COOLDOWN; this.prompt = '';
+      return { active: false, transitioned: true, forced: true, prompt: '', name: this.site.name, cooldownReady: false };
+    }
     const wantsInteract = !!input.interact;
     const target = this.active ? this.exit : this.entry;
     const near = insideInteractionRange(player.pos, target, this.active ? 2.7 : 2.8);
     const action = this.mobile ? (this.active ? 'TAP EXIT HOUSE' : 'TAP ENTER HOUSE') : (this.active ? '[E] EXIT HOUSE' : '[E] ENTER HOUSE');
-    this.prompt = near ? `${this.active ? 'EXIT' : 'ENTER'} ${this.site.name.toUpperCase()} · ${action}` : '';
+    this.prompt = near ? (exteriorDamaged ? `${this.site.name.toUpperCase()} DAMAGED · ENTRY CLOSED` : `${this.active ? 'EXIT' : 'ENTER'} ${this.site.name.toUpperCase()} · ${action}`) : '';
     const cooldownReady = interactionCooldownReady(now, this.transitionReadyAt);
+    if (exteriorDamaged) return { active: false, transitioned: false, prompt: this.prompt, cooldownReady: false, blocked: true };
     if (!shouldTransitionApartment(near, wantsInteract, cooldownReady)) return { active: this.active, transitioned: false, prompt: this.prompt, cooldownReady };
     this.active = !this.active; this.interior.visible = this.active;
     player.pos.copy(this.active ? this.insideSpawn : this.outsideSpawn);
     player.vel.set(0, 0, 0); player.onGround = true;
-    if (!this.active) player.yaw = Math.PI / 2;
+    if (!this.active) player.yaw = this.site.outsideYaw ?? Math.PI / 2;
     this.transitionReadyAt = now + TRANSITION_COOLDOWN; this.prompt = '';
     return { active: this.active, transitioned: true, prompt: '', name: this.site.name, cooldownReady: true };
   }
+
+  bindDestruction(spec) { this.destruction = spec || null; }
 }

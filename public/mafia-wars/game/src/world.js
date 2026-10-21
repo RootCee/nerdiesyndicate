@@ -4,6 +4,7 @@ import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { mergeGeometries } from '/mafia-wars/game/vendor/three/jsm/utils/BufferGeometryUtils.js';
 import { pbr, weather, prep, loadGLB } from './assets.js';
 import { moveCircleWithSubsteps, resolveCircleAabbs } from './collision-math.js';
+import { ORIGINAL_EXPANSION_HOUSES } from './city-layout.js';
 
 export const MAP = { minX: -43, maxX: 43, minZ: -46, maxZ: 46 };
 // front yards that get a brick wall (destructible) instead of chain-link: 'side:lotIndex'
@@ -186,7 +187,7 @@ function buildHouse(b, M, spec, hb = null) {
     const faces = [solidLocal(M, d / 2 - 0.1, hT / 2, 0, 0.2, hT, w), solidLocal(M, -d / 2 + 0.1, hT / 2, 0, 0.2, hT, w), solidLocal(M, 0, hT / 2, w / 2 - 0.1, d, hT, 0.2), solidLocal(M, 0, hT / 2, -w / 2 + 0.1, d, hT, 0.2)];
     solidLocal(M, 0, base / 2, 0, d, base, w, { step: true });                  // the floor: walk in once a wall is open
     const roofC = solidLocal(M, 0, top + Rh0 / 2, 0, d, Rh0, w);               // keeps rockets from flying through the roof
-    houseDescs.push({ M: M.clone(), d, w, base, top, H, brick, tint: wallTint, worn: !!spec.worn, ridgeX, Rh: Rh0, pitch, windows: curWindows, door: { u: dz, y: base + 1.15, w: 1.2, h: 2.3 }, faces, roofC, statics: [] });
+    houseDescs.push({ id: spec.id || null, name: spec.name || null, M: M.clone(), d, w, base, top, H, brick, tint: wallTint, worn: !!spec.worn, ridgeX, Rh: Rh0, pitch, windows: curWindows, door: { u: dz, y: base + 1.15, w: 1.2, h: 2.3 }, faces, roofC, statics: [] });
   }
   curWindows = null;
   const c = new THREE.Vector3(0, 0, 0).applyMatrix4(M); const e = new THREE.Vector3(d / 2 + (porch ? 2.4 : 0), 0, w / 2).applyMatrix4(M); const o = new THREE.Vector3(-d / 2, 0, -w / 2).applyMatrix4(M);
@@ -273,6 +274,15 @@ export async function buildWorld(scene, Q, progress = () => {}) {
       lots.push({ side, zc, spec });
       if (rnd() < 0.75) buildGarage(b, mat(side * (ALLEY_X + 2 + 2.8 + 0.3), 0, zc + rr(-0.6, 0.6), side < 0 ? Math.PI : 0));
     }
+  }
+  // Limited lateral extension: exactly two independent instances of the
+  // original destructible house kit, facing the existing North Cross road.
+  // Each receives its own descriptor, face colliders, panel bodies and static
+  // trim bucket so a missile cannot accidentally share state across houses.
+  for (const site of ORIGINAL_EXPANSION_HOUSES) {
+    const hb = new Bucket();
+    buildHouse(b, mat(site.x, 0, site.z, site.rotY), { ...site.spec, id: site.id, name: site.name, blocks: Q.houses !== false }, hb);
+    houseBuckets.push(hb);
   }
   // backdrop rows beyond the cross streets (not reachable)
   if (!Q.cityExpansion) for (let i = 0; i < 9; i++) for (const s of [-1, 1]) {

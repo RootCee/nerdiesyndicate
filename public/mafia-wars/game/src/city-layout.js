@@ -42,6 +42,25 @@ export const ENTERABLE_HOUSE_SITE = Object.freeze({
   facing: 'west',
 });
 
+// Two original Hood Warfare kit houses extend the first block sideways along
+// North Cross. They remain ordinary destruction.js structures (not decorative
+// city shells); this shared plan only supplies their stable identity and the
+// interaction position for the west house's separately loaded interior.
+export const ORIGINAL_EXPANSION_HOUSES = Object.freeze([
+  Object.freeze({
+    id: 'hood-cross-west', name: '47 North Cross House', x: -50, z: 62,
+    rotY: Math.PI / 2, facing: 'south', enterable: true, interiorY: 70,
+    entry: Object.freeze({ x: -48.45, y: 0, z: 53.75 }),
+    outsideSpawn: Object.freeze({ x: -48.45, y: 0, z: 53.45 }), outsideYaw: 0,
+    spec: Object.freeze({ floors: 2, brick: true, worn: false, tint: 0xffffff, ridgeX: true, porch: true, chimney: true }),
+  }),
+  Object.freeze({
+    id: 'hood-cross-east', name: '51 North Cross House', x: 50, z: 62,
+    rotY: Math.PI / 2, facing: 'south', enterable: false,
+    spec: Object.freeze({ floors: 2, brick: false, worn: true, tint: 0xd8e8f4, ridgeX: true, porch: true, chimney: false }),
+  }),
+]);
+
 const BUILDING_TINTS = [0x8d654c, 0x6d7884, 0x75604e, 0x7f7467, 0x665f58, 0x73514a];
 
 function district(id, centerZ, seedOffset) {
@@ -145,6 +164,7 @@ export function createCityPlan(profileName = 'desktop') {
     ],
     apartment: { ...APARTMENT_SITE },
     enterableHouse: { ...ENTERABLE_HOUSE_SITE },
+    originalExpansionHouses: ORIGINAL_EXPANSION_HOUSES.map((site) => ({ ...site, entry: site.entry ? { ...site.entry } : null, outsideSpawn: site.outsideSpawn ? { ...site.outsideSpawn } : null, spec: { ...site.spec } })),
     combatVenue: { ...COMBAT_VENUE_SITE },
   };
 }

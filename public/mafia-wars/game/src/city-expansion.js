@@ -108,7 +108,7 @@ export function buildCityExpansion(scene, Q = {}) {
   }
 
   const chunks = [];
-  let apartment = null, house = null, combatVenue = null;
+  let apartment = null, house = null, originalHouse = null, combatVenue = null;
   for (const district of plan.districts) {
     const group = new THREE.Group(); group.name = `city-chunk-${district.id}`; scene.add(group);
     for (const spec of district.buildings) addBuilding(group, spec, plan.profile, mats);
@@ -120,6 +120,9 @@ export function buildCityExpansion(scene, Q = {}) {
       apartment = new HybridApartmentSystem(scene, plan.apartment, { addCollider, mobile: plan.profile.key === 'mobile' });
       group.add(apartment.exterior);
       mapRects.push({ x: plan.apartment.x - plan.apartment.width / 2, z: plan.apartment.z - plan.apartment.depth / 2, w: plan.apartment.width, h: plan.apartment.depth, type: 'apartment' });
+      const originalSite = plan.originalExpansionHouses.find((site) => site.enterable);
+      originalHouse = new HybridHouseSystem(scene, { ...originalSite, width: 12, depth: 10, useExistingExterior: true }, { addCollider, mobile: plan.profile.key === 'mobile' });
+      group.add(originalHouse.exterior);
     }
     if (district.id === plan.enterableHouse.districtId) {
       house = new HybridHouseSystem(scene, plan.enterableHouse, { addCollider, mobile: plan.profile.key === 'mobile' });
@@ -142,7 +145,7 @@ export function buildCityExpansion(scene, Q = {}) {
   addCollider(MAP.minX - 2, MAP.maxZ, MAP.maxX + 2, MAP.maxZ + 2, 0, 12, { boundary: true });
 
   const city = {
-    plan, chunks, apartment, house, combatVenue, infrastructure, mode: 'free-roam',
+    plan, chunks, apartment, house, originalHouse, combatVenue, infrastructure, mode: 'free-roam',
     beginPrewarm() {
       const state = chunks.map((chunk) => chunk.group.visible);
       const culling = [];
@@ -167,7 +170,7 @@ export function buildCityExpansion(scene, Q = {}) {
       for (const chunk of chunks) {
         const visible = apartment?.active && chunk.id === 'north'
           ? true
-          : house?.active && chunk.id === plan.enterableHouse.districtId
+          : (house?.active && chunk.id === plan.enterableHouse.districtId) || (originalHouse?.active && chunk.id === 'north')
             ? true
           : chunkVisible(chunk.center, player.pos, plan.profile.activeRadius + chunk.radius * 0.35);
         if (visible !== chunk.visible) { chunk.visible = visible; chunk.group.visible = visible; }
@@ -182,6 +185,7 @@ export function buildCityExpansion(scene, Q = {}) {
         vehicles: plan.districts.reduce((total, district) => total + (district.vehicles?.length || 0), 0),
         apartment: apartment?.site.id || null,
         enterableHouse: house?.site.id || null,
+        originalEnterableHouse: originalHouse?.site.id || null,
         combatVenue: combatVenue?.site.id || null,
         bounds: { ...MAP },
       };

@@ -318,7 +318,13 @@ async function boot() {
     addWall(scene, wallSpec(x, (a0 + a1) / 2, a1 - a0, 7, 1)); addWall(scene, wallSpec(x, (b0 + b1) / 2, b1 - b0, 7, 1));
   }
   addWall(scene, wallSpec(-12, 42.2, 6.4, 8, 0)); addWall(scene, wallSpec(12, -42.2, 6.4, 8, 0));
-  const nh = qs.get('nhouses') ? +qs.get('nhouses') : houseDescs.length; for (let i = 0; i < houseDescs.length; i++) { if (i < nh) addHouse(scene, houseDescs[i]); }
+  const houseStructures = new Map();
+  const nh = qs.get('nhouses') ? +qs.get('nhouses') : houseDescs.length;
+  for (let i = 0; i < houseDescs.length; i++) if (i < nh) {
+    const spec = addHouse(scene, houseDescs[i]);
+    if (houseDescs[i].id) houseStructures.set(houseDescs[i].id, spec);
+  }
+  city?.originalHouse?.bindDestruction(houseStructures.get(city.originalHouse.site.id));
   pmsg.textContent = 'Welding the bricks…';
   const physMode = await initDestruction(scene, { enabled: qs.get('phys') !== '0' });
   console.log('destruction mode:', physMode, 'blocks:', destruction.blocks);
@@ -408,19 +414,23 @@ function loop(now) {
     player.update(dt, MATCH.over || combatLobbyOpen ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
     if (city && MATCH.mode === GAME_MODES.FREE_ROAM) {
       const apartmentState = city.apartment.update(player, input, time);
-      const houseState = apartmentState.active || apartmentState.transitioned
+      const originalHouseState = apartmentState.active || apartmentState.transitioned
+        ? { active: false, transitioned: false, prompt: '' }
+        : city.originalHouse.update(player, input, time);
+      const houseState = apartmentState.active || apartmentState.transitioned || originalHouseState.active || originalHouseState.transitioned
         ? { active: false, transitioned: false, prompt: '' }
         : city.house.update(player, input, time);
-      const interiorActive = apartmentState.active || houseState.active;
-      const venueState = interiorActive || apartmentState.transitioned || houseState.transitioned
+      const interiorActive = apartmentState.active || originalHouseState.active || houseState.active;
+      const venueState = interiorActive || apartmentState.transitioned || originalHouseState.transitioned || houseState.transitioned
         ? { prompt: '', requestedLobby: false }
         : city.combatVenue.update(player, !!input.interact, time, combatLobbyOpen);
       if (venueState.requestedLobby) setCombatLobby(true);
-      const prompt = apartmentState.prompt || houseState.prompt || venueState.prompt;
-      const mobileLabel = venueState.prompt ? 'ENTER COMBAT' : houseState.prompt ? (houseState.active ? 'EXIT HOUSE' : 'ENTER HOUSE') : '';
+      const prompt = apartmentState.prompt || originalHouseState.prompt || houseState.prompt || venueState.prompt;
+      const activeHouseState = originalHouseState.prompt ? originalHouseState : houseState;
+      const mobileLabel = venueState.prompt ? 'ENTER COMBAT' : activeHouseState.prompt && !activeHouseState.blocked ? (activeHouseState.active ? 'EXIT HOUSE' : 'ENTER HOUSE') : '';
       hud.prompt(prompt, interiorActive, mobileLabel);
       input.interact = false;
-      const transition = apartmentState.transitioned ? { type: 'apartment', state: apartmentState } : houseState.transitioned ? { type: 'house', state: houseState } : null;
+      const transition = apartmentState.transitioned ? { type: 'apartment', state: apartmentState } : originalHouseState.transitioned ? { type: 'house', state: originalHouseState } : houseState.transitioned ? { type: 'house', state: houseState } : null;
       if (transition) {
         setInteriorRenderLayer(transition.state.active);
         setCameraMode(true);
@@ -431,6 +441,7 @@ function loop(now) {
     } else { hud.prompt(''); input.interact = false; }
     thirdCamera.update(dt);
     city?.apartment?.updateCameraVisibility(camera, player, dt);
+    city?.originalHouse?.updateCameraVisibility(camera, player, dt);
     city?.house?.updateCameraVisibility(camera, player, dt);
     if (localAvatar) {
       const show = thirdCamera.enabled && !player.dead;
@@ -491,4 +502,4 @@ function loop(now) {
 }
 boot().catch((e) => { console.error(e); pmsg.textContent = 'Could not start: ' + e.message; });
 // expose for QA
-window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, destruction, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };
+window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, destruction, blast, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };
