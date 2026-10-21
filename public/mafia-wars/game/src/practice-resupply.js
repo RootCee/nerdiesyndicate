@@ -1,9 +1,11 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
-import { PRACTICE_RESUPPLY_COOLDOWN, resupplyPracticeAmmo } from './loadout.js';
+import { resupplyPracticeAmmo } from './loadout.js';
+import { SOLO_PRACTICE_POLICY, createResupplyState, inspectResupply, commitResupply } from './resupply-rules.js';
 
 export class PracticeResupply {
   constructor(scene, guns, launcher) {
-    this.guns = guns; this.launcher = launcher; this.cooldownUntil = 0;
+    this.guns = guns; this.launcher = launcher; this.policy = SOLO_PRACTICE_POLICY;
+    this.matchId = ''; this.teamId = 'blue'; this.playerId = 'local-player'; this.stationId = 'underground-ammo-1'; this.state = null;
     this.position = new THREE.Vector3(-5.5, 0, 34.5);
     this.group = new THREE.Group(); this.group.name = 'practice-ammo-resupply';
     const caseMat = new THREE.MeshStandardMaterial({ color: 0x3d4b35, roughness: 0.82, metalness: 0.16 });
@@ -15,16 +17,44 @@ export class PracticeResupply {
     this.group.position.copy(this.position); this.group.visible = false; scene.add(this.group);
   }
 
-  setEnabled(enabled) { this.group.visible = !!enabled; if (!enabled) this.cooldownUntil = 0; }
+  beginMatch({ matchId, teamId = 'blue', playerId = 'local-player', now = 0, policy = SOLO_PRACTICE_POLICY }) {
+    if (this.matchId === matchId && this.state) return false;
+    this.matchId = matchId; this.teamId = teamId; this.playerId = playerId; this.policy = policy;
+    this.state = createResupplyState({ matchId, teamId, stationId: this.stationId, now });
+    return true;
+  }
+
+  setEnabled(enabled) { this.group.visible = !!enabled; }
+
+  status(now) {
+    if (!this.state) this.beginMatch({ matchId: 'local-practice-0', now });
+    const status = inspectResupply(this.state, this.policy, this.playerId, now);
+    this.state = status.state;
+    return status;
+  }
+
+  promptFor(status) {
+    const seconds = Math.ceil(status.remainingSeconds);
+    if (status.reason === 'player-used') return `SOLO RESUPPLY USED · ${seconds}s`;
+    if (status.reason === 'station-depleted') return `AMMO STATION DEPLETED · ${seconds}s`;
+    return '[E] RESUPPLY AMMO · SOLO USE';
+  }
 
   update(player, interact, time) {
     if (!this.group.visible || player.dead || player.pos.distanceToSquared(this.position) > 7.84) return { prompt: '', supplied: false };
-    const remaining = Math.max(0, this.cooldownUntil - time);
-    if (!interact) return { prompt: remaining > 0 ? `AMMO RESUPPLY · ${Math.ceil(remaining)}s` : '[E] RESUPPLY AMMO', supplied: false, ready: remaining <= 0 };
-    if (remaining > 0) return { prompt: `AMMO RESUPPLY · ${Math.ceil(remaining)}s`, supplied: false, ready: false };
+    const before = this.status(time);
+    if (!interact) return { ...before, prompt: this.promptFor(before), supplied: false, ready: before.allowed };
+    if (!before.allowed) return { ...before, prompt: this.promptFor(before), supplied: false, ready: false };
     const amounts = resupplyPracticeAmmo(this.guns, this.launcher);
-    const supplied = Object.values(amounts).some((amount) => amount > 0);
-    if (supplied) this.cooldownUntil = time + PRACTICE_RESUPPLY_COOLDOWN;
-    return { prompt: supplied ? `AMMO RESUPPLIED · ${PRACTICE_RESUPPLY_COOLDOWN}s` : 'AMMO FULL', supplied, ready: !supplied, amounts };
+    const added = Object.values(amounts).reduce((sum, amount) => sum + amount, 0);
+    const committed = commitResupply(this.state, this.policy, { playerId: this.playerId, now: time, added });
+    this.state = committed.state;
+    return {
+      ...committed,
+      prompt: committed.consumed ? `AMMO RESUPPLIED · ${Math.ceil(committed.remainingSeconds)}s` : committed.reason === 'ammo-full' ? 'AMMO ALREADY AT CAPACITY' : this.promptFor(committed),
+      supplied: committed.consumed,
+      ready: committed.allowed,
+      amounts,
+    };
   }
 }

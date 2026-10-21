@@ -11,7 +11,7 @@ export class Player {
     this.camera = camera; this.pos = new THREE.Vector3(0, 0, 40); this.vel = new THREE.Vector3();
     this.yaw = Math.PI; this.pitch = 0; this.kick = 0; this.kickYaw = 0; this.hp = 100; this.maxHp = 100; this.dead = false; this.onGround = true;
     this.crouchT = 0; this.radius = PLAYER_COLLISION_RADIUS; this.height = 1.8; this.eye = 1.62; this.bob = 0; this.bobAmp = 0; this.sens = 0.0022; this.team = 'blue'; this.name = 'You';
-    this.kills = 0; this.deaths = 0; this.lastHit = -10; this.regenAt = 0; this.stepT = 0; this.speedMul = 1; this.fovAds = 0;
+    this.kills = 0; this.deaths = 0; this.lastHit = -10; this.regenAt = 0; this.stepT = 0; this.speedMul = 1; this.fovAds = 0; this.protectedUntil = 0;
     this.collisionHit = false; this.collisionNormal = new THREE.Vector3(); this.collisionContacts = [];
     camera.rotation.order = 'YXZ';
   }
@@ -76,6 +76,6 @@ export class Player {
     // even when the physics root was already stopped at the correct boundary.
     this.sprinting = sprint && planar > 0.35;
   }
-  damage(n, time) { if (this.dead) return false; this.hp -= n; this.lastHit = time; if (this.hp <= 0) { this.hp = 0; this.dead = true; this.deaths++; return true; } return false; }
+  damage(n, time) { if (this.dead || time < this.protectedUntil) return false; this.hp -= n; this.lastHit = time; if (this.hp <= 0) { this.hp = 0; this.dead = true; this.deaths++; return true; } return false; }
   respawn(p) { this.pos.copy(p); this.vel.set(0, 0, 0); this.collisionHit = false; this.collisionNormal.set(0, 0, 0); this.collisionContacts.length = 0; this.hp = this.maxHp; this.dead = false; this.yaw = p.z > 0 ? Math.PI : 0; this.pitch = 0; }
 }

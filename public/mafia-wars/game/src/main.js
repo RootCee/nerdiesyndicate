@@ -7,7 +7,7 @@ import { UnrealBloomPass } from '/mafia-wars/game/vendor/three/jsm/postprocessin
 import { ShaderPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/OutputPass.js';
 import { manager, loadHDR, loadGLB, setAniso, setLowMemoryAssets } from './assets.js';
-import { buildWorld, colliders, collisionBroadphaseStats, lamps, windowsLit, resolve, MAP } from './world.js';
+import { buildWorld, colliders, collisionBroadphaseStats, lamps, windowsLit, resolve, MAP, groundAt, lineClear } from './world.js';
 import { Player } from './player.js';
 import { FX, Weapon, GUN_SPECS } from './weapon.js';
 import { Bot, buildNav, rayVsBots, freeCellNear } from './bots.js';
@@ -29,6 +29,7 @@ import { DUPLICATED_ORIGINAL_NEIGHBORHOOD, ORIGINAL_NEIGHBORHOOD_LAYOUT } from '
 import { createPerformanceProfiler } from './performance-profiler.js';
 import { restorePracticeLoadout } from './loadout.js';
 import { PracticeResupply } from './practice-resupply.js';
+import { RESPAWN_CONFIG, UNDERGROUND_SPAWN_CANDIDATES, selectRespawnCandidate } from './respawn-rules.js';
 
 const qs = new URLSearchParams(location.search);
 const performanceProfile = createPerformanceProfiler(qs.get('perf') === '1');
@@ -160,10 +161,13 @@ async function selectWeapon(command) {
 }
 const bots = []; let trooper = null, localAvatar = null, city = null, collisionDebug = null;
 const avatarContactOffset = new THREE.Vector3();
-const score = { red: 0, blue: 0 }; const MATCH = { limit: 100, time: 600, left: 600, over: false, started: false, mode: GAME_MODES.FREE_ROAM };
+const score = { red: 0, blue: 0 }; const MATCH = { id: '', limit: 100, time: 600, left: 600, over: false, started: false, mode: GAME_MODES.FREE_ROAM };
 const developerCombat = qs.get('dev') === 'combat';
 const selectedMode = developerCombat ? GAME_MODES.COMBAT : GAME_MODES.FREE_ROAM;
 let practiceCombat = false, combatLobbyOpen = false;
+let combatSessionSerial = 0;
+const combatSession = { id: '', active: false, completed: true };
+const combatEvents = { deaths: [], damage: [], explosions: [], spawnUses: [] };
 let modeCalloutTimer = 0;
 let destructionStreamingStats = { activeStructures: 0, activeHouses: 0, activePanels: 0 };
 const neighborhoodLightPool = [];
@@ -221,10 +225,13 @@ const ctx = {
   resolve,
   hotspot: (team) => { const spots = [[0, -20], [0, 0], [0, 20], [-35, -10], [35, 10], [-35, 25], [35, -25], [-10, 0], [10, -30], [-10, 30], [28, 0], [-28, -30]]; const s = spots[Math.floor(Math.random() * spots.length)]; return freeCellNear(s[0], s[1], 5); },
   hurt: (victim, dmg, from, point, dir, t) => {
+    if (victim.protectedUntil && t < victim.protectedUntil) return;
+    if (point) combatEvents.damage.push({ time: t, position: { x: point.x, z: point.z } });
     if (victim === player) { if (player.damage(dmg, t)) onDeath(player, from); else { hurtK = 1; sfx.hurt(); } }
     else if (victim.damage(dmg, from, t, point, dir)) onDeath(victim, from);
   },
   explode: (p, bomber) => {
+    combatEvents.explosions.push({ time, position: { x: p.x, z: p.z } });
     fx.explosion(p); sfx.explode(p); blast(p, 3.6, 7.5);
     for (const v of [player, ...bots]) { if (v.dead || v === bomber) continue; const d = v.pos.distanceTo(p); if (d < 7 && v.team !== bomber.team) ctx.hurt(v, Math.round(140 * (1 - d / 7)), bomber, p, new THREE.Vector3(0, 1, 0), time); }
     if (player.pos.distanceTo(p) < 12) player.kick += 0.08 * (1 - player.pos.distanceTo(p) / 12);
@@ -232,7 +239,61 @@ const ctx = {
   },
   remove: (b) => { const i = bots.indexOf(b); if (i >= 0) bots.splice(i, 1); b.ch.dispose(scene); },
 };
-function spawnPoint(team) { const z = team === 'blue' ? 36 + Math.random() * 6 : -42 + Math.random() * 6; const lanes = [0, -2.8, 2.8, 5.5, -5.5, 35.5, -35.5]; const x = lanes[Math.floor(Math.random() * lanes.length)]; return freeCellNear(x, z, 3); }
+function beginCombatSession() {
+  const fresh = !combatSession.id || combatSession.completed;
+  if (fresh) {
+    combatSession.id = `local-match-${++combatSessionSerial}`; combatSession.completed = false;
+    for (const events of Object.values(combatEvents)) events.length = 0;
+    restorePracticeLoadout(guns, launcher);
+    practiceResupply.beginMatch({ matchId: combatSession.id, teamId: 'blue', playerId: 'local-player', now: time });
+  }
+  combatSession.active = true; MATCH.id = combatSession.id;
+  return fresh;
+}
+function candidateGround(candidate) { return groundAt(candidate.x, candidate.z, 0); }
+function pruneCombatEvents() {
+  const oldest = time - Math.max(RESPAWN_CONFIG.recentDeathWindow, RESPAWN_CONFIG.recentUseWindow) - 2;
+  for (const events of Object.values(combatEvents)) {
+    let first = 0; while (first < events.length && events[first].time < oldest) first++;
+    if (first) events.splice(0, first);
+    if (events.length > 64) events.splice(0, events.length - 64);
+  }
+}
+function candidateClear(candidate) {
+  if (candidate.x < MAP.minX + player.radius || candidate.x > MAP.maxX - player.radius || candidate.z < MAP.minZ + player.radius || candidate.z > MAP.maxZ - player.radius) return false;
+  const y = candidateGround(candidate);
+  for (const c of colliders) {
+    if (c.maxY < y + 0.2 || c.minY > y + player.height) continue;
+    const nx = Math.max(c.minX, Math.min(candidate.x, c.maxX)), nz = Math.max(c.minZ, Math.min(candidate.z, c.maxZ));
+    const dx = candidate.x - nx, dz = candidate.z - nz;
+    if (dx * dx + dz * dz < player.radius * player.radius) return false;
+  }
+  return true;
+}
+function selectArenaSpawn(team, entity = null, random = Math.random) {
+  pruneCombatEvents();
+  const enemies = ctx.enemiesOf(team).filter((other) => other !== entity && !other.dead);
+  const occupied = [player, ...bots].filter((other) => other !== entity && !other.dead).map((other) => ({ position: other.pos }));
+  const result = selectRespawnCandidate({
+    matchId: combatSession.id, teamId: team, playerId: entity?.id ?? (entity === player ? 'local-player' : 'initial'),
+    candidates: UNDERGROUND_SPAWN_CANDIDATES[team], enemies, occupied, now: time,
+    recentDeaths: combatEvents.deaths, recentDamage: combatEvents.damage, recentExplosions: combatEvents.explosions, recentUses: combatEvents.spawnUses,
+    isValid: candidateClear,
+    hasLineOfSight: (candidate, enemy) => lineClear(new THREE.Vector3(candidate.x, candidateGround(candidate) + 1.25, candidate.z), new THREE.Vector3(enemy.x, (enemy.y || 0) + 1.25, enemy.z)),
+    random,
+  });
+  let candidate = result.candidate;
+  if (!candidate) {
+    const emergency = freeCellNear(0, team === 'blue' ? 39 : -39, 5);
+    candidate = { id: `${team}-validated-emergency`, x: emergency.x, z: emergency.z };
+    result.fallback = true; result.reason = 'validated-emergency';
+  }
+  const position = new THREE.Vector3(candidate.x, candidateGround(candidate), candidate.z);
+  combatEvents.spawnUses.push({ time, candidateId: candidate.id, position: { x: candidate.x, z: candidate.z } });
+  if (combatEvents.spawnUses.length > 64) combatEvents.spawnUses.splice(0, combatEvents.spawnUses.length - 64);
+  console.debug('respawn selection:', { matchId: combatSession.id, team, candidate: candidate.id, score: result.score, reason: result.reason, fallback: result.fallback });
+  return { ...result, candidate, position };
+}
 function onDeath(victim, killer) {
   const kName = killer ? killer.name : '?', kTeam = killer ? killer.team : 'red';
   hud.feed(kName, kTeam, victim.name, victim.team);
@@ -242,7 +303,14 @@ function onDeath(victim, killer) {
     if (killStreak === 2) hud.killText('DOUBLE KILL'); else if (killStreak === 3) hud.killText('TRIPLE KILL'); else if (killStreak >= 4) hud.killText('RAMPAGE');
     for (const n in ab) { if (ab[n].have < ab[n].need) { ab[n].have++; if (ab[n].have === ab[n].need) { hud.callout(ab[n].name + ' READY', ab[n].sub, $('ab' + n).querySelector('svg').outerHTML); sfx.ding(); } } }
   } else if (killer && killer.team === 'blue' && killer !== player && victim.team === 'red' && victim.lastAttacker === player) { hud.points('+25'); hud.killText('KILL ASSIST'); }
-  if (victim === player) { respawnAt = time + 4; hud.hurt(1); sfx.death(); } else sfx.deathAt(victim.pos);
+  combatEvents.deaths.push({ time, position: { x: victim.pos.x, z: victim.pos.z }, team: victim.team });
+  if (victim === player) {
+    // Death freezes the exact magazine/reserve values. A reload that was in
+    // progress is cancelled instead of completing invisibly during the death cam.
+    for (const gun of Object.values(guns)) gun.reloading = 0;
+    launcher.reloading = 0; input.reload = false;
+    respawnAt = time + 4; hud.hurt(1); sfx.death();
+  } else sfx.deathAt(victim.pos);
   hud.score(score.red, score.blue);
   if (!MATCH.over && (score.red >= MATCH.limit || score.blue >= MATCH.limit)) endMatch();
 }
@@ -254,7 +322,7 @@ function useAbility(n) {
 }
 function endMatch() {
   if (!isCombatMode(MATCH.mode)) return;
-  MATCH.over = true; const win = score.blue > score.red; if (win) sfx.victory(); else sfx.defeat(); $('ov').classList.remove('off'); $('end').textContent = win ? 'VICTORY' : score.blue === score.red ? 'DRAW' : 'DEFEAT';
+  MATCH.over = true; combatSession.completed = true; const win = score.blue > score.red; if (win) sfx.victory(); else sfx.defeat(); $('ov').classList.remove('off'); $('end').textContent = win ? 'VICTORY' : score.blue === score.red ? 'DRAW' : 'DEFEAT';
   $('pmsg').textContent = `BLUE ${score.blue} · RED ${score.red} · YOU ${player.kills} KILLS / ${player.deaths} DEATHS`; $('go').textContent = practiceCombat ? 'Return to City' : 'Run it back'; $('go').classList.add('on'); $('hint').textContent = practiceCombat ? 'AI PRACTICE COMPLETE · RETURN TO THE UNDERGROUND' : '';
   submitMatch();
   if (document.exitPointerLock) document.exitPointerLock();
@@ -283,20 +351,23 @@ function startGame(mode = selectedMode, options = {}) {
   MATCH.mode = normalizeGameMode(mode); const combat = isCombatMode(MATCH.mode);
   $('weaponTray')?.classList.remove('on'); document.body.classList.remove('weapon-selecting');
   practiceCombat = combat && !!options.practice;
+  const freshCombatSession = combat ? beginCombatSession() : false;
   practiceResupply.setEnabled(practiceCombat);
   setCombatLobby(false);
   score.red = score.blue = 0; MATCH.left = MATCH.time; MATCH.over = false; MATCH.started = true; for (const n in ab) ab[n].have = 0; snitchUntil = 0;
   for (const interior of [city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = false; interior.interior.visible = false; }
   setInteriorRenderLayer(false);
   while (bots.length) ctx.remove(bots[bots.length - 1]);
-  if (combat) {
-    for (let i = 0; i < 5; i++) bots.push(new Bot(ctx, trooper, 'blue', spawnPoint('blue')));
-    for (let i = 0; i < 6; i++) bots.push(new Bot(ctx, trooper, 'red', spawnPoint('red')));
-  }
   player.team = combat ? 'blue' : null;
+  if (combat) {
+    for (let i = 0; i < 5; i++) bots.push(new Bot(ctx, trooper, 'blue', selectArenaSpawn('blue').position));
+    for (let i = 0; i < 6; i++) bots.push(new Bot(ctx, trooper, 'red', selectArenaSpawn('red').position));
+  }
   city?.setMode(combat ? 'combat' : 'free-roam');
   const freeRoamSpawn = options.spawn?.clone?.() || (city?.apartment && qs.get('spawn') === 'apartment' ? city.apartment.outsideSpawn.clone() : freeCellNear(0, 28, 5));
-  player.respawn(combat ? spawnPoint('blue') : freeRoamSpawn);
+  player.respawn(combat ? selectArenaSpawn('blue', player).position : freeRoamSpawn);
+  if (combat) player.protectedUntil = time + RESPAWN_CONFIG.spawnProtectionSeconds;
+  else player.protectedUntil = 0;
   // The original Hood Warfare neighborhood is the combat arena. Entering via
   // The Underground happens outside its Free Roam render radius, so explicitly
   // activate it for combat and immediately restore position-based streaming on
@@ -308,7 +379,8 @@ function startGame(mode = selectedMode, options = {}) {
   );
   updateNeighborhoodLights(destructionStreamingStats.activeStreamingId);
   if (!combat && Number.isFinite(options.yaw)) player.yaw = options.yaw;
-  restorePracticeLoadout(guns, launcher); for (const k in guns) guns[k].holstered = k !== 'ak'; arsenal.cur = 'ak'; pendingWeapon = ''; player.kills = 0; player.deaths = 0;
+  for (const k in guns) guns[k].holstered = k !== 'ak'; arsenal.cur = 'ak'; pendingWeapon = ''; player.kills = 0; player.deaths = 0;
+  if (freshCombatSession) console.log('new combat ammunition lifecycle:', MATCH.id);
   setCameraMode(!combat);
   document.body.classList.toggle('free-roam', !combat); $('modebadge').textContent = combat ? 'Original Combat' : 'Free Roam · V Camera';
   if (practiceCombat) $('modebadge').textContent = 'AI Practice Match';
@@ -328,6 +400,7 @@ function startGame(mode = selectedMode, options = {}) {
 function returnToCity() {
   const venue = city?.combatVenue;
   startGame(GAME_MODES.FREE_ROAM, { spawn: venue?.outsideSpawn, yaw: venue?.outsideYaw });
+  combatSession.active = false;
   if (venue) venue.transitionReadyAt = time + 0.8;
   hud.callout('BACK IN NERDIE CITY', 'THE UNDERGROUND · WEST INDUSTRIAL DISTRICT');
 }
@@ -443,6 +516,8 @@ async function boot() {
   }
   launcher.rayTargets = (o, d, maxT, owner) => rayVsBots(o, d, maxT, bots.filter((b) => b !== owner && (owner !== player || b.team === 'red' || b.kind === 'bomber')));
   launcher.onExplode = (p, owner, t) => {
+    combatEvents.explosions.push({ time: t, position: { x: p.x, z: p.z } });
+    if (owner?.protectedUntil && t < owner.protectedUntil) return;
     for (const v of [player, ...bots]) {
       if (v.dead) continue; const d = v.pos.distanceTo(p); if (d > 6.5) continue;
       const self = v === owner; if (!self && owner && v.team === owner.team && v !== player) continue;
@@ -588,6 +663,12 @@ function loop(now) {
       selectWeapon(input.swap);
     }
     input.swap = '';
+    // The attack that cancels protection is consumed before any weapon update,
+    // so it can never deal damage while the player is still invulnerable.
+    if (input.fire && time < player.protectedUntil) {
+      player.protectedUntil = time; input.fire = false;
+      hud.callout('SPAWN PROTECTION ENDED', 'ATTACK CANCELLED PROTECTION');
+    }
     const idle = { fire: false, ads: false, reload: false }, live = MATCH.over ? { fire: false } : input;
     for (const k in guns) { const g = guns[k]; g.baseFov = weapon.baseFov; g.portrait = weapon.portrait; g.fovOwner = arsenal.cur === k || (arsenal.cur === 'rpg' && k === 'ak'); g.update(dt, arsenal.cur === k ? live : idle, look, time); }
     if (thirdCamera.enabled) for (const g of Object.values(guns)) g.rig.visible = false;
@@ -595,10 +676,14 @@ function loop(now) {
     launcher.portrait = weapon.portrait; launcher.update(dt, MATCH.over ? { fire: false } : input, look, time, arsenal.cur === 'rpg');
     if (thirdCamera.enabled) launcher.rig.visible = false;
     for (const b of bots) {
-      if (b.dead && b.respawnAt && time > b.respawnAt && !b.expires && !MATCH.over) b.respawn(spawnPoint(b.team));
+      if (b.dead && b.respawnAt && time > b.respawnAt && !b.expires && !MATCH.over) { const spawn = selectArenaSpawn(b.team, b); b.respawn(spawn.position, time, spawn.protectionSeconds); }
       b.update(dt, time);
     }
-    if (player.dead && time > respawnAt && !MATCH.over) { player.respawn(isCombatMode(MATCH.mode) ? spawnPoint('blue') : freeCellNear(0, 28, 5)); player.team = isCombatMode(MATCH.mode) ? 'blue' : null; restorePracticeLoadout(guns, launcher); hud.hurt(0); }
+    if (player.dead && time > respawnAt && !MATCH.over) {
+      const spawn = isCombatMode(MATCH.mode) ? selectArenaSpawn('blue', player) : null;
+      player.respawn(spawn ? spawn.position : freeCellNear(0, 28, 5)); player.team = isCombatMode(MATCH.mode) ? 'blue' : null;
+      player.protectedUntil = spawn ? time + spawn.protectionSeconds : 0; hud.hurt(0);
+    }
     performanceProfile.end('weapons-bots', systemStarted);
   }
   let systemStarted = performanceProfile.start();
@@ -612,6 +697,7 @@ function loop(now) {
   if (MATCH.started && !MATCH.over && isCombatMode(MATCH.mode) && time > nextDistant) { sfx.distantGunfire(); nextDistant = time + 18 + Math.random() * 30; }
   // HUD
   if (MATCH.started) {
+    hud.protection(Math.max(0, player.protectedUntil - time));
     if (arsenal.cur === 'rpg') hud.ammo(launcher.loaded, launcher.reserve, player.kills, 'RPG-7', 'rpg'); else { const g = curGun(); hud.ammo(g.mag, g.reserve, player.kills, g.name, arsenal.cur); }
     const snitch = time < snitchUntil; for (const n in ab) hud.ability(n, ab[n].have / ab[n].need, ab[n].have >= ab[n].need);
     labelItems.length = 0; dots.length = 0;
@@ -632,4 +718,4 @@ function loop(now) {
 }
 boot().catch((e) => { console.error(e); pmsg.textContent = 'Could not start: ' + e.message; });
 // expose for QA
-window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, destruction, blast, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };
+window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };

@@ -62,6 +62,8 @@ canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block
 #interactPrompt { position: absolute; left: 50%; bottom: calc(96px + var(--sab)); transform: translateX(-50%) translateY(8px); padding: 10px 16px; border: 1px solid rgba(217,172,88,.65); border-radius: 7px; background: rgba(8,8,7,.82); color: var(--gold-bright); font: 600 12px/1 'Barlow'; letter-spacing: .16em; text-transform: uppercase; opacity: 0; transition: opacity .16s, transform .16s; pointer-events: none; white-space: nowrap; }
 #interactPrompt.on { opacity: 1; transform: translateX(-50%); }
 #interactPrompt.interior { border-color: rgba(255,255,255,.45); color: #f6f2e9; }
+#spawnProtection { position: absolute; left: 50%; top: calc(72px + var(--sat)); transform: translateX(-50%) translateY(-5px); padding: 6px 11px; border: 1px solid rgba(99,190,255,.65); border-radius: 14px; background: rgba(7,22,34,.78); color: #a9dcff; font: 700 10px/1 'Barlow'; letter-spacing: .12em; opacity: 0; transition: opacity .15s, transform .15s; pointer-events: none; }
+#spawnProtection.on { opacity: 1; transform: translateX(-50%); }
 #kill { font: 400 18px/1 'Marker'; color: #fff; text-shadow: 0 2px 0 #000; margin-top: 44px; opacity: 0; transition: opacity .2s; }
 #kill.on { opacity: 1; }
 #pts { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -78px); font: 400 15px/1 'Marker'; color: #fff; text-shadow: 0 2px 0 #000; opacity: 0; }
@@ -205,6 +207,7 @@ body.weapon-selecting #interactPrompt, body.weapon-selecting #tInteract { opacit
   <div id="hit"><svg viewBox="0 0 24 24"><path d="M4 4l5 5M20 4l-5 5M4 20l5-5M20 20l-5-5"/></svg></div>
   <div id="hurt"></div>
   <div id="interactPrompt"></div>
+  <div id="spawnProtection" role="status" aria-live="polite"></div>
   <div id="ammo"><div id="wname">AK-47</div><div><span class="mag" id="mag">30</span><span class="res" id="res">180</span><span class="ab" id="kills">1 ☠</span></div></div>
 </div>
 

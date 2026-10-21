@@ -3,7 +3,7 @@ import { mapRects, MAP } from './world.js';
 const $ = (s) => document.querySelector(s);
 const el = {};
 export function initHud() {
-  for (const id of ['fps', 'map', 'state', 'sRed', 'sBlue', 'timer', 'feed', 'callout', 'kill', 'pts', 'hit', 'hurt', 'labels', 'mag', 'res', 'kills', 'ab4', 'ab5', 'ab6', 'hud', 'wname', 'interactPrompt', 'tInteract', 'weaponTray']) el[id] = document.getElementById(id);
+  for (const id of ['fps', 'map', 'state', 'sRed', 'sBlue', 'timer', 'feed', 'callout', 'kill', 'pts', 'hit', 'hurt', 'labels', 'mag', 'res', 'kills', 'ab4', 'ab5', 'ab6', 'hud', 'wname', 'interactPrompt', 'tInteract', 'weaponTray', 'spawnProtection']) el[id] = document.getElementById(id);
   el.map2d = el.map.getContext('2d');
   // bake the block map once: 4 px per metre on a 100x100 m canvas
   const W = MAP.maxX - MAP.minX, H = MAP.maxZ - MAP.minZ, S = Math.min(4, 512 / Math.max(W, H)); const off = document.createElement('canvas'); off.width = Math.ceil(W * S); off.height = Math.ceil(H * S); const g = off.getContext('2d');
@@ -43,6 +43,12 @@ export const hud = {
   points(t = '+100') { el.pts.textContent = t; el.pts.classList.remove('on'); void el.pts.offsetWidth; el.pts.classList.add('on'); },
   hit(kill) { el.hit.classList.remove('on', 'kill'); void el.hit.offsetWidth; el.hit.classList.add('on'); if (kill) el.hit.classList.add('kill'); },
   hurt(k) { el.hurt.style.opacity = THREE.MathUtils.clamp(k, 0, 1); },
+  protection(seconds) {
+    if (!el.spawnProtection) return;
+    const active = seconds > 0;
+    el.spawnProtection.classList.toggle('on', active);
+    el.spawnProtection.textContent = active ? `SPAWN SHIELD ${seconds.toFixed(1)}s` : '';
+  },
   ability(n, frac, ready) { const e = el['ab' + n]; e.querySelector('.fill').style.transform = `scaleY(${frac})`; e.classList.toggle('ready', ready); },
   labels(camera, items) {
     // items: {pos, name, team, dist}

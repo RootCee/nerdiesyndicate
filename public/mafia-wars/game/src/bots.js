@@ -61,7 +61,7 @@ export class Bot {
   constructor(ctx, template, team, pos, opts = {}) {
     this.ctx = ctx; this.team = team; this.id = botId++; this.kind = opts.kind || 'soldier'; this.expires = opts.expires || 0; this.owner = opts.owner || null;
     this.name = opts.name || (team === 'red' ? NAMES_RED[this.id % NAMES_RED.length] : NAMES_BLUE[this.id % NAMES_BLUE.length]);
-    this.pos = pos.clone(); this.yaw = Math.random() * 6.28; this.hp = 100; this.dead = false; this.deadT = 0; this.respawnAt = 0; this.kills = 0;
+    this.pos = pos.clone(); this.yaw = Math.random() * 6.28; this.hp = 100; this.dead = false; this.deadT = 0; this.respawnAt = 0; this.kills = 0; this.protectedUntil = 0;
     this.path = null; this.pathI = 0; this.repathT = 0; this.target = null; this.lastSeen = null; this.seeT = 0; this.perceiveT = Math.random() * 0.2; this.burst = 0; this.burstGap = 0; this.fireT = 0; this.reactT = 0;
     this.strafe = 0; this.strafeT = 0; this.wander = null; this.speed = opts.speed || 4.2; this.vel = new THREE.Vector3(); this.spotted = 0; this.lastAttacker = null;
     // model: a Tripo hoodie character for this team, with its own third-person AK
@@ -73,7 +73,7 @@ export class Bot {
   get eye() { return new THREE.Vector3(this.pos.x, this.pos.y + 1.55, this.pos.z); }
   get chest() { return new THREE.Vector3(this.pos.x, this.pos.y + 1.15, this.pos.z); }
   damage(n, from, time, point, dir) {
-    if (this.dead) return false; this.hp -= n; this.lastAttacker = from;
+    if (this.dead || time < this.protectedUntil) return false; this.hp -= n; this.lastAttacker = from;
     if (from && from.team !== this.team) { this.target = from; this.lastSeen = (from.pos || from.position).clone(); this.seeT = time; this.reactT = 0.1; }
     if (this.hp <= 0) { this.die(time); return true; }
     if (Math.random() < 0.25) { this.play('HitRecieve', 0.05, true); this.ch.cur = null; }
@@ -83,7 +83,7 @@ export class Bot {
     this.dead = true; this.deadT = time; this.respawnAt = time + 5; this.play('Death', 0.08, true); this.ch.ghostVisible = false; this.path = null; this.target = null;
     if (this.kind === 'bomber') this.ctx.explode(this.pos.clone(), this);
   }
-  respawn(pos) { this.pos.copy(pos); this.hp = 100; this.dead = false; this.path = null; this.target = null; this.lastSeen = null; this.ch.cur = null; this.play('Idle_Gun', 0); this.ch.update(0, this.pos, this.yaw, false, false); }
+  respawn(pos, time = 0, protectionSeconds = 0) { this.pos.copy(pos); this.hp = 100; this.dead = false; this.protectedUntil = time + protectionSeconds; this.path = null; this.target = null; this.lastSeen = null; this.ch.cur = null; this.play('Idle_Gun', 0); this.ch.update(0, this.pos, this.yaw, false, false); }
   seek(target, time) { this.target = target; this.lastSeen = (target.pos || target.position).clone(); this.seeT = time; }
   // ---------- brain ----------
   update(dt, time) {
@@ -140,7 +140,7 @@ export class Bot {
     let dy = faceYaw - this.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); this.yaw += dy * Math.min(1, dt * 10);
     // ---- shooting ----
     this.reactT -= dt;
-    if (seeing && this.kind !== 'bomber' && this.reactT <= 0) {
+    if (seeing && this.kind !== 'bomber' && this.reactT <= 0 && time >= this.protectedUntil) {
       this.fireT -= dt;
       if (this.burst > 0) { if (this.fireT <= 0) { this.shoot(time); this.burst--; this.fireT = 0.1; if (this.burst === 0) this.burstGap = 0.5 + Math.random() * 0.9; } }
       else { this.burstGap -= dt; if (this.burstGap <= 0) this.burst = 3 + Math.floor(Math.random() * 4); }
