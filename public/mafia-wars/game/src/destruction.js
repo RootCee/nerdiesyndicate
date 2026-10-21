@@ -9,6 +9,7 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { pbr } from './assets.js';
 import { colliders } from './world.js';
+import { selectStreamingDistrict } from './city-layout.js';
 
 export const BLOCK = { x: 0.4, y: 0.2, z: 0.2 };   // garden-wall block (a chunk of mortared bricks)
 export const PANEL = { x: 0.8, y: 0.4, z: 0.2 };   // house wall panel
@@ -22,6 +23,8 @@ const WELD_DOWN = (_weld[0] || 16) / 0.128, WELD_SIDE = (_weld[1] || 9) / 0.128;
 const FLAGS = new URLSearchParams(location.search); // debug: noroof, nocorner, nogable, stack
 const D = { log: new URLSearchParams(location.search).has('breaklog') ? [] : null, world: null, walls: [], mode: 'none', blocks: 0, joints: 0, broken: 0, weld: [WELD_DOWN * 0.128, WELD_SIDE * 0.128], bySpec: new Map(), onBlast: null };
 export const destruction = D;
+let activeStreamingId = null;
+const STREAM_SWITCH_HYSTERESIS = 8;
 
 // ---------- materials ----------
 const mats = {};
@@ -251,10 +254,24 @@ export function updateDestruction(dt) {
 // renderer. Physics/collision state stays deterministic and is restored when
 // the player returns.
 export function updateDestructionStreaming(playerPosition, radius = 112) {
+  const groups = new Map();
+  for (const spec of D.walls) {
+    if (!spec.streaming || groups.has(spec.streaming.id)) continue;
+    const stream = spec.streaming;
+    groups.set(stream.id, { id: stream.id, centerX: stream.centerX, centerZ: stream.centerZ });
+  }
+  activeStreamingId = selectStreamingDistrict([...groups.values()], playerPosition, radius, activeStreamingId, STREAM_SWITCH_HYSTERESIS);
+
   let activeStructures = 0, activeHouses = 0, activePanels = 0;
   for (const spec of D.walls) {
     const stream = spec.streaming;
-    const visible = !stream || Math.hypot(playerPosition.x - stream.centerX, playerPosition.z - stream.centerZ) <= radius;
+    // Original and copied Hood Warfare blocks have identical, heavy panel
+    // sets. Rendering both in their overlap corridor doubled the active panel
+    // budget and changed the live point-light count, which forced shader
+    // variants to compile while the player was moving. Keep exactly one
+    // nearest streamed block active, with hysteresis to prevent midpoint
+    // thrashing. Non-streamed structures remain visible.
+    const visible = !stream || stream.id === activeStreamingId;
     if (visible !== spec.streamVisible) {
       spec.streamVisible = visible;
       spec.mesh.visible = visible;
@@ -266,7 +283,7 @@ export function updateDestructionStreaming(playerPosition, radius = 112) {
     activeStructures++; activePanels += spec.items.length;
     if (spec.kind === 'house') activeHouses++;
   }
-  return { activeStructures, activeHouses, activePanels };
+  return { activeStructures, activeHouses, activePanels, activeStreamingId };
 }
 
 export function beginDestructionPrewarm() {

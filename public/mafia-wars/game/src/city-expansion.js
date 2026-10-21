@@ -74,8 +74,8 @@ function addParkedVehicle(group, spec, mats) {
 function addStreetlight(group, x, z, mats, lit) {
   addCylinder(group, mats.metal, 0.1, 4.8, x, 2.4, z, 'city-streetlight');
   const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), mats.bulb); bulb.position.set(x, 4.76, z); group.add(bulb);
-  if (lit) { const light = new THREE.PointLight(0xffc57a, 28, 13, 2); light.position.set(x, 4.5, z); group.add(light); }
   mapRects.push({ x: x - 0.15, z: z - 0.15, w: 0.3, h: 0.3, type: 'pole' });
+  return lit ? { x, y: 4.5, z } : null;
 }
 
 export function buildCityExpansion(scene, Q = {}) {
@@ -108,14 +108,15 @@ export function buildCityExpansion(scene, Q = {}) {
     }
   }
 
-  const chunks = [];
+  const chunks = [], cityLightSites = [];
   let apartment = null, house = null, originalHouse = null, duplicatedHouse = null, combatVenue = null;
   for (const district of plan.districts) {
     const group = new THREE.Group(); group.name = `city-chunk-${district.id}`; scene.add(group);
     for (const spec of district.buildings) addBuilding(group, spec, plan.profile, mats);
     for (const vehicle of district.vehicles || []) addParkedVehicle(group, vehicle, mats);
     const lightX = district.center.x + (district.center.x > 0 ? -14 : district.center.x < 0 ? 14 : 0);
-    addStreetlight(group, lightX, district.center.z - 20, mats, plan.profile.streetLights);
+    const lightSite = addStreetlight(group, lightX, district.center.z - 20, mats, plan.profile.streetLights);
+    if (lightSite) cityLightSites.push({ ...lightSite, chunkId: district.id });
     addStreetlight(group, lightX, district.center.z + 20, mats, false);
     if (district.id === 'north') {
       apartment = new HybridApartmentSystem(scene, plan.apartment, { addCollider, mobile: plan.profile.key === 'mobile' });
@@ -144,6 +145,26 @@ export function buildCityExpansion(scene, Q = {}) {
     chunks.push({ id: district.id, center: district.center, radius: district.radius || 48, group, visible: true });
   }
 
+  // Keep a fixed number of live point lights while district meshes stream.
+  // Three.js specializes shaders for the current light count, so parenting
+  // lights under hidden chunks caused new programs to compile on every first
+  // district visit. Three pooled lights cover the maximum simultaneous
+  // desktop districts without adding paid infrastructure or changing art.
+  const cityLightPool = [];
+  if (plan.profile.streetLights) for (let i = 0; i < 3; i++) {
+    const light = new THREE.PointLight(0xffc57a, 0, 13, 2);
+    light.name = `city-stream-light-${i}`; infrastructure.add(light); cityLightPool.push(light);
+  }
+  function updateCityLights() {
+    const visibleIds = new Set(chunks.filter((chunk) => chunk.visible).map((chunk) => chunk.id));
+    const active = cityLightSites.filter((site) => visibleIds.has(site.chunkId));
+    cityLightPool.forEach((light, index) => {
+      const site = active[index];
+      if (site) { light.position.set(site.x, site.y, site.z); light.intensity = 28; }
+      else light.intensity = 0;
+    });
+  }
+
   // One outer boundary protects the expanded city; the Milestone 3 core no
   // longer adds its small-block boundary when expansion is enabled.
   addCollider(MAP.minX - 2, MAP.minZ - 2, MAP.minX, MAP.maxZ + 2, 0, 12, { boundary: true });
@@ -170,7 +191,7 @@ export function buildCityExpansion(scene, Q = {}) {
     },
     setMode(mode) {
       this.mode = mode;
-      if (mode === 'combat') for (const chunk of chunks) { chunk.visible = false; chunk.group.visible = false; }
+      if (mode === 'combat') { for (const chunk of chunks) { chunk.visible = false; chunk.group.visible = false; } updateCityLights(); }
     },
     update(player) {
       if (this.mode === 'combat') return;
@@ -182,6 +203,7 @@ export function buildCityExpansion(scene, Q = {}) {
           : chunkVisible(chunk.center, player.pos, plan.profile.activeRadius + chunk.radius * 0.35);
         if (visible !== chunk.visible) { chunk.visible = visible; chunk.group.visible = visible; }
       }
+      updateCityLights();
     },
     stats() {
       return {
@@ -195,6 +217,7 @@ export function buildCityExpansion(scene, Q = {}) {
         originalEnterableHouse: originalHouse?.site.id || null,
         duplicatedEnterableHouse: duplicatedHouse?.site.id || null,
         duplicatedOriginalHouses: plan.duplicatedOriginalNeighborhood.houseCount,
+        activeCityLights: cityLightPool.filter((light) => light.intensity > 0).length,
         combatVenue: combatVenue?.site.id || null,
         bounds: { ...MAP },
       };

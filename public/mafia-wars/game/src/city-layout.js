@@ -211,6 +211,19 @@ export function chunkVisible(chunkCenter, playerPosition, radius) {
   return dx * dx + dz * dz <= radius * radius;
 }
 
+export function selectStreamingDistrict(groups, playerPosition, radius, currentId = null, hysteresis = 8) {
+  const distances = groups.map((group) => ({
+    id: group.id,
+    distance: Math.hypot(playerPosition.x - group.centerX, playerPosition.z - group.centerZ),
+  }));
+  const candidates = distances.filter((group) => group.distance <= radius).sort((a, b) => a.distance - b.distance);
+  const nearest = candidates[0] || null;
+  if (!nearest) return null;
+  const current = currentId ? distances.find((group) => group.id === currentId) : null;
+  if (!current || current.distance > radius) return nearest.id;
+  return nearest.id !== current.id && nearest.distance + hysteresis < current.distance ? nearest.id : current.id;
+}
+
 export function insideInteractionRange(playerPosition, target, radius = 2.4) {
   const dx = playerPosition.x - target.x;
   const dy = playerPosition.y - target.y;

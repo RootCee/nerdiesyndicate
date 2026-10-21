@@ -26,8 +26,10 @@ import { buildCityExpansion } from './city-expansion.js';
 import { createCollisionDebug } from './collision-debug.js';
 import { requestedWeapon, weaponOrderForProfile } from './weapon-cycle.js';
 import { DUPLICATED_ORIGINAL_NEIGHBORHOOD, ORIGINAL_NEIGHBORHOOD_LAYOUT } from './city-layout.js';
+import { createPerformanceProfiler } from './performance-profiler.js';
 
 const qs = new URLSearchParams(location.search);
+const performanceProfile = createPerformanceProfiler(qs.get('perf') === '1');
 // Legacy ladder support remains developer-only. Public Base identity and rankings are coming later.
 const API = qs.get('api') || '';
 const ident = (() => { try { return JSON.parse(localStorage.getItem('nerdie-city-mafia-wars.identity') || '{}') || {}; } catch { return {}; } })();
@@ -142,6 +144,18 @@ const developerCombat = qs.get('dev') === 'combat';
 const selectedMode = developerCombat ? GAME_MODES.COMBAT : GAME_MODES.FREE_ROAM;
 let practiceCombat = false, combatLobbyOpen = false;
 let destructionStreamingStats = { activeStructures: 0, activeHouses: 0, activePanels: 0 };
+const neighborhoodLightPool = [];
+let neighborhoodLightSpecs = [], neighborhoodLightBlock = null;
+function updateNeighborhoodLights(blockId) {
+  if (blockId === neighborhoodLightBlock) return;
+  neighborhoodLightBlock = blockId;
+  const offsetX = blockId === DUPLICATED_ORIGINAL_NEIGHBORHOOD.id ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX : 0;
+  neighborhoodLightPool.forEach((light, index) => {
+    const spec = neighborhoodLightSpecs[index];
+    light.position.set(spec.x + offsetX, spec.y, spec.z);
+    light.intensity = blockId ? (spec.alley ? 90 : 150) : 0;
+  });
+}
 let combatAssetsReady = !Q.lowMemory, combatAssetsLoading = false;
 const ab = { 4: { need: 3, have: 0, name: 'SNITCH', sub: 'PRESS [4]' }, 5: { need: 5, have: 0, name: 'HOMIES', sub: 'PRESS [5]' }, 6: { need: 4, have: 0, name: 'SUICIDE BOMBER', sub: 'PRESS [6]' } };
 let snitchUntil = 0, killStreak = 0, streakT = 0, time = 0, hurtK = 0, respawnAt = 0;
@@ -338,9 +352,17 @@ async function boot() {
   const bulbGeo = new THREE.SphereGeometry(0.11, 10, 8), bulbMat = new THREE.MeshBasicMaterial({ color: 0xffd9a0, toneMapped: false });
   for (const l of lamps) {
     const parent = l.cityChunk ? scene.getObjectByName(`city-chunk-${l.cityChunk}`) || scene : scene;
-    if (!l.far) { const pl = new THREE.PointLight(l.alley ? 0xffc27a : 0xffb46a, l.alley ? 90 : 150, l.alley ? 20 : 28, 2); pl.position.set(l.x, l.y, l.z); parent.add(pl); }
     const bulb = new THREE.Mesh(bulbGeo, bulbMat); bulb.position.set(l.x, l.y + 0.05, l.z); bulb.scale.set(1, 1.3, 1); parent.add(bulb);
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: fx.flashMat.map, color: 0xffb060, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.55, toneMapped: false })); glow.position.copy(bulb.position); glow.scale.setScalar(1.6); parent.add(glow);
+  }
+  // Original and copied neighborhood lamps share a fixed light pool. Moving
+  // the pool when the nearest destructible block changes keeps the Three.js
+  // point-light count stable, avoiding runtime shader recompilation.
+  neighborhoodLightSpecs = lamps.filter((lamp) => !lamp.far && !lamp.cityChunk);
+  for (let i = 0; i < neighborhoodLightSpecs.length; i++) {
+    const spec = neighborhoodLightSpecs[i];
+    const light = new THREE.PointLight(spec.alley ? 0xffc27a : 0xffb46a, 0, spec.alley ? 20 : 28, 2);
+    light.name = `neighborhood-stream-light-${i}`; scene.add(light); neighborhoodLightPool.push(light);
   }
   // destructible brick walls: front-yard walls on the WALL_LOTS lots (two segments each, a gap at the walkway) + two free-standing ones
   for (const neighborhood of [ORIGINAL_NEIGHBORHOOD_LAYOUT, DUPLICATED_ORIGINAL_NEIGHBORHOOD]) for (const key of WALL_LOTS) {
@@ -365,6 +387,7 @@ async function boot() {
   city?.originalHouse?.bindDestruction(houseStructures.get(city.originalHouse.site.id));
   city?.duplicatedHouse?.bindDestruction(houseStructures.get(city.duplicatedHouse.site.id));
   destructionStreamingStats = updateDestructionStreaming(player.pos, Q.lowMemory ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.mobile : DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.desktop);
+  updateNeighborhoodLights(destructionStreamingStats.activeStreamingId);
   pmsg.textContent = 'Welding the bricks…';
   const physMode = await initDestruction(scene, { enabled: qs.get('phys') !== '0' });
   console.log('destruction mode:', physMode, 'blocks:', destruction.blocks);
@@ -416,6 +439,7 @@ async function boot() {
   restoreDestructionVisibility();
   restoreCityVisibility?.(); city?.update(player);
   destructionStreamingStats = updateDestructionStreaming(player.pos, Q.lowMemory ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.mobile : DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.desktop);
+  updateNeighborhoodLights(destructionStreamingStats.activeStreamingId);
   fx.warm(false);
   for (const o of warm) o.visible = false; fx.parts[1].s.visible = false; fx.parts[2].s.visible = false; fx.parts[0].s.material = fx.parts[1].s.material = fx.parts[2].s.material = fx.dustMat;
   pbar.style.width = '100%'; pmsg.textContent = Q.mobile ? 'City ready · left thumb moves · right thumb aims' : 'City ready';
@@ -435,6 +459,7 @@ async function boot() {
 
 // ---------- loop ----------
 let last = performance.now(), fpsAcc = 0, fpsN = 0, nextDistant = 12;
+let lastProfileChunks = '', lastProfileStream = null;
 addEventListener('keydown', (e) => {
   if (e.target && e.target.tagName === 'INPUT') return;
   if (e.code === 'Escape' && combatLobbyOpen) { setCombatLobby(false); return; }
@@ -444,6 +469,7 @@ addEventListener('keydown', (e) => {
 });
 const labelItems = [], dots = [];
 function loop(now) {
+  const frameStarted = performanceProfile.start();
   requestAnimationFrame(loop);
   const dt = Math.min(0.05, (now - last) / 1000); last = now; time += dt;
   fpsAcc += dt; fpsN++; if (fpsAcc > 0.5) { hud.fps(Math.round(fpsN / fpsAcc)); fpsAcc = 0; fpsN = 0; }
@@ -452,9 +478,11 @@ function loop(now) {
   if (!MATCH.started) { // idle camera drift on the title
     player.yaw += dt * 0.03; player.update(dt, { moveX: 0, moveY: 0 }, { dx: 0, dy: 0 }, time);
   } else {
+    let systemStarted = performanceProfile.start();
     if (!MATCH.over && isCombatMode(MATCH.mode)) { MATCH.left -= dt; hud.timer(MATCH.left); if (MATCH.left <= 0) endMatch(); }
     if (input.ab) { if (isCombatMode(MATCH.mode)) useAbility(input.ab); input.ab = 0; }
     player.update(dt, MATCH.over || combatLobbyOpen ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
+    performanceProfile.end('player', systemStarted); systemStarted = performanceProfile.start();
     if (city && MATCH.mode === GAME_MODES.FREE_ROAM) {
       const apartmentState = city.apartment.update(player, input, time);
       const originalHouseState = apartmentState.active || apartmentState.transitioned
@@ -485,7 +513,16 @@ function loop(now) {
       }
       city.update(player);
       destructionStreamingStats = updateDestructionStreaming(player.pos, Q.lowMemory ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.mobile : DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.desktop);
+      updateNeighborhoodLights(destructionStreamingStats.activeStreamingId);
+      if (performanceProfile.enabled) {
+        const chunks = city.stats().visibleChunks.join(',');
+        if (chunks !== lastProfileChunks || destructionStreamingStats.activeStreamingId !== lastProfileStream) {
+          performanceProfile.transition({ fromChunks: lastProfileChunks, toChunks: chunks, fromStream: lastProfileStream, toStream: destructionStreamingStats.activeStreamingId, activePanels: destructionStreamingStats.activePanels, programs: renderer.info.programs?.length || 0 });
+          lastProfileChunks = chunks; lastProfileStream = destructionStreamingStats.activeStreamingId;
+        }
+      }
     } else { hud.prompt(''); input.interact = false; }
+    performanceProfile.end('city-interactions-streaming', systemStarted); systemStarted = performanceProfile.start();
     thirdCamera.update(dt);
     city?.apartment?.updateCameraVisibility(camera, player, dt);
     city?.originalHouse?.updateCameraVisibility(camera, player, dt);
@@ -504,6 +541,7 @@ function loop(now) {
     }
     if (player.stepped && !player.dead) sfx.step();
     collisionDebug?.update();
+    performanceProfile.end('camera-avatar', systemStarted); systemStarted = performanceProfile.start();
     if (input.swap && !player.dead) {
       const want = requestedWeapon(arsenal.cur, input.swap, ORDER);
       if (ORDER.includes(want) && want !== arsenal.cur) {
@@ -523,13 +561,16 @@ function loop(now) {
       b.update(dt, time);
     }
     if (player.dead && time > respawnAt && !MATCH.over) { player.respawn(isCombatMode(MATCH.mode) ? spawnPoint('blue') : freeCellNear(0, 28, 5)); player.team = isCombatMode(MATCH.mode) ? 'blue' : null; for (const g of Object.values(guns)) g.mag = g.magSize; launcher.loaded = 1; launcher.reserve = 3; hud.hurt(0); }
+    performanceProfile.end('weapons-bots', systemStarted);
   }
+  let systemStarted = performanceProfile.start();
   fx.update(dt); updateDestruction(dt);
   if (fx.shake > 0.001) { const a = fx.shake * fx.shake; camera.position.x += (Math.random() - 0.5) * 0.16 * a; camera.position.y += (Math.random() - 0.5) * 0.12 * a; camera.rotation.z += (Math.random() - 0.5) * 0.03 * a; }
   hurtK = Math.max(0, hurtK - dt * 1.6); grade.uniforms.hurt.value = player.dead ? 0.9 : hurtK * 0.8 + (1 - player.hp / player.maxHp) * 0.35; hud.hurt(player.dead ? 0.8 : hurtK * 0.7);
   grade.uniforms.time.value = time;
   snapShadow(player.pos);
   setListener(camera.position, player.yaw);
+  performanceProfile.end('effects-destruction-shadow-audio', systemStarted); systemStarted = performanceProfile.start();
   if (MATCH.started && !MATCH.over && isCombatMode(MATCH.mode) && time > nextDistant) { sfx.distantGunfire(); nextDistant = time + 18 + Math.random() * 30; }
   // HUD
   if (MATCH.started) {
@@ -546,8 +587,11 @@ function loop(now) {
     }
     hud.labels(camera, labelItems); hud.minimap(player, dots, snitch);
   }
+  performanceProfile.end('hud', systemStarted); systemStarted = performanceProfile.start();
   if (composer) composer.render(); else renderer.render(scene, camera);
+  performanceProfile.end('render', systemStarted);
+  performanceProfile.frame(frameStarted);
 }
 boot().catch((e) => { console.error(e); pmsg.textContent = 'Could not start: ' + e.message; });
 // expose for QA
-window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, destruction, blast, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };
+window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, destruction, blast, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };
