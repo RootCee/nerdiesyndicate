@@ -3,16 +3,21 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '..', 'public', 'mafia-wars', 'game', 'src');
-const [main, assets, audio, world, characters, cityExpansion, apartment, combatVenue, player, collision, weaponCycle] = await Promise.all(
-  ['main.js', 'assets.js', 'audio.js', 'world.js', 'characters.js', 'city-expansion.js', 'apartment-system.js', 'combat-venue.js', 'player.js', 'collision-math.js', 'weapon-cycle.js'].map((file) => readFile(path.join(root, file), 'utf8')),
+const [main, assets, audio, world, characters, cityExpansion, apartment, combatVenue, player, collision, weaponCycle, loadout, resupply] = await Promise.all(
+  ['main.js', 'assets.js', 'audio.js', 'world.js', 'characters.js', 'city-expansion.js', 'apartment-system.js', 'combat-venue.js', 'player.js', 'collision-math.js', 'weapon-cycle.js', 'loadout.js', 'practice-resupply.js'].map((file) => readFile(path.join(root, file), 'utf8')),
 );
 
 assert.match(main, /Q\.lowMemory = Q\.mobile && qs\.get\('full'\) !== '1'/);
 assert.match(main, /renderer\.shadowMap\.enabled = !Q\.lowMemory/);
 assert.match(main, /if \(composer\) composer\.render\(\); else renderer\.render\(scene, camera\)/);
 assert.match(main, /if \(Q\.lowMemory\) await Promise\.all\(\[weapon\.load\(\), guns\.mac10\.load\(\)\]\)/);
-assert.match(weaponCycle, /MOBILE_WEAPON_ORDER = Object\.freeze\(\['ak', 'mac10'\]\)/);
-assert.doesNotMatch(weaponCycle, /MOBILE_WEAPON_ORDER[^\n]*mp5|MOBILE_WEAPON_ORDER[^\n]*m700/);
+assert.match(weaponCycle, /DESKTOP_WEAPON_ORDER = Object\.freeze\(\['ak', 'mac10', 'mp5', 'm700', 'rpg'\]\)/);
+assert.match(weaponCycle, /MOBILE_WEAPON_ORDER = DESKTOP_WEAPON_ORDER/);
+assert.match(main, /LOW-MEMORY ON-DEMAND LOAD/);
+assert.match(main, /await asset\.load\(\)/);
+assert.match(loadout, /PRACTICE_LOADOUT/);
+assert.match(loadout, /restorePracticeLoadout/);
+assert.match(resupply, /PRACTICE_RESUPPLY_COOLDOWN/);
 assert.match(main, /Q\.lowMemory \? \['blue_zip', 'navy'\]/);
 assert.match(assets, /normalMap: LOW_MEMORY \? null/);
 assert.match(assets, /roughnessMap: LOW_MEMORY \? null/);

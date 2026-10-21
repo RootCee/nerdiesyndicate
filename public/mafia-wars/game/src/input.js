@@ -66,7 +66,12 @@ function initTouch() {
   btn('tAds', () => { input.ads = !input.ads; });
   btn('tJump', () => { input.jump = true; });
   btn('tReload', () => { input.reload = true; });
-  btn('tSwap', () => { input.swap = 'next'; });
+  btn('tSwap', () => { const tray = document.getElementById('weaponTray'); const open = tray?.classList.toggle('on'); document.body.classList.toggle('weapon-selecting', !!open); });
   btn('tInteract', () => { input.interact = true; });
+  for (const el of document.querySelectorAll('#weaponTray [data-weapon]')) {
+    el.addEventListener('touchstart', (e) => {
+      onFirst?.(); input.swap = el.dataset.weapon; document.getElementById('weaponTray')?.classList.remove('on'); document.body.classList.remove('weapon-selecting'); e.preventDefault();
+    }, { passive: false });
+  }
   for (const n of [4, 5, 6]) { const el = document.getElementById('ab' + n); el.addEventListener('touchstart', (e) => { input.ab = n; e.preventDefault(); }, { passive: false }); }
 }

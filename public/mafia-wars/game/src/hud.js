@@ -3,7 +3,7 @@ import { mapRects, MAP } from './world.js';
 const $ = (s) => document.querySelector(s);
 const el = {};
 export function initHud() {
-  for (const id of ['fps', 'map', 'state', 'sRed', 'sBlue', 'timer', 'feed', 'callout', 'kill', 'pts', 'hit', 'hurt', 'labels', 'mag', 'res', 'kills', 'ab4', 'ab5', 'ab6', 'hud', 'wname', 'interactPrompt', 'tInteract']) el[id] = document.getElementById(id);
+  for (const id of ['fps', 'map', 'state', 'sRed', 'sBlue', 'timer', 'feed', 'callout', 'kill', 'pts', 'hit', 'hurt', 'labels', 'mag', 'res', 'kills', 'ab4', 'ab5', 'ab6', 'hud', 'wname', 'interactPrompt', 'tInteract', 'weaponTray']) el[id] = document.getElementById(id);
   el.map2d = el.map.getContext('2d');
   // bake the block map once: 4 px per metre on a 100x100 m canvas
   const W = MAP.maxX - MAP.minX, H = MAP.maxZ - MAP.minZ, S = Math.min(4, 512 / Math.max(W, H)); const off = document.createElement('canvas'); off.width = Math.ceil(W * S); off.height = Math.ceil(H * S); const g = off.getContext('2d');
@@ -22,7 +22,10 @@ export const hud = {
   fps(v) { el.fps.textContent = 'FPS ' + v; },
   score(red, blue) { el.sRed.textContent = red; el.sBlue.textContent = blue; el.state.textContent = blue > red ? 'WINNING' : blue < red ? 'LOSING' : 'TIED'; },
   timer(s) { s = Math.max(0, Math.ceil(s)); el.timer.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; },
-  ammo(mag, res, kills, name) { el.mag.textContent = mag; el.res.textContent = res; el.kills.textContent = kills + ' ☠'; if (name && el.wname.textContent !== name) el.wname.textContent = name; },
+  ammo(mag, res, kills, name, id) {
+    el.mag.textContent = mag; el.res.textContent = res; el.kills.textContent = kills + ' ☠'; if (name && el.wname.textContent !== name) el.wname.textContent = name;
+    if (id && el.weaponTray) for (const button of el.weaponTray.querySelectorAll('[data-weapon]')) button.classList.toggle('selected', button.dataset.weapon === id);
+  },
   feed(k, kt, v, vt) {
     const d = document.createElement('div'); d.innerHTML = `<span class="${kt === 'red' ? 'r' : 'k'}">${k}</span><span class="w">🔫</span><span class="${vt === 'red' ? 'r' : 'k'}">${v}</span>`;
     el.feed.appendChild(d); while (el.feed.children.length > 5) el.feed.firstChild.remove(); setTimeout(() => d.remove(), 6000);

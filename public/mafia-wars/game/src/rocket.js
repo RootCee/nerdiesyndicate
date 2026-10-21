@@ -14,6 +14,7 @@ export class Launcher {
     this.loaded = 1; this.reserve = 3; this.reloading = 0; this.cool = 0; this.kickZ = 0; this.sway = new THREE.Vector2();
     this.hipPos = new THREE.Vector3(0.2, -0.24, -0.5); this.model = null; this.muzzleLocal = new THREE.Vector3(0, 0.08, -0.9);
     this.rockets = []; this.onExplode = null; this.rayTargets = null; this.raise = 0;
+    this.loadedAsset = false; this.loading = null;
     // pooled lights + sprites: adding a PointLight to a live scene recompiles every shader (a 4 s freeze on the first shot)
     this.pool = [];
     for (let i = 0; i < 3; i++) {
@@ -23,6 +24,12 @@ export class Launcher {
     }
   }
   async load() {
+    if (this.loadedAsset) return;
+    if (this.loading) return this.loading;
+    this.loading = this.loadModel();
+    try { await this.loading; this.loadedAsset = true; } finally { this.loading = null; }
+  }
+  async loadModel() {
     try {
       const g = await loadGLB('assets/models/rpg7.glb'); const vm = prep(g.scene, { cast: false, receive: false, env: 1.2 });
       vm.traverse((o) => { if (!o.isMesh) return; const mats = Array.isArray(o.material) ? o.material : [o.material]; for (const m of mats) { m.transparent = false; m.alphaTest = 0; m.opacity = 1; m.depthWrite = true; } o.frustumCulled = false; o.renderOrder = 5; });

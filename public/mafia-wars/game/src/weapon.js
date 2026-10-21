@@ -181,6 +181,12 @@ export class Weapon {
     this.onHit = null; this.rayTargets = null; this.lastFire = 0; this.baseFov = 72; this.portrait = false;
   }
   async load() {
+    if (this.loaded) return;
+    if (this.loading) return this.loading;
+    this.loading = this.loadModel();
+    try { await this.loading; } finally { this.loading = null; }
+  }
+  async loadModel() {
     const g = await loadGLB(`assets/models/${this.spec.glb}.glb`); const vm = prep(g.scene, { cast: false, receive: false, env: 1.3 });
     vm.traverse((o) => { if (!o.isMesh) return; const mats = Array.isArray(o.material) ? o.material : [o.material]; for (const m of mats) { m.transparent = false; m.alphaTest = 0; m.opacity = 1; m.depthWrite = true; m.side = THREE.FrontSide; m.needsUpdate = true; } });
     const bb = new THREE.Box3().setFromObject(vm); const size = bb.getSize(new THREE.Vector3());

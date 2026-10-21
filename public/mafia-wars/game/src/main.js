@@ -27,6 +27,8 @@ import { createCollisionDebug } from './collision-debug.js';
 import { requestedWeapon, weaponOrderForProfile } from './weapon-cycle.js';
 import { DUPLICATED_ORIGINAL_NEIGHBORHOOD, ORIGINAL_NEIGHBORHOOD_LAYOUT } from './city-layout.js';
 import { createPerformanceProfiler } from './performance-profiler.js';
+import { restorePracticeLoadout } from './loadout.js';
+import { PracticeResupply } from './practice-resupply.js';
 
 const qs = new URLSearchParams(location.search);
 const performanceProfile = createPerformanceProfiler(qs.get('perf') === '1');
@@ -137,6 +139,25 @@ const ORDER = weaponOrderForProfile(Q.lowMemory);
 const curGun = () => guns[arsenal.cur] || null;
 const launcher = new Launcher(scene, camera, player, fx);
 const arsenal = { cur: 'ak', switchT: 0 };
+const practiceResupply = new PracticeResupply(scene, guns, launcher);
+let pendingWeapon = '';
+async function selectWeapon(command) {
+  const want = requestedWeapon(arsenal.cur, command, ORDER);
+  if (!ORDER.includes(want) || want === arsenal.cur) return;
+  pendingWeapon = want;
+  const asset = want === 'rpg' ? launcher : guns[want];
+  try {
+    if (want === 'rpg' ? !launcher.loadedAsset : !asset.loaded) {
+      hud.callout(`LOADING ${want === 'rpg' ? 'RPG-7' : asset.name}`, 'LOW-MEMORY ON-DEMAND LOAD');
+      await asset.load();
+    }
+    if (pendingWeapon !== want || player.dead) return;
+    arsenal.cur = want; for (const k in guns) guns[k].holstered = k !== want;
+    const g = guns[want]; hud.callout(want === 'rpg' ? 'RPG-7' : g.name, want === 'rpg' ? `${launcher.loaded + launcher.reserve} ROCKETS` : `${g.mag + g.reserve} ROUNDS`);
+  } catch (error) {
+    console.error('weapon load:', want, error); hud.callout('WEAPON UNAVAILABLE', 'TRY AGAIN');
+  } finally { if (pendingWeapon === want) pendingWeapon = ''; }
+}
 const bots = []; let trooper = null, localAvatar = null, city = null, collisionDebug = null;
 const avatarContactOffset = new THREE.Vector3();
 const score = { red: 0, blue: 0 }; const MATCH = { limit: 100, time: 600, left: 600, over: false, started: false, mode: GAME_MODES.FREE_ROAM };
@@ -260,7 +281,9 @@ function setCombatLobby(open) {
 }
 function startGame(mode = selectedMode, options = {}) {
   MATCH.mode = normalizeGameMode(mode); const combat = isCombatMode(MATCH.mode);
+  $('weaponTray')?.classList.remove('on'); document.body.classList.remove('weapon-selecting');
   practiceCombat = combat && !!options.practice;
+  practiceResupply.setEnabled(practiceCombat);
   setCombatLobby(false);
   score.red = score.blue = 0; MATCH.left = MATCH.time; MATCH.over = false; MATCH.started = true; for (const n in ab) ab[n].have = 0; snitchUntil = 0;
   for (const interior of [city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = false; interior.interior.visible = false; }
@@ -285,7 +308,7 @@ function startGame(mode = selectedMode, options = {}) {
   );
   updateNeighborhoodLights(destructionStreamingStats.activeStreamingId);
   if (!combat && Number.isFinite(options.yaw)) player.yaw = options.yaw;
-  for (const k in guns) { const g = guns[k]; g.mag = g.magSize; g.reserve = g.spec.reserve; g.holstered = k !== 'ak'; g.reloading = 0; } launcher.loaded = 1; launcher.reserve = 3; arsenal.cur = 'ak'; player.kills = 0; player.deaths = 0;
+  restorePracticeLoadout(guns, launcher); for (const k in guns) guns[k].holstered = k !== 'ak'; arsenal.cur = 'ak'; pendingWeapon = ''; player.kills = 0; player.deaths = 0;
   setCameraMode(!combat);
   document.body.classList.toggle('free-roam', !combat); $('modebadge').textContent = combat ? 'Original Combat' : 'Free Roam · V Camera';
   if (practiceCombat) $('modebadge').textContent = 'AI Practice Match';
@@ -465,7 +488,7 @@ async function boot() {
   $('backToCity').addEventListener('click', () => setCombatLobby(false));
   $('combatExit').addEventListener('click', returnToCity);
   $('gname').value = ident.name || ''; $('gwallet').value = ident.wallet || ''; for (const id of ['gname', 'gwallet']) $(id).addEventListener('change', saveIdent);
-  if (Q.mobile) pmsg.textContent += ' · SWAP cycles AK / MAC-10';
+  if (Q.mobile) pmsg.textContent += ' · SWAP opens all weapons';
   if (qs.get('auto') === '1') startGame(selectedMode);
   requestAnimationFrame(loop);
 }
@@ -534,6 +557,12 @@ function loop(now) {
           lastProfileChunks = chunks; lastProfileStream = destructionStreamingStats.activeStreamingId;
         }
       }
+    } else if (practiceCombat && MATCH.started && !MATCH.over) {
+      const resupply = practiceResupply.update(player, !!input.interact, time);
+      hud.prompt(resupply.prompt, false, resupply.ready ? 'RESUPPLY' : 'WAIT');
+      if (resupply.supplied) hud.callout('AMMO RESUPPLIED', 'RESERVES CAPPED · 15 SECOND COOLDOWN');
+      else if (input.interact && resupply.prompt === 'AMMO FULL') hud.callout('AMMO FULL', 'NO SUPPLY USED');
+      input.interact = false;
     } else { hud.prompt(''); input.interact = false; }
     performanceProfile.end('city-interactions-streaming', systemStarted); systemStarted = performanceProfile.start();
     thirdCamera.update(dt);
@@ -556,11 +585,7 @@ function loop(now) {
     collisionDebug?.update();
     performanceProfile.end('camera-avatar', systemStarted); systemStarted = performanceProfile.start();
     if (input.swap && !player.dead) {
-      const want = requestedWeapon(arsenal.cur, input.swap, ORDER);
-      if (ORDER.includes(want) && want !== arsenal.cur) {
-        arsenal.cur = want; for (const k in guns) guns[k].holstered = k !== want;
-        const g = guns[want]; hud.callout(want === 'rpg' ? 'RPG-7' : g.name, want === 'rpg' ? `${launcher.loaded + launcher.reserve} ROCKETS` : `${g.mag + g.reserve} ROUNDS`);
-      }
+      selectWeapon(input.swap);
     }
     input.swap = '';
     const idle = { fire: false, ads: false, reload: false }, live = MATCH.over ? { fire: false } : input;
@@ -573,7 +598,7 @@ function loop(now) {
       if (b.dead && b.respawnAt && time > b.respawnAt && !b.expires && !MATCH.over) b.respawn(spawnPoint(b.team));
       b.update(dt, time);
     }
-    if (player.dead && time > respawnAt && !MATCH.over) { player.respawn(isCombatMode(MATCH.mode) ? spawnPoint('blue') : freeCellNear(0, 28, 5)); player.team = isCombatMode(MATCH.mode) ? 'blue' : null; for (const g of Object.values(guns)) g.mag = g.magSize; launcher.loaded = 1; launcher.reserve = 3; hud.hurt(0); }
+    if (player.dead && time > respawnAt && !MATCH.over) { player.respawn(isCombatMode(MATCH.mode) ? spawnPoint('blue') : freeCellNear(0, 28, 5)); player.team = isCombatMode(MATCH.mode) ? 'blue' : null; restorePracticeLoadout(guns, launcher); hud.hurt(0); }
     performanceProfile.end('weapons-bots', systemStarted);
   }
   let systemStarted = performanceProfile.start();
@@ -587,7 +612,7 @@ function loop(now) {
   if (MATCH.started && !MATCH.over && isCombatMode(MATCH.mode) && time > nextDistant) { sfx.distantGunfire(); nextDistant = time + 18 + Math.random() * 30; }
   // HUD
   if (MATCH.started) {
-    if (arsenal.cur === 'rpg') hud.ammo(launcher.loaded, launcher.reserve, player.kills, 'RPG-7'); else { const g = curGun(); hud.ammo(g.mag, g.reserve, player.kills, g.name); }
+    if (arsenal.cur === 'rpg') hud.ammo(launcher.loaded, launcher.reserve, player.kills, 'RPG-7', 'rpg'); else { const g = curGun(); hud.ammo(g.mag, g.reserve, player.kills, g.name, arsenal.cur); }
     const snitch = time < snitchUntil; for (const n in ab) hud.ability(n, ab[n].have / ab[n].need, ab[n].have >= ab[n].need);
     labelItems.length = 0; dots.length = 0;
     for (const b of bots) {
@@ -607,4 +632,4 @@ function loop(now) {
 }
 boot().catch((e) => { console.error(e); pmsg.textContent = 'Could not start: ' + e.message; });
 // expose for QA
-window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, destruction, blast, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };
+window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, destruction, blast, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };

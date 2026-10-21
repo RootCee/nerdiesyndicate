@@ -1,7 +1,7 @@
 export const DESKTOP_WEAPON_ORDER = Object.freeze(['ak', 'mac10', 'mp5', 'm700', 'rpg']);
-// The phone profile keeps two compact firearm viewmodels. This repairs SWAP
-// without loading the full desktop arsenal or the heavier RPG assets.
-export const MOBILE_WEAPON_ORDER = Object.freeze(['ak', 'mac10']);
+// Mobile exposes the shared desktop arsenal. The low-memory profile still
+// starts with only AK/MAC-10 resident; the remaining viewmodels load on demand.
+export const MOBILE_WEAPON_ORDER = DESKTOP_WEAPON_ORDER;
 
 export function weaponOrderForProfile(lowMemory = false) {
   return lowMemory ? [...MOBILE_WEAPON_ORDER] : [...DESKTOP_WEAPON_ORDER];
