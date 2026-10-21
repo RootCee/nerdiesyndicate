@@ -69,7 +69,7 @@ function twoBoneIK(upper, lower, end, target, pole) {
 const UP = new THREE.Vector3(0, 1, 0);
 export class Character {
   constructor(scene, modelName, ghostMat) {
-    const src = lib.models[modelName]; this.name = modelName;
+    const src = lib.models[modelName]; this.name = modelName; this.ghostMat = ghostMat;
     const root = SkeletonUtils.clone(src.scene); prep(root, { cast: true, receive: false, env: 0.7 });
     root.traverse((o) => { if (o.isMesh) { o.frustumCulled = false; o.material = o.material.clone(); } });
     // scale to HEIGHT using the bind-pose bounds
@@ -122,5 +122,25 @@ export class Character {
     if (b.lArm && b.lFore && b.lHand) { b.lArm.getWorldPosition(_b); twoBoneIK(b.lArm, b.lFore, b.lHand, fo, _b.clone().addScaledVector(right, -0.4).addScaledVector(UP, -0.7)); }
   }
   muzzleWorld(out = new THREE.Vector3()) { return out.copy(this.gun.userData.muzzle).applyMatrix4(this.gun.matrixWorld); }
-  dispose(scene) { scene.remove(this.obj); scene.remove(this.gun); }
+  dispose(scene) {
+    scene.remove(this.obj); scene.remove(this.gun);
+    this.mixer.stopAllAction(); this.mixer.uncacheRoot(this.inner);
+    // SkeletonUtils gives each character independent skeletons. WebGL creates
+    // one bone texture per skeleton, so dispose those on mode cleanup or every
+    // Combat -> Free Roam -> Combat cycle retains another GPU allocation set.
+    const skeletons = new Set(), materials = new Set();
+    this.inner.traverse((object) => {
+      if (object.isSkinnedMesh && object.skeleton) skeletons.add(object.skeleton);
+      if (object.isMesh) {
+        const objectMaterials = Array.isArray(object.material) ? object.material : [object.material];
+        for (const material of objectMaterials) if (material && material !== this.ghostMat) materials.add(material);
+      }
+    });
+    // The third-person rifle template is also cloned with SkeletonUtils and
+    // can carry its own skinned submeshes. Its materials/textures are shared,
+    // but its per-clone skeleton textures are not.
+    this.gun.traverse((object) => { if (object.isSkinnedMesh && object.skeleton) skeletons.add(object.skeleton); });
+    for (const skeleton of skeletons) skeleton.dispose();
+    for (const material of materials) material.dispose();
+  }
 }

@@ -253,14 +253,20 @@ export function updateDestruction(dt) {
 // so only the nearby original block (or its complete copy) is submitted to the
 // renderer. Physics/collision state stays deterministic and is restored when
 // the player returns.
-export function updateDestructionStreaming(playerPosition, radius = 112) {
+export function updateDestructionStreaming(playerPosition, radius = 112, requiredStreamingId = null) {
   const groups = new Map();
   for (const spec of D.walls) {
     if (!spec.streaming || groups.has(spec.streaming.id)) continue;
     const stream = spec.streaming;
     groups.set(stream.id, { id: stream.id, centerX: stream.centerX, centerZ: stream.centerZ });
   }
-  activeStreamingId = selectStreamingDistrict([...groups.values()], playerPosition, radius, activeStreamingId, STREAM_SWITCH_HYSTERESIS);
+  // Original Combat reuses the original Hood Warfare block as its arena. The
+  // Underground entrance is outside the Free Roam streaming radius, so mode
+  // transitions must be able to require that block independently of the last
+  // city position. Free Roam continues to use nearest-block selection.
+  activeStreamingId = requiredStreamingId && groups.has(requiredStreamingId)
+    ? requiredStreamingId
+    : selectStreamingDistrict([...groups.values()], playerPosition, radius, activeStreamingId, STREAM_SWITCH_HYSTERESIS);
 
   let activeStructures = 0, activeHouses = 0, activePanels = 0;
   for (const spec of D.walls) {

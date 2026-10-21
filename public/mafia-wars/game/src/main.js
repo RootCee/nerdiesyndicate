@@ -143,6 +143,7 @@ const score = { red: 0, blue: 0 }; const MATCH = { limit: 100, time: 600, left: 
 const developerCombat = qs.get('dev') === 'combat';
 const selectedMode = developerCombat ? GAME_MODES.COMBAT : GAME_MODES.FREE_ROAM;
 let practiceCombat = false, combatLobbyOpen = false;
+let modeCalloutTimer = 0;
 let destructionStreamingStats = { activeStructures: 0, activeHouses: 0, activePanels: 0 };
 const neighborhoodLightPool = [];
 let neighborhoodLightSpecs = [], neighborhoodLightBlock = null;
@@ -273,6 +274,16 @@ function startGame(mode = selectedMode, options = {}) {
   city?.setMode(combat ? 'combat' : 'free-roam');
   const freeRoamSpawn = options.spawn?.clone?.() || (city?.apartment && qs.get('spawn') === 'apartment' ? city.apartment.outsideSpawn.clone() : freeCellNear(0, 28, 5));
   player.respawn(combat ? spawnPoint('blue') : freeRoamSpawn);
+  // The original Hood Warfare neighborhood is the combat arena. Entering via
+  // The Underground happens outside its Free Roam render radius, so explicitly
+  // activate it for combat and immediately restore position-based streaming on
+  // return to the city.
+  destructionStreamingStats = updateDestructionStreaming(
+    player.pos,
+    Q.lowMemory ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.mobile : DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.desktop,
+    combat ? ORIGINAL_NEIGHBORHOOD_LAYOUT.id : null,
+  );
+  updateNeighborhoodLights(destructionStreamingStats.activeStreamingId);
   if (!combat && Number.isFinite(options.yaw)) player.yaw = options.yaw;
   for (const k in guns) { const g = guns[k]; g.mag = g.magSize; g.reserve = g.spec.reserve; g.holstered = k !== 'ak'; g.reloading = 0; } launcher.loaded = 1; launcher.reserve = 3; arsenal.cur = 'ak'; player.kills = 0; player.deaths = 0;
   setCameraMode(!combat);
@@ -283,8 +294,10 @@ function startGame(mode = selectedMode, options = {}) {
   hud.score(0, 0); if (!combat) { $('state').textContent = 'FREE ROAM'; $('timer').textContent = 'NO TIME LIMIT'; }
   $('ov').classList.add('off'); $('lmsg').textContent = ''; $('lboard').classList.remove('on'); requestLock(); unlockAudio();
   console.log('game mode:', MATCH.mode, 'camera:', thirdCamera.enabled ? 'third-person' : 'first-person', 'bots:', bots.length);
-  setTimeout(() => {
-    if (!MATCH.started || MATCH.over) return;
+  clearTimeout(modeCalloutTimer);
+  const announcedMode = MATCH.mode;
+  modeCalloutTimer = setTimeout(() => {
+    if (!MATCH.started || MATCH.over || MATCH.mode !== announcedMode) return;
     if (combat) hud.callout(Q.mobile ? 'TAP SWAP TO CYCLE GUNS' : 'PRESS 2 TO ARM THE RPG-7', Q.mobile ? 'MAC-10 · MP5 · M700 · RPG-7' : '3 MAC-10 · 7 MP5 · 8 SNIPER · Q CYCLES');
     else hud.callout('FREE ROAM', 'NO TIMER · NO FORCED COMBAT · PRESS [V] TO SWITCH CAMERA');
   }, 1200);

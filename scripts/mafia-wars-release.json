@@ -1,7 +1,7 @@
 {
   "name": "Nerdie City: Mafia Wars",
   "channel": "early-development-preview",
-  "sourceCommit": "1db3dc7628bb94b7fcfff162ed1103e4fa7a0e42",
-  "sourceBranch": "codex/mafia-wars-milestone-5-2d",
+  "sourceCommit": "3e0d733065665332110381a6f5ce72023ad9d0d9",
+  "sourceBranch": "codex/mafia-wars-5-2d-1-combat-hotfix",
   "entry": "/mafia-wars/game/?phys=0"
 }
