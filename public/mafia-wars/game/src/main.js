@@ -439,17 +439,29 @@ function configureMultiplayerClient() {
     else if (message.type === 'state') ensureRemote({ id: message.playerId, name: message.name })?.push(message);
     else if (message.type === 'correction' && message.state) player.pos.lerp(new THREE.Vector3(message.state.x, message.state.y, message.state.z), 0.35);
   });
+  const connectWith = async (credentials, label) => {
+    multiplayer.credentials = credentials; $('mpCode').blur();
+    $('mpRoom').textContent = `${label} ${credentials.roomCode} · ${credentials.capacity || MULTIPLAYER_LIMITS.maxPlayers} player capacity`;
+    await multiplayer.connect(credentials);
+  };
+  const enterPublic = async () => {
+    try {
+      multiplayer.name = ($('gname').value.trim() || 'Guest').slice(0, 16);
+      setMultiplayerStatus('Finding the active public city…');
+      await connectWith(await multiplayer.matchmake(), 'PUBLIC ROOM');
+    } catch (error) { setMultiplayerStatus(`Could not join public city · ${error.message}`); }
+  };
   const enter = async (host) => {
     try {
       multiplayer.name = ($('gname').value.trim() || 'Guest').slice(0, 16);
       const credentials = host ? await multiplayer.createRoom() : await multiplayer.joinRoom($('mpCode').value.trim().toUpperCase());
-      multiplayer.credentials = credentials; $('mpCode').blur();
       const share = new URL(location.href); share.searchParams.set('multiplayer', '1'); share.searchParams.set('room', credentials.roomCode); share.searchParams.set('mp', multiplayerServiceUrl);
-      $('mpRoom').textContent = `ROOM ${credentials.roomCode} · share link copied when permitted`;
+      await connectWith(credentials, host ? 'PRIVATE ROOM' : 'ROOM');
       navigator.clipboard?.writeText(share.href).catch(() => {});
-      await multiplayer.connect(credentials);
     } catch (error) { setMultiplayerStatus(error.code === 'room_full' ? 'Room full' : `Could not connect · ${error.message}`); }
   };
+  $('mpPublic').addEventListener('pointerdown', unlockAudio, { passive: true });
+  $('mpPublic').addEventListener('click', enterPublic);
   $('mpHost').addEventListener('click', () => enter(true)); $('mpJoin').addEventListener('click', () => enter(false));
   const requestedRoom = qs.get('room'); if (requestedRoom) { $('mpCode').value = requestedRoom; setTimeout(() => enter(false), 0); }
 }

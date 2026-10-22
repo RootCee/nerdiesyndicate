@@ -11,6 +11,7 @@ export class MultiplayerClient extends EventTarget {
   }
   setState(state, detail = {}) { this.state = state; this.dispatchEvent(new CustomEvent('state', { detail: { state, ...detail } })); }
   async createRoom() { return this.#request('/rooms', { method: 'POST', body: JSON.stringify({ name: this.name }) }); }
+  async matchmake() { return this.#request('/matchmake', { method: 'POST', body: JSON.stringify({ name: this.name }) }); }
   async joinRoom(room) { return this.#request(`/rooms/${encodeURIComponent(room)}/join`, { method: 'POST', body: JSON.stringify({ name: this.name }) }); }
   async #request(path, options) {
     const response = await fetch(this.serviceUrl + path, { ...options, headers: { 'content-type': 'application/json' } });

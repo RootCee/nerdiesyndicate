@@ -154,6 +154,7 @@ body.multiplayer-dev #mpEntry { display: block; }
 #mpEntry .row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 #mpEntry button, #mpEntry input { min-height: 42px; border: 1px solid rgba(217,172,88,.6); border-radius: 6px; background: rgba(255,255,255,.07); color: #fff; font: 700 11px/1 'Barlow'; letter-spacing: .12em; text-transform: uppercase; padding: 10px 12px; }
 #mpEntry button { cursor: pointer; color: #17130c; background: var(--gold); }
+#mpEntry #mpPublic { width: 100%; margin-bottom: 10px; min-height: 50px; font-size: 14px; background: linear-gradient(135deg, var(--gold-bright), var(--gold)); }
 #mpEntry input { width: 150px; text-align: center; user-select: text; -webkit-user-select: text; }
 #mpRoom { margin-top: 10px; color: #f5d58e; font: 700 11px/1.5 'Barlow'; letter-spacing: .12em; }
 body.multiplayer-dev #go { display: none !important; }
@@ -261,8 +262,9 @@ body.multiplayer-dev #go { display: none !important; }
     <div id="idrow"><input id="gname" maxlength="16" placeholder="GAMERTAG" autocomplete="off" spellcheck="false"><input id="gwallet" maxlength="42" placeholder="BASE WALLET (COMING SOON)" autocomplete="off" spellcheck="false" disabled aria-label="Base wallet integration coming soon"></div>
     <button id="go">Enter City</button>
     <div id="mpEntry" aria-label="Two-player multiplayer development preview">
-      <div class="row"><button id="mpHost" type="button">Host 2-Player Room</button><input id="mpCode" maxlength="12" placeholder="ROOM CODE" autocomplete="off" spellcheck="false"><button id="mpJoin" type="button">Join Room</button></div>
-      <div id="mpRoom">Presence-only preview · combat and destruction disabled</div>
+      <button id="mpPublic" type="button">Enter Public City</button>
+      <div class="row"><button id="mpHost" type="button">Host Private Room</button><input id="mpCode" maxlength="12" placeholder="PRIVATE CODE" autocomplete="off" spellcheck="false"><button id="mpJoin" type="button">Join Private</button></div>
+      <div id="mpRoom">Public matchmaking fills the active city automatically · 2-player capacity</div>
     </div>
     <div class="hint" id="ladder" role="status">LEADERBOARD · COMING SOON</div>
     <div class="hint" id="hint"><b>FREE ROAM</b> · expanded city · no timer · no forced fights<br>WASD move · mouse look · Shift sprint · Space jump · E enter buildings · V camera</div>
