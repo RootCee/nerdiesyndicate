@@ -68,10 +68,11 @@ function twoBoneIK(upper, lower, end, target, pole) {
 
 const UP = new THREE.Vector3(0, 1, 0);
 export class Character {
-  constructor(scene, modelName, ghostMat) {
+  constructor(scene, modelName, ghostMat, { presenceOnly = false } = {}) {
     const src = lib.models[modelName]; this.name = modelName; this.ghostMat = ghostMat;
-    const root = SkeletonUtils.clone(src.scene); prep(root, { cast: true, receive: false, env: 0.7 });
-    root.traverse((o) => { if (o.isMesh) { o.frustumCulled = false; o.material = o.material.clone(); } });
+    this.presenceOnly = presenceOnly; this.ownsMaterials = !presenceOnly;
+    const root = SkeletonUtils.clone(src.scene); prep(root, { cast: !presenceOnly, receive: false, env: 0.7 });
+    root.traverse((o) => { if (o.isMesh) { o.frustumCulled = presenceOnly; if (this.ownsMaterials) o.material = o.material.clone(); } });
     // scale to HEIGHT using the bind-pose bounds
     const bb = new THREE.Box3().setFromObject(root); const s = HEIGHT / Math.max(0.1, bb.max.y - bb.min.y);
     this.inner = root; root.scale.setScalar(s); root.position.y = -bb.min.y * s;
@@ -80,12 +81,12 @@ export class Character {
     this.b = { spine: bone('Spine2'), rArm: bone('RightArm'), rFore: bone('RightForeArm'), rHand: bone('RightHand'), lArm: bone('LeftArm'), lFore: bone('LeftForeArm'), lHand: bone('LeftHand'), head: bone('Head') };
     this.mixer = new THREE.AnimationMixer(root); this.actions = {};
     for (const [k, c] of Object.entries(lib.clips)) this.actions[k] = this.mixer.clipAction(c);
-    this.gun = makeGun(); scene.add(this.gun);
+    this.gun = presenceOnly ? null : makeGun(); if (this.gun) scene.add(this.gun);
     this.aimPitch = 0; this.ready = 1; this.dead = false;
     this.visualOffset = new THREE.Vector3();
     // x-ray ghost: extra skinned meshes bound to the same skeleton, drawn on top
     this.ghosts = [];
-    root.traverse((o) => { if (o.isSkinnedMesh) { const g = new THREE.SkinnedMesh(o.geometry, ghostMat); g.bind(o.skeleton, o.bindMatrix); g.renderOrder = 50; g.visible = false; g.frustumCulled = false; o.parent.add(g); this.ghosts.push(g); } });
+    if (!presenceOnly) root.traverse((o) => { if (o.isSkinnedMesh) { const g = new THREE.SkinnedMesh(o.geometry, ghostMat); g.bind(o.skeleton, o.bindMatrix); g.renderOrder = 50; g.visible = false; g.frustumCulled = false; o.parent.add(g); this.ghosts.push(g); } });
     this.play('Idle_Gun', 0);
   }
   set ghostVisible(v) { for (const g of this.ghosts) g.visible = v; }
@@ -102,6 +103,7 @@ export class Character {
     const targetOffset = contactOffset || _t.set(0, 0, 0);
     this.visualOffset.lerp(targetOffset, 1 - Math.exp(-18 * Math.max(0, dt)));
     this.obj.position.copy(pos).add(this.visualOffset); this.obj.rotation.y = yaw; this.mixer.update(dt);
+    if (!this.gun) return;
     this.obj.updateMatrixWorld(true);
     this.ready += ((aiming ? 1 : 0) - this.ready) * Math.min(1, dt * 8);
     this.gun.visible = !dead;
@@ -123,7 +125,7 @@ export class Character {
   }
   muzzleWorld(out = new THREE.Vector3()) { return out.copy(this.gun.userData.muzzle).applyMatrix4(this.gun.matrixWorld); }
   dispose(scene) {
-    scene.remove(this.obj); scene.remove(this.gun);
+    scene.remove(this.obj); if (this.gun) scene.remove(this.gun);
     this.mixer.stopAllAction(); this.mixer.uncacheRoot(this.inner);
     // SkeletonUtils gives each character independent skeletons. WebGL creates
     // one bone texture per skeleton, so dispose those on mode cleanup or every
@@ -131,7 +133,7 @@ export class Character {
     const skeletons = new Set(), materials = new Set();
     this.inner.traverse((object) => {
       if (object.isSkinnedMesh && object.skeleton) skeletons.add(object.skeleton);
-      if (object.isMesh) {
+      if (this.ownsMaterials && object.isMesh) {
         const objectMaterials = Array.isArray(object.material) ? object.material : [object.material];
         for (const material of objectMaterials) if (material && material !== this.ghostMat) materials.add(material);
       }
@@ -139,7 +141,7 @@ export class Character {
     // The third-person rifle template is also cloned with SkeletonUtils and
     // can carry its own skinned submeshes. Its materials/textures are shared,
     // but its per-clone skeleton textures are not.
-    this.gun.traverse((object) => { if (object.isSkinnedMesh && object.skeleton) skeletons.add(object.skeleton); });
+    this.gun?.traverse((object) => { if (object.isSkinnedMesh && object.skeleton) skeletons.add(object.skeleton); });
     for (const skeleton of skeletons) skeleton.dispose();
     for (const material of materials) material.dispose();
   }
