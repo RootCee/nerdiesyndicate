@@ -1,4 +1,4 @@
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 export const MULTIPLAYER_LIMITS = Object.freeze({
   maxPlayers: 6,
   updateHz: 15,
@@ -12,6 +12,7 @@ export const MULTIPLAYER_LIMITS = Object.freeze({
   roomIdleMs: 15 * 60_000,
   maxPayloadBytes: 1024,
   maxMessagesPerSecond: 30,
+  maxAppearanceUpdatesPerSecond: 2,
   maxSpeed: 8.5,
   maxAcceleration: 32,
   bounds: Object.freeze({ minX: -140, maxX: 244, minZ: -148, maxZ: 148 }),

@@ -1,5 +1,6 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
-import { Character } from './characters.js';
+import { Character, ensureCharacterModel } from './characters.js';
+import { normalizeAvatarAppearance } from './avatar-schema.js';
 import { MULTIPLAYER_LIMITS, interpolateSnapshots } from './multiplayer-protocol.js';
 
 function makeLabel(name) {
@@ -10,11 +11,25 @@ function makeLabel(name) {
 }
 
 export class RemotePlayer {
-  constructor(scene, { id, name }, ghostMat) {
-    this.scene = scene; this.id = id; this.name = name; this.snapshots = []; this.character = new Character(scene, 'blue_zip', ghostMat, { presenceOnly: true });
-    this.label = makeLabel(name); this.character.obj.add(this.label); this.position = new THREE.Vector3(); this.lastStateAt = performance.now();
+  constructor(scene, { id, name, appearance, appearanceRevision = 0 }, ghostMat) {
+    this.scene = scene; this.id = id; this.name = name; this.ghostMat = ghostMat; this.snapshots = []; this.character = null;
+    this.label = makeLabel(name); this.label.visible = false; this.scene.add(this.label); this.position = new THREE.Vector3(); this.lastStateAt = performance.now();
     this.lastSeq = -1; this.lastServerAt = 0; this.lastArrivalAt = 0; this.animationAccum = 0; this.renderState = {};
+    this.appearance = normalizeAvatarAppearance(appearance); this.appearanceRevision = -1; this.appearanceRequest = 0;
     this.metrics = { snapshots: 0, staleSnapshots: 0, jitterMs: 0, interpolationMs: MULTIPLAYER_LIMITS.interpolationMs, snapshotAgeMs: 0, extrapolations: 0, animationUpdates: 0 };
+    this.setAppearance(this.appearance, appearanceRevision);
+  }
+  async setAppearance(appearance, revision = this.appearanceRevision + 1) {
+    if (revision < this.appearanceRevision) return false;
+    const canonical = normalizeAvatarAppearance(appearance);
+    if (this.character?.name === canonical.preset) { this.appearance = canonical; this.appearanceRevision = revision; return true; }
+    const request = ++this.appearanceRequest;
+    try { await ensureCharacterModel(canonical.preset); } catch { return false; }
+    if (request !== this.appearanceRequest || revision < this.appearanceRevision) return false;
+    const replacement = new Character(this.scene, canonical.preset, this.ghostMat, { presenceOnly: true });
+    replacement.obj.position.copy(this.position); replacement.obj.visible = this.character?.obj.visible ?? false;
+    this.label.position.set(0, 2.25, 0); this.label.visible = true; replacement.obj.add(this.label); this.character?.dispose(this.scene); this.character = replacement;
+    this.appearance = canonical; this.appearanceRevision = revision; return true;
   }
   push(state) {
     if (!Number.isFinite(state?.serverTime) || !Number.isSafeInteger(state.seq) || state.seq <= this.lastSeq) { this.metrics.staleSnapshots++; return; }
@@ -34,6 +49,7 @@ export class RemotePlayer {
     this.metrics.snapshotAgeMs = Math.max(0, serverNow - this.lastServerAt); if (state.extrapolated) this.metrics.extrapolations++;
     this.position.set(state.x, state.y, state.z);
     const distance = viewerPosition ? viewerPosition.distanceTo(this.position) : 0;
+    if (!this.character) { this.label.position.copy(this.position); this.label.position.y += 2.25; return; }
     this.character.obj.visible = distance < 180;
     if (!this.character.obj.visible) return;
     this.character.obj.position.copy(this.position); this.character.obj.rotation.y = state.yaw + Math.PI;
@@ -46,5 +62,5 @@ export class RemotePlayer {
     }
   }
   diagnostics() { return { ...this.metrics, queuedSnapshots: this.snapshots.length }; }
-  dispose() { this.label.material.map.dispose(); this.label.material.dispose(); this.character.dispose(this.scene); }
+  dispose() { this.appearanceRequest++; this.scene.remove(this.label); this.label.material.map.dispose(); this.label.material.dispose(); this.character?.dispose(this.scene); }
 }

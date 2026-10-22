@@ -3,6 +3,7 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import * as SkeletonUtils from '/mafia-wars/game/vendor/three/jsm/utils/SkeletonUtils.js';
 import { loadGLB, prep } from './assets.js';
+import { AVATAR_PRESETS, isAvatarPreset } from './avatar-schema.js';
 
 export const ROSTER = {
   blue: ['blue_zip', 'navy'],
@@ -11,24 +12,40 @@ export const ROSTER = {
 const HEIGHT = 1.8; // metres, top of head
 const CLIP_MAP = { Idle_Gun: 'idle', Idle_Gun_Shoot: 'idle', Run: 'run', Run_Shoot: 'run', Walk: 'walk', Death: 'fall', HitRecieve: 'hit_to_body_01' };
 
-const lib = { models: {}, clips: {}, gun: null, ready: false };
+const lib = { models: {}, loading: {}, clips: {}, gun: null, ready: false };
+
+function registerClips(glb) {
+  for (const source of glb.animations || []) {
+    const key = source.name.replace(/\.\d+$/, '');
+    if (lib.clips[key]) continue;
+    const clip = source.clone(); clip.name = key;
+    for (const track of clip.tracks) if (/Hips\.position$/.test(track.name)) {
+      const values = track.values, x0 = values[0], z0 = values[2];
+      for (let i = 0; i < values.length; i += 3) { values[i] = x0; values[i + 2] = z0; }
+    }
+    lib.clips[key] = clip;
+  }
+}
+
+export async function ensureCharacterModel(name) {
+  if (!isAvatarPreset(name)) throw new Error(`Unsupported character preset: ${name}`);
+  if (lib.models[name]) return lib.models[name];
+  if (!lib.loading[name]) lib.loading[name] = loadGLB(`assets/chars/${name}.glb`)
+    .then((glb) => { lib.models[name] = glb; registerClips(glb); return glb; })
+    .finally(() => { delete lib.loading[name]; });
+  return lib.loading[name];
+}
 
 export async function loadCharacters(gunTemplate, names = [...ROSTER.blue, ...ROSTER.red]) {
-  const glbs = await Promise.all(names.map((n) => loadGLB(`assets/chars/${n}.glb`).catch(() => null)));
-  names.forEach((n, i) => { if (glbs[i]) lib.models[n] = glbs[i]; });
-  // clips: take them from whichever model carries them (blue_zip was exported with all of them)
-  for (const g of glbs) if (g) for (const c of g.animations) {
-    const key = c.name.replace(/\.\d+$/, '');
-    if (!lib.clips[key]) { c.name = key; lib.clips[key] = c; }
-  }
-  // strip horizontal root motion from the Hips track so "in place" really stays in place
-  for (const c of Object.values(lib.clips)) for (const t of c.tracks) if (/Hips\.position$/.test(t.name)) {
-    const v = t.values; const x0 = v[0], z0 = v[2]; for (let i = 0; i < v.length; i += 3) { v[i] = x0; v[i + 2] = z0; }
-  }
+  // blue_zip carries the shared Mixamo clips; every other preset is loaded only
+  // when selected or required by combat.
+  const requested = [...new Set(['blue_zip', ...names])];
+  await Promise.all(requested.map((name) => ensureCharacterModel(name).catch(() => null)));
   lib.gun = gunTemplate; lib.ready = Object.keys(lib.models).length > 0 && !!lib.clips.idle;
   return lib.ready;
 }
 export const charactersReady = () => lib.ready;
+export const characterAssetStats = () => ({ loaded: Object.keys(lib.models), pending: Object.keys(lib.loading), available: AVATAR_PRESETS.map(({ id }) => id) });
 
 // A gun group whose origin is the pistol grip and whose muzzle points down -Z (0.86 m long).
 function makeGun() {
@@ -69,7 +86,8 @@ function twoBoneIK(upper, lower, end, target, pole) {
 const UP = new THREE.Vector3(0, 1, 0);
 export class Character {
   constructor(scene, modelName, ghostMat, { presenceOnly = false } = {}) {
-    const src = lib.models[modelName]; this.name = modelName; this.ghostMat = ghostMat;
+    const src = lib.models[modelName]; if (!src) throw new Error(`Character preset not loaded: ${modelName}`);
+    this.name = modelName; this.ghostMat = ghostMat;
     this.presenceOnly = presenceOnly; this.ownsMaterials = !presenceOnly;
     const root = SkeletonUtils.clone(src.scene); prep(root, { cast: !presenceOnly, receive: false, env: 0.7 });
     root.traverse((o) => { if (o.isMesh) { o.frustumCulled = presenceOnly; if (this.ownsMaterials) o.material = o.material.clone(); } });

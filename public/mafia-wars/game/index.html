@@ -158,6 +158,19 @@ body.multiplayer-dev #mpEntry { display: block; }
 #mpEntry input { width: 150px; text-align: center; user-select: text; -webkit-user-select: text; }
 #mpRoom { margin-top: 10px; color: #f5d58e; font: 700 11px/1.5 'Barlow'; letter-spacing: .12em; }
 body.multiplayer-dev #go { display: none !important; }
+.avatar-creator { width: min(500px, 92vw); margin: 15px auto 0; padding: 13px; border: 1px solid rgba(217,172,88,.3); border-radius: 9px; background: rgba(0,0,0,.24); }
+.avatar-creator h3 { margin: 0 0 10px; color: #f4e7c9; font: 700 11px/1 'Barlow'; letter-spacing: .2em; text-transform: uppercase; }
+.avatar-presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+.avatar-preset { min-height: 58px; padding: 8px 5px; border: 1px solid rgba(255,255,255,.17); border-radius: 7px; color: #dfe5ed; background: rgba(255,255,255,.055); font: 700 10px/1.25 'Barlow'; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; touch-action: manipulation; }
+.avatar-preset::before { content: ''; display: block; width: 24px; height: 24px; margin: 0 auto 6px; border-radius: 50% 50% 42% 42%; background: var(--avatar-accent, #334); box-shadow: inset 0 0 0 2px rgba(255,255,255,.14), 0 2px 8px rgba(0,0,0,.5); }
+.avatar-preset[aria-checked="true"] { color: #17130c; border-color: #ffe6ad; background: linear-gradient(135deg, var(--gold-bright), var(--gold)); box-shadow: 0 0 0 2px rgba(217,172,88,.16); }
+.avatar-status { min-height: 12px; margin-top: 8px; color: #8fa0b6; font: 600 10px/1.3 'Barlow'; letter-spacing: .1em; text-transform: uppercase; }
+#avatarToggle { display: none; position: fixed; z-index: 8; top: calc(58px + var(--sat)); right: calc(14px + var(--sar)); padding: 10px 12px; border: 1px solid rgba(217,172,88,.6); border-radius: 6px; color: #17130c; background: var(--gold); font: 700 10px/1 'Barlow'; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
+body.multiplayer-active #avatarToggle { display: block; }
+#avatarPanel { display: none; position: fixed; z-index: 9; top: calc(104px + var(--sat)); right: calc(14px + var(--sar)); width: min(410px, calc(100vw - 28px - var(--sal) - var(--sar))); padding: 14px; border: 1px solid rgba(217,172,88,.55); border-radius: 9px; background: rgba(10,11,13,.96); box-shadow: 0 18px 60px rgba(0,0,0,.65); }
+#avatarPanel.on { display: block; }
+#avatarPanel .avatar-creator { width: auto; margin: 0; padding: 0; border: 0; background: none; }
+@media (max-width: 620px) { .avatar-presets { grid-template-columns: repeat(2, 1fr); } .avatar-preset { min-height: 54px; } #avatarToggle { top: calc(48px + var(--sat)); } #avatarPanel { top: calc(90px + var(--sat)); } }
 #ov .hint { font: 500 12px/1.6 'Barlow'; letter-spacing: .1em; color: #6f859d; margin-top: 18px; }
 #end { font: 400 clamp(30px, 7vw, 54px)/1 'Marker'; }
 #ov > div { max-height: 100svh; overflow-y: auto; padding: 18px 0; width: min(680px, 100%); }
@@ -224,6 +237,10 @@ body.multiplayer-dev #go { display: none !important; }
 </div>
 
 <button id="combatExit" type="button">Return to City · X</button>
+<button id="avatarToggle" type="button" aria-expanded="false" aria-controls="avatarPanel">Character</button>
+<div id="avatarPanel" role="dialog" aria-label="Change character">
+  <div class="avatar-creator"><h3>Change Character</h3><div class="avatar-presets" id="avatarPresetsLive" role="radiogroup" aria-label="Character preset"></div><div class="avatar-status" id="avatarStatusLive" role="status"></div></div>
+</div>
 
 <div id="touch">
   <div id="stick"><div id="knob"></div></div>
@@ -260,6 +277,7 @@ body.multiplayer-dev #go { display: none !important; }
     <div class="msg" id="lmsg"></div>
     <div id="lboard"></div>
     <div id="idrow"><input id="gname" maxlength="16" placeholder="GAMERTAG" autocomplete="off" spellcheck="false"><input id="gwallet" maxlength="42" placeholder="BASE WALLET (COMING SOON)" autocomplete="off" spellcheck="false" disabled aria-label="Base wallet integration coming soon"></div>
+    <div class="avatar-creator"><h3>Choose Your Character</h3><div class="avatar-presets" id="avatarPresets" role="radiogroup" aria-label="Character preset"></div><div class="avatar-status" id="avatarStatus" role="status">Four original character presets · appearance saves on this device</div></div>
     <button id="go">Enter City</button>
     <div id="mpEntry" aria-label="Six-player multiplayer development preview">
       <button id="mpPublic" type="button">Enter Public City</button>
