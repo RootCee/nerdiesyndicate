@@ -11,7 +11,7 @@ import { buildWorld, colliders, collisionBroadphaseStats, lamps, windowsLit, res
 import { Player } from './player.js';
 import { FX, Weapon, GUN_SPECS } from './weapon.js';
 import { Bot, buildNav, rayVsBots, freeCellNear } from './bots.js';
-import { Character, loadCharacters } from './characters.js';
+import { Character, loadCharacters, ensureCharacterModel, characterAssetStats } from './characters.js';
 import { Launcher } from './rocket.js';
 import { addWall, wallSpec, initDestruction, updateDestruction, updateDestructionStreaming, beginDestructionPrewarm, destruction, blast } from './destruction.js';
 import { WALL_LOTS, GEO, houseDescs } from './world.js';
@@ -34,6 +34,7 @@ import { MultiplayerClient } from './multiplayer-client.js';
 import { resolveMultiplayerService } from './multiplayer-endpoint.js';
 import { RemotePlayer } from './remote-player.js';
 import { MULTIPLAYER_LIMITS, MULTIPLAYER_SPAWNS } from './multiplayer-protocol.js';
+import { AVATAR_PRESETS, normalizeAvatarAppearance, sameAvatarAppearance } from './avatar-schema.js';
 
 const qs = new URLSearchParams(location.search);
 const multiplayerDev = qs.get('multiplayer') === '1';
@@ -42,6 +43,9 @@ const performanceProfile = createPerformanceProfiler(qs.get('perf') === '1');
 // Legacy ladder support remains developer-only. Public Base identity and rankings are coming later.
 const API = qs.get('api') || '';
 const ident = (() => { try { return JSON.parse(localStorage.getItem('nerdie-city-mafia-wars.identity') || '{}') || {}; } catch { return {}; } })();
+const APPEARANCE_STORAGE_KEY = 'nerdie-city-mafia-wars.avatar.v1';
+let localAppearance = (() => { try { return normalizeAvatarAppearance(JSON.parse(localStorage.getItem(APPEARANCE_STORAGE_KEY) || '{}')); } catch { return normalizeAvatarAppearance(); } })();
+function persistAppearance() { try { localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify(localAppearance)); } catch {} }
 function saveIdent() { ident.name = $('gname').value.trim(); ident.wallet = $('gwallet').value.trim(); try { localStorage.setItem('nerdie-city-mafia-wars.identity', JSON.stringify(ident)); } catch {} }
 async function submitMatch() {
   const lm = $('lmsg');
@@ -166,6 +170,7 @@ async function selectWeapon(command) {
   } finally { if (pendingWeapon === want) pendingWeapon = ''; }
 }
 const bots = []; let trooper = null, localAvatar = null, city = null, collisionDebug = null;
+let localAppearanceRequest = 0;
 let multiplayer = null, multiplayerActive = false, multiplayerServerOffset = 0, multiplayerSendAt = 0, multiplayerPingAt = 0, multiplayerStatusAt = 0;
 const remotePlayers = new Map();
 const avatarContactOffset = new THREE.Vector3();
@@ -190,10 +195,47 @@ function updateNeighborhoodLights(blockId) {
     light.intensity = blockId ? (spec.alley ? 90 : 150) : 0;
   });
 }
-let combatAssetsReady = !Q.lowMemory, combatAssetsLoading = false;
+// Free Roam now loads only the selected local preset. The complete actor roster
+// becomes ready at the explicit combat boundary (or during direct dev combat).
+let combatAssetsReady = developerCombat, combatAssetsLoading = false;
 const ab = { 4: { need: 3, have: 0, name: 'SNITCH', sub: 'PRESS [4]' }, 5: { need: 5, have: 0, name: 'HOMIES', sub: 'PRESS [5]' }, 6: { need: 4, have: 0, name: 'SUICIDE BOMBER', sub: 'PRESS [6]' } };
 let snitchUntil = 0, killStreak = 0, streakT = 0, time = 0, hurtK = 0, respawnAt = 0;
 const ghostMat = new THREE.MeshBasicMaterial({ color: 0xff3040, transparent: true, opacity: 0.4, depthTest: false, depthWrite: false, toneMapped: false });
+
+function syncAvatarSelectors(status = '') {
+  for (const containerId of ['avatarPresets', 'avatarPresetsLive']) for (const button of $(containerId)?.querySelectorAll('[data-avatar-preset]') || []) button.setAttribute('aria-checked', String(button.dataset.avatarPreset === localAppearance.preset));
+  for (const statusId of ['avatarStatus', 'avatarStatusLive']) if ($(statusId) && status) $(statusId).textContent = status;
+}
+async function applyLocalAppearance(appearance, { broadcast = true, persist = true } = {}) {
+  const canonical = normalizeAvatarAppearance(appearance);
+  if (sameAvatarAppearance(localAppearance, canonical) && localAvatar?.name === canonical.preset) { if (multiplayer) multiplayer.appearance = canonical; syncAvatarSelectors('Character ready'); return true; }
+  const request = ++localAppearanceRequest; syncAvatarSelectors('Loading character…');
+  try { await ensureCharacterModel(canonical.preset); } catch (error) { console.error('avatar load:', error); syncAvatarSelectors('Character could not be loaded'); return false; }
+  if (request !== localAppearanceRequest) return false;
+  const replacement = new Character(scene, canonical.preset, ghostMat);
+  const wasVisible = localAvatar?.obj.visible ?? false, gunVisible = localAvatar?.gun?.visible ?? false;
+  replacement.obj.visible = wasVisible; if (replacement.gun) replacement.gun.visible = gunVisible;
+  replacement.aimPitch = player.pitch; localAvatar?.dispose(scene); localAvatar = replacement;
+  localAppearance = canonical; if (persist) persistAppearance(); setInteriorRenderLayer(interiorSceneState.active);
+  if (multiplayer) multiplayer.appearance = canonical;
+  syncAvatarSelectors('Character saved');
+  if (broadcast && multiplayer?.state === 'connected') multiplayer.updateAppearance(canonical);
+  return true;
+}
+function configureAvatarUi() {
+  const makeButtons = (containerId) => {
+    const container = $(containerId); if (!container) return;
+    for (const preset of AVATAR_PRESETS) {
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'avatar-preset'; button.dataset.avatarPreset = preset.id; button.setAttribute('role', 'radio'); button.style.setProperty('--avatar-accent', preset.accent); button.textContent = preset.label;
+      button.addEventListener('click', () => applyLocalAppearance({ preset: preset.id })); container.appendChild(button);
+    }
+  };
+  makeButtons('avatarPresets'); makeButtons('avatarPresetsLive'); syncAvatarSelectors();
+  $('avatarToggle').addEventListener('click', () => {
+    const open = !$('avatarPanel').classList.contains('on'); $('avatarPanel').classList.toggle('on', open); $('avatarToggle').setAttribute('aria-expanded', String(open));
+    if (open) { input.moveX = input.moveY = 0; input.fire = input.ads = input.sprint = false; document.exitPointerLock?.(); } else if (MATCH.started && !MATCH.over) requestLock();
+  });
+}
 const interiorSceneState = { active: false, outdoor: null };
 function setInteriorRenderLayer(active) {
   const layer = active ? 1 : 0;
@@ -366,6 +408,8 @@ function startGame(mode = selectedMode, options = {}) {
   $('weaponTray')?.classList.remove('on'); document.body.classList.remove('weapon-selecting');
   practiceCombat = combat && !!options.practice;
   multiplayerActive = !combat && !!options.multiplayer;
+  document.body.classList.toggle('multiplayer-active', multiplayerActive);
+  $('avatarPanel')?.classList.remove('on'); $('avatarToggle')?.setAttribute('aria-expanded', 'false');
   const freshCombatSession = combat ? beginCombatSession() : false;
   practiceResupply.setEnabled(practiceCombat);
   setCombatLobby(false);
@@ -420,11 +464,12 @@ function ensureRemote(playerInfo) {
   if (!playerInfo?.id || playerInfo.id === multiplayer?.credentials?.playerId) return null;
   let remote = remotePlayers.get(playerInfo.id);
   if (!remote) { remote = new RemotePlayer(scene, playerInfo, ghostMat); remotePlayers.set(playerInfo.id, remote); }
+  else if (playerInfo.appearance) remote.setAppearance(playerInfo.appearance, playerInfo.appearanceRevision);
   return remote;
 }
 function configureMultiplayerClient() {
   if (!multiplayerDev) return;
-  multiplayer = new MultiplayerClient({ serviceUrl: multiplayerServiceUrl, name: ident.name || 'Guest' });
+  multiplayer = new MultiplayerClient({ serviceUrl: multiplayerServiceUrl, name: ident.name || 'Guest', appearance: localAppearance });
   multiplayer.addEventListener('state', ({ detail }) => {
     const labels = { connecting: 'Connecting…', connected: 'Connected · public city online', reconnecting: 'Reconnecting…', 'room-full': 'Room full', 'connection-lost': 'Connection lost', 'session-expired': 'Session expired', disconnected: 'Disconnected' };
     setMultiplayerStatus(labels[detail.state] || detail.state);
@@ -439,10 +484,15 @@ function configureMultiplayerClient() {
       multiplayerServerOffset = message.serverTime - Date.now();
       if (Number.isInteger(message.spawnIndex)) multiplayer.credentials.spawnIndex = message.spawnIndex;
       if (Number.isInteger(message.capacity)) multiplayer.credentials.capacity = message.capacity;
+      if (message.appearance) applyLocalAppearance(message.appearance, { broadcast: false });
       for (const peer of message.peers || []) { const remote = ensureRemote(peer); if (remote && peer.state) remote.push(peer.state); }
     } else if (message.type === 'peer-joined') { ensureRemote(message.player); setMultiplayerStatus(`Connected · ${message.player.name} joined`); }
     else if (message.type === 'peer-left') { remotePlayers.get(message.playerId)?.dispose(); remotePlayers.delete(message.playerId); setMultiplayerStatus('Connected · a player is reconnecting'); }
     else if (message.type === 'state') ensureRemote({ id: message.playerId, name: message.name })?.push(message);
+    else if (message.type === 'appearance') {
+      if (message.playerId === multiplayer.credentials?.playerId) applyLocalAppearance(message.appearance, { broadcast: false });
+      else ensureRemote({ id: message.playerId, name: 'PLAYER', appearance: message.appearance, appearanceRevision: message.appearanceRevision });
+    }
     else if (message.type === 'correction' && message.state) player.pos.lerp(new THREE.Vector3(message.state.x, message.state.y, message.state.z), 0.35);
   });
   const connectWith = async (credentials, label) => {
@@ -485,7 +535,9 @@ async function startPracticeMatch() {
   try {
     if (!combatAssetsReady) {
       combatAssetsLoading = true; button.disabled = true; button.textContent = 'Loading AI Fighters…';
-      await loadCharacters(weapon.template3p, ['red_hoodie', 'red_jersey']);
+      // Combat can create any roster member. Keep Free Roam lazy, then load
+      // the complete four-preset roster only at this explicit mode boundary.
+      await loadCharacters(weapon.template3p);
       combatAssetsReady = true;
     }
     button.textContent = 'Practice Match'; button.disabled = false; combatAssetsLoading = false;
@@ -580,8 +632,8 @@ async function boot() {
   if (Q.lowMemory) await Promise.all([weapon.load(), guns.mac10.load()]);
   else { await Promise.all(Object.values(guns).map((g) => g.load())); await launcher.load(); }
   pmsg.textContent = 'Calling the homies…';
-  await loadCharacters(weapon.template3p, Q.lowMemory ? ['blue_zip', 'navy'] : undefined);
-  localAvatar = new Character(scene, 'navy', ghostMat);
+  await loadCharacters(weapon.template3p, developerCombat ? undefined : [localAppearance.preset]);
+  localAvatar = new Character(scene, localAppearance.preset, ghostMat);
   localAvatar.obj.visible = false; localAvatar.gun.visible = false;
   setInteriorRenderLayer(false);
   for (const g of Object.values(guns)) {
@@ -630,6 +682,7 @@ async function boot() {
   pbar.style.width = '100%'; pmsg.textContent = Q.mobile ? 'City ready · left thumb moves · right thumb aims' : 'City ready';
   console.log('performance profile:', Q.lowMemory ? 'mobile-low-memory' : 'full');
   $('go').classList.add('on');
+  configureAvatarUi();
   configureEntryUi();
   configureMultiplayerClient();
   $('go').addEventListener('pointerdown', unlockAudio, { passive: true });
@@ -648,6 +701,7 @@ let last = performance.now(), fpsAcc = 0, fpsN = 0, nextDistant = 12;
 let lastProfileChunks = '', lastProfileStream = null;
 addEventListener('keydown', (e) => {
   if (e.target && e.target.tagName === 'INPUT') return;
+  if (e.code === 'Escape' && $('avatarPanel')?.classList.contains('on')) { $('avatarPanel').classList.remove('on'); $('avatarToggle').setAttribute('aria-expanded', 'false'); if (MATCH.started && !MATCH.over) requestLock(); return; }
   if (e.code === 'Escape' && combatLobbyOpen) { setCombatLobby(false); return; }
   if (e.code === 'KeyX' && practiceCombat && MATCH.started) { returnToCity(); return; }
   if (e.code === 'KeyM') { setMuted(!isMuted()); hud.callout(isMuted() ? 'SOUND OFF' : 'SOUND ON', 'PRESS [M]'); }
@@ -805,4 +859,4 @@ function loop(now) {
 }
 boot().catch((e) => { console.error(e); pmsg.textContent = 'Could not start: ' + e.message; });
 // expose for QA
-window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, remotePlayers, get multiplayer() { return multiplayer; }, get multiplayerActive() { return multiplayerActive; }, get multiplayerDiagnostics() { return { client: multiplayer?.diagnostics?.() || null, remotes: [...remotePlayers.values()].map((remote) => ({ id: remote.id, ...remote.diagnostics() })) }; }, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };
+window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, remotePlayers, applyLocalAppearance, characterAssetStats, get localAppearance() { return localAppearance; }, get multiplayer() { return multiplayer; }, get multiplayerActive() { return multiplayerActive; }, get multiplayerDiagnostics() { return { client: multiplayer?.diagnostics?.() || null, remotes: [...remotePlayers.values()].map((remote) => ({ id: remote.id, appearance: remote.appearance, ...remote.diagnostics() })) }; }, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };

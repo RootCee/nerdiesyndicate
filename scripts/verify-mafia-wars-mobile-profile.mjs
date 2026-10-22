@@ -3,8 +3,8 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '..', 'public', 'mafia-wars', 'game', 'src');
-const [main, assets, audio, world, characters, cityExpansion, apartment, combatVenue, player, collision, weaponCycle, loadout, resupply, resupplyRules, respawnRules] = await Promise.all(
-  ['main.js', 'assets.js', 'audio.js', 'world.js', 'characters.js', 'city-expansion.js', 'apartment-system.js', 'combat-venue.js', 'player.js', 'collision-math.js', 'weapon-cycle.js', 'loadout.js', 'practice-resupply.js', 'resupply-rules.js', 'respawn-rules.js'].map((file) => readFile(path.join(root, file), 'utf8')),
+const [main, assets, audio, world, characters, avatarSchema, cityExpansion, apartment, combatVenue, player, collision, weaponCycle, loadout, resupply, resupplyRules, respawnRules] = await Promise.all(
+  ['main.js', 'assets.js', 'audio.js', 'world.js', 'characters.js', 'avatar-schema.js', 'city-expansion.js', 'apartment-system.js', 'combat-venue.js', 'player.js', 'collision-math.js', 'weapon-cycle.js', 'loadout.js', 'practice-resupply.js', 'resupply-rules.js', 'respawn-rules.js'].map((file) => readFile(path.join(root, file), 'utf8')),
 );
 
 assert.match(main, /Q\.lowMemory = Q\.mobile && qs\.get\('full'\) !== '1'/);
@@ -26,7 +26,11 @@ assert.match(respawnRules, /enemyDangerRadius: 25/);
 assert.match(respawnRules, /spawnProtectionSeconds: 3/);
 assert.match(main, /protectedUntil = time \+ RESPAWN_CONFIG\.spawnProtectionSeconds/);
 assert.doesNotMatch(main, /player\.respawn[^\n]+restorePracticeLoadout/);
-assert.match(main, /Q\.lowMemory \? \['blue_zip', 'navy'\]/);
+assert.match(main, /loadCharacters\(weapon\.template3p, developerCombat \? undefined : \[localAppearance\.preset\]\)/);
+assert.match(characters, /ensureCharacterModel/);
+assert.match(characters, /lib\.loading\[name\]/);
+assert.match(avatarSchema, /blue_zip/);
+assert.match(avatarSchema, /red_jersey/);
 assert.match(assets, /normalMap: LOW_MEMORY \? null/);
 assert.match(assets, /roughnessMap: LOW_MEMORY \? null/);
 assert.match(world, /if \(!Q\.lowMemory\) \{[\s\S]*jacaranda_tree/);

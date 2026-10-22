@@ -1,4 +1,5 @@
 export const PRODUCTION_MULTIPLAYER_SERVICE = 'https://nerdie-city-multiplayer-preview.buddieroots.workers.dev';
+export const AVATAR_PREVIEW_MULTIPLAYER_SERVICE = 'https://nerdie-city-multiplayer-5-3b-preview.buddieroots.workers.dev';
 export const LOCAL_MULTIPLAYER_SERVICE = 'http://127.0.0.1:8787';
 
 export function resolveMultiplayerService(locationLike = globalThis.location) {
@@ -6,7 +7,7 @@ export function resolveMultiplayerService(locationLike = globalThis.location) {
   const override = query.get('mp');
   if (override) return override.replace(/\/$/, '');
   const hostname = locationLike?.hostname || '';
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
-    ? LOCAL_MULTIPLAYER_SERVICE
-    : PRODUCTION_MULTIPLAYER_SERVICE;
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return LOCAL_MULTIPLAYER_SERVICE;
+  if (hostname.endsWith('.vercel.app')) return AVATAR_PREVIEW_MULTIPLAYER_SERVICE;
+  return PRODUCTION_MULTIPLAYER_SERVICE;
 }
