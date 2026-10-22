@@ -30,8 +30,13 @@ import { createPerformanceProfiler } from './performance-profiler.js';
 import { restorePracticeLoadout } from './loadout.js';
 import { PracticeResupply } from './practice-resupply.js';
 import { RESPAWN_CONFIG, UNDERGROUND_SPAWN_CANDIDATES, selectRespawnCandidate } from './respawn-rules.js';
+import { MultiplayerClient } from './multiplayer-client.js';
+import { RemotePlayer } from './remote-player.js';
+import { MULTIPLAYER_LIMITS, MULTIPLAYER_SPAWNS } from './multiplayer-protocol.js';
 
 const qs = new URLSearchParams(location.search);
+const multiplayerDev = qs.get('multiplayer') === '1';
+const multiplayerServiceUrl = qs.get('mp') || 'http://127.0.0.1:8787';
 const performanceProfile = createPerformanceProfiler(qs.get('perf') === '1');
 // Legacy ladder support remains developer-only. Public Base identity and rankings are coming later.
 const API = qs.get('api') || '';
@@ -160,6 +165,8 @@ async function selectWeapon(command) {
   } finally { if (pendingWeapon === want) pendingWeapon = ''; }
 }
 const bots = []; let trooper = null, localAvatar = null, city = null, collisionDebug = null;
+let multiplayer = null, multiplayerActive = false, multiplayerServerOffset = 0, multiplayerSendAt = 0, multiplayerPingAt = 0, multiplayerStatusAt = 0;
+const remotePlayers = new Map();
 const avatarContactOffset = new THREE.Vector3();
 const score = { red: 0, blue: 0 }; const MATCH = { id: '', limit: 100, time: 600, left: 600, over: false, started: false, mode: GAME_MODES.FREE_ROAM };
 const developerCombat = qs.get('dev') === 'combat';
@@ -328,6 +335,12 @@ function endMatch() {
   if (document.exitPointerLock) document.exitPointerLock();
 }
 function configureEntryUi() {
+  document.body.classList.toggle('multiplayer-dev', multiplayerDev);
+  if (multiplayerDev) {
+    $('tagline').textContent = 'Two-player shared-city development preview';
+    $('hint').innerHTML = '<b>MULTIPLAYER FREE ROAM</b> · two guest players · movement and presence only<br>Combat, destruction, interiors, and The Underground remain single-player';
+    return;
+  }
   $('tagline').textContent = developerCombat ? 'Developer combat test · 6 v 6' : 'The neighborhood is yours';
   $('go').textContent = developerCombat ? 'Launch Developer Combat' : 'Enter City';
   $('hint').innerHTML = developerCombat
@@ -351,6 +364,7 @@ function startGame(mode = selectedMode, options = {}) {
   MATCH.mode = normalizeGameMode(mode); const combat = isCombatMode(MATCH.mode);
   $('weaponTray')?.classList.remove('on'); document.body.classList.remove('weapon-selecting');
   practiceCombat = combat && !!options.practice;
+  multiplayerActive = !combat && !!options.multiplayer;
   const freshCombatSession = combat ? beginCombatSession() : false;
   practiceResupply.setEnabled(practiceCombat);
   setCombatLobby(false);
@@ -385,8 +399,8 @@ function startGame(mode = selectedMode, options = {}) {
   document.body.classList.toggle('free-roam', !combat); $('modebadge').textContent = combat ? 'Original Combat' : 'Free Roam · V Camera';
   if (practiceCombat) $('modebadge').textContent = 'AI Practice Match';
   $('combatExit').classList.toggle('on', practiceCombat);
-  $('state').textContent = combat ? 'TIED' : 'FREE ROAM'; $('timer').textContent = combat ? '10:00' : 'NO TIME LIMIT';
-  hud.score(0, 0); if (!combat) { $('state').textContent = 'FREE ROAM'; $('timer').textContent = 'NO TIME LIMIT'; }
+  $('state').textContent = combat ? 'TIED' : multiplayerActive ? '6-PLAYER CITY' : 'FREE ROAM'; $('timer').textContent = combat ? '10:00' : 'NO TIME LIMIT';
+  hud.score(0, 0); if (!combat) { $('state').textContent = multiplayerActive ? '6-PLAYER CITY' : 'FREE ROAM'; $('timer').textContent = 'NO TIME LIMIT'; }
   $('ov').classList.add('off'); $('lmsg').textContent = ''; $('lboard').classList.remove('on'); requestLock(); unlockAudio();
   console.log('game mode:', MATCH.mode, 'camera:', thirdCamera.enabled ? 'third-person' : 'first-person', 'bots:', bots.length);
   clearTimeout(modeCalloutTimer);
@@ -394,8 +408,67 @@ function startGame(mode = selectedMode, options = {}) {
   modeCalloutTimer = setTimeout(() => {
     if (!MATCH.started || MATCH.over || MATCH.mode !== announcedMode) return;
     if (combat) hud.callout(Q.mobile ? 'TAP SWAP TO CYCLE GUNS' : 'PRESS 2 TO ARM THE RPG-7', Q.mobile ? 'MAC-10 · MP5 · M700 · RPG-7' : '3 MAC-10 · 7 MP5 · 8 SNIPER · Q CYCLES');
+    else if (multiplayerActive) hud.callout('MULTIPLAYER FREE ROAM', 'PRESENCE ONLY · COMBAT AND DESTRUCTION DISABLED');
     else hud.callout('FREE ROAM', 'NO TIMER · NO FORCED COMBAT · PRESS [V] TO SWITCH CAMERA');
   }, 1200);
+}
+
+function setMultiplayerStatus(text, on = true) { const el = $('mpStatus'); if (el.textContent !== text) el.textContent = text; el.classList.toggle('on', on); }
+function clearRemotePlayers() { for (const remote of remotePlayers.values()) remote.dispose(); remotePlayers.clear(); }
+function ensureRemote(playerInfo) {
+  if (!playerInfo?.id || playerInfo.id === multiplayer?.credentials?.playerId) return null;
+  let remote = remotePlayers.get(playerInfo.id);
+  if (!remote) { remote = new RemotePlayer(scene, playerInfo, ghostMat); remotePlayers.set(playerInfo.id, remote); }
+  return remote;
+}
+function configureMultiplayerClient() {
+  if (!multiplayerDev) return;
+  multiplayer = new MultiplayerClient({ serviceUrl: multiplayerServiceUrl, name: ident.name || 'Guest' });
+  multiplayer.addEventListener('state', ({ detail }) => {
+    const labels = { connecting: 'Connecting…', connected: 'Connected · public city online', reconnecting: 'Reconnecting…', 'room-full': 'Room full', 'connection-lost': 'Connection lost', 'session-expired': 'Session expired', disconnected: 'Disconnected' };
+    setMultiplayerStatus(labels[detail.state] || detail.state);
+    if (detail.state === 'connected' && !multiplayerActive) {
+      const target = MULTIPLAYER_SPAWNS[(detail.spawnIndex || 0) % MULTIPLAYER_SPAWNS.length];
+      startGame(GAME_MODES.FREE_ROAM, { multiplayer: true, spawn: freeCellNear(target.x, target.z, 4) });
+    }
+    if (['connection-lost', 'session-expired', 'room-full', 'disconnected'].includes(detail.state)) clearRemotePlayers();
+  });
+  multiplayer.addEventListener('message', ({ detail: message }) => {
+    if (message.type === 'welcome') {
+      multiplayerServerOffset = message.serverTime - Date.now();
+      if (Number.isInteger(message.spawnIndex)) multiplayer.credentials.spawnIndex = message.spawnIndex;
+      if (Number.isInteger(message.capacity)) multiplayer.credentials.capacity = message.capacity;
+      for (const peer of message.peers || []) { const remote = ensureRemote(peer); if (remote && peer.state) remote.push(peer.state); }
+    } else if (message.type === 'peer-joined') { ensureRemote(message.player); setMultiplayerStatus(`Connected · ${message.player.name} joined`); }
+    else if (message.type === 'peer-left') { remotePlayers.get(message.playerId)?.dispose(); remotePlayers.delete(message.playerId); setMultiplayerStatus('Connected · a player is reconnecting'); }
+    else if (message.type === 'state') ensureRemote({ id: message.playerId, name: message.name })?.push(message);
+    else if (message.type === 'correction' && message.state) player.pos.lerp(new THREE.Vector3(message.state.x, message.state.y, message.state.z), 0.35);
+  });
+  const connectWith = async (credentials, label) => {
+    multiplayer.credentials = credentials; $('mpCode').blur();
+    $('mpRoom').textContent = `${label} ${credentials.roomCode} · ${credentials.capacity || MULTIPLAYER_LIMITS.maxPlayers} player capacity`;
+    await multiplayer.connect(credentials);
+  };
+  const enterPublic = async () => {
+    try {
+      multiplayer.name = ($('gname').value.trim() || 'Guest').slice(0, 16);
+      setMultiplayerStatus('Finding the active public city…');
+      await connectWith(await multiplayer.matchmake(), 'PUBLIC ROOM');
+    } catch (error) { setMultiplayerStatus(`Could not join public city · ${error.message}`); }
+  };
+  const enter = async (host) => {
+    try {
+      multiplayer.name = ($('gname').value.trim() || 'Guest').slice(0, 16);
+      const credentials = host ? await multiplayer.createRoom() : await multiplayer.joinRoom($('mpCode').value.trim().toUpperCase());
+      const share = new URL(location.href); share.searchParams.set('multiplayer', '1'); share.searchParams.set('room', credentials.roomCode); share.searchParams.set('mp', multiplayerServiceUrl);
+      await connectWith(credentials, host ? 'PRIVATE ROOM' : 'ROOM');
+      navigator.clipboard?.writeText(share.href).catch(() => {});
+    } catch (error) { setMultiplayerStatus(error.code === 'room_full' ? 'Room full' : `Could not connect · ${error.message}`); }
+  };
+  $('mpPublic').addEventListener('pointerdown', unlockAudio, { passive: true });
+  $('mpPublic').addEventListener('click', enterPublic);
+  $('mpHost').addEventListener('click', () => enter(true)); $('mpJoin').addEventListener('click', () => enter(false));
+  const requestedRoom = qs.get('room'); if (requestedRoom) { $('mpCode').value = requestedRoom; setTimeout(() => enter(false), 0); }
 }
 function returnToCity() {
   const venue = city?.combatVenue;
@@ -557,6 +630,7 @@ async function boot() {
   console.log('performance profile:', Q.lowMemory ? 'mobile-low-memory' : 'full');
   $('go').classList.add('on');
   configureEntryUi();
+  configureMultiplayerClient();
   $('go').addEventListener('pointerdown', unlockAudio, { passive: true });
   $('go').addEventListener('click', () => { if (MATCH.over && practiceCombat) returnToCity(); else startGame(selectedMode); });
   $('practiceMatch').addEventListener('click', startPracticeMatch);
@@ -593,6 +667,7 @@ function loop(now) {
     if (!MATCH.over && isCombatMode(MATCH.mode)) { MATCH.left -= dt; hud.timer(MATCH.left); if (MATCH.left <= 0) endMatch(); }
     if (input.ab) { if (isCombatMode(MATCH.mode)) useAbility(input.ab); input.ab = 0; }
     player.update(dt, MATCH.over || combatLobbyOpen ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
+    if (multiplayerActive) input.interact = false;
     performanceProfile.end('player', systemStarted); systemStarted = performanceProfile.start();
     if (city && MATCH.mode === GAME_MODES.FREE_ROAM) {
       const apartmentState = city.apartment.update(player, input, time);
@@ -656,6 +731,17 @@ function loop(now) {
       localAvatar.aimPitch = player.pitch; localAvatar.update(dt, player.pos, player.yaw + Math.PI, !!input.ads, player.dead, avatarContactOffset);
       localAvatar.obj.visible = show; localAvatar.gun.visible = show;
     }
+    if (multiplayerActive && multiplayer?.state === 'connected') {
+      if (now >= multiplayerSendAt) { multiplayer.sendMovement(player, now); multiplayerSendAt = now + 1000 / MULTIPLAYER_LIMITS.updateHz; }
+      if (now >= multiplayerPingAt) { multiplayer.ping(); multiplayerPingAt = now + 5000; }
+      const serverNow = Date.now() + multiplayerServerOffset;
+      for (const remote of remotePlayers.values()) remote.update(dt, serverNow, player.pos);
+      if (now >= multiplayerStatusAt) {
+        const capacity = multiplayer.credentials?.capacity || MULTIPLAYER_LIMITS.maxPlayers;
+        setMultiplayerStatus(`Connected · ${remotePlayers.size + 1}/${capacity} · ${Math.round(multiplayer.metrics.rtt)} ms`);
+        multiplayerStatusAt = now + 500;
+      }
+    }
     if (player.stepped && !player.dead) sfx.step();
     collisionDebug?.update();
     performanceProfile.end('camera-avatar', systemStarted); systemStarted = performanceProfile.start();
@@ -669,11 +755,11 @@ function loop(now) {
       player.protectedUntil = time; input.fire = false;
       hud.callout('SPAWN PROTECTION ENDED', 'ATTACK CANCELLED PROTECTION');
     }
-    const idle = { fire: false, ads: false, reload: false }, live = MATCH.over ? { fire: false } : input;
+    const idle = { fire: false, ads: false, reload: false }, live = multiplayerActive ? idle : MATCH.over ? { fire: false } : input;
     for (const k in guns) { const g = guns[k]; g.baseFov = weapon.baseFov; g.portrait = weapon.portrait; g.fovOwner = arsenal.cur === k || (arsenal.cur === 'rpg' && k === 'ak'); g.update(dt, arsenal.cur === k ? live : idle, look, time); }
     if (thirdCamera.enabled) for (const g of Object.values(guns)) g.rig.visible = false;
     { const g = guns.m700, on = !thirdCamera.enabled && arsenal.cur === 'm700' && g.ads > 0.85; document.getElementById('scope').classList.toggle('on', on); document.getElementById('xh').style.visibility = on ? 'hidden' : ''; }
-    launcher.portrait = weapon.portrait; launcher.update(dt, MATCH.over ? { fire: false } : input, look, time, arsenal.cur === 'rpg');
+    launcher.portrait = weapon.portrait; launcher.update(dt, multiplayerActive ? idle : MATCH.over ? { fire: false } : input, look, time, !multiplayerActive && arsenal.cur === 'rpg');
     if (thirdCamera.enabled) launcher.rig.visible = false;
     for (const b of bots) {
       if (b.dead && b.respawnAt && time > b.respawnAt && !b.expires && !MATCH.over) { const spawn = selectArenaSpawn(b.team, b); b.respawn(spawn.position, time, spawn.protectionSeconds); }
@@ -718,4 +804,4 @@ function loop(now) {
 }
 boot().catch((e) => { console.error(e); pmsg.textContent = 'Could not start: ' + e.message; });
 // expose for QA
-window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };
+window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, remotePlayers, get multiplayer() { return multiplayer; }, get multiplayerActive() { return multiplayerActive; }, get multiplayerDiagnostics() { return { client: multiplayer?.diagnostics?.() || null, remotes: [...remotePlayers.values()].map((remote) => ({ id: remote.id, ...remote.diagnostics() })) }; }, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };

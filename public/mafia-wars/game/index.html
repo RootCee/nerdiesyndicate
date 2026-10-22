@@ -64,6 +64,8 @@ canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block
 #interactPrompt.interior { border-color: rgba(255,255,255,.45); color: #f6f2e9; }
 #spawnProtection { position: absolute; left: 50%; top: calc(72px + var(--sat)); transform: translateX(-50%) translateY(-5px); padding: 6px 11px; border: 1px solid rgba(99,190,255,.65); border-radius: 14px; background: rgba(7,22,34,.78); color: #a9dcff; font: 700 10px/1 'Barlow'; letter-spacing: .12em; opacity: 0; transition: opacity .15s, transform .15s; pointer-events: none; }
 #spawnProtection.on { opacity: 1; transform: translateX(-50%); }
+#mpStatus { position: absolute; left: calc(14px + var(--sal)); top: calc(14px + var(--sat)); display: none; max-width: min(360px, 72vw); padding: 8px 11px; border: 1px solid rgba(217,172,88,.55); border-radius: 16px; background: rgba(7,9,12,.78); color: #f5d58e; font: 700 10px/1.2 'Barlow'; letter-spacing: .1em; text-transform: uppercase; pointer-events: none; }
+#mpStatus.on { display: block; }
 #kill { font: 400 18px/1 'Marker'; color: #fff; text-shadow: 0 2px 0 #000; margin-top: 44px; opacity: 0; transition: opacity .2s; }
 #kill.on { opacity: 1; }
 #pts { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -78px); font: 400 15px/1 'Marker'; color: #fff; text-shadow: 0 2px 0 #000; opacity: 0; }
@@ -147,6 +149,15 @@ body.weapon-selecting #interactPrompt, body.weapon-selecting #tInteract { opacit
 #go { margin-top: 26px; font: 600 18px/1 'Barlow'; letter-spacing: .25em; text-transform: uppercase; color: #15120d; background: linear-gradient(135deg, var(--gold-bright), var(--gold)); border: 1px solid #ffe6ad; border-radius: 6px; padding: 17px 42px; cursor: pointer; display: none; box-shadow: 0 12px 38px rgba(0,0,0,.58), 0 0 26px rgba(217,172,88,.12); }
 #go:hover { filter: brightness(1.08); transform: translateY(-1px); }
 #go.on { display: inline-block; }
+#mpEntry { display: none; width: min(430px, 92vw); margin: 18px auto 0; padding: 14px; border: 1px solid rgba(217,172,88,.35); border-radius: 9px; background: rgba(0,0,0,.22); }
+body.multiplayer-dev #mpEntry { display: block; }
+#mpEntry .row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+#mpEntry button, #mpEntry input { min-height: 42px; border: 1px solid rgba(217,172,88,.6); border-radius: 6px; background: rgba(255,255,255,.07); color: #fff; font: 700 11px/1 'Barlow'; letter-spacing: .12em; text-transform: uppercase; padding: 10px 12px; }
+#mpEntry button { cursor: pointer; color: #17130c; background: var(--gold); }
+#mpEntry #mpPublic { width: 100%; margin-bottom: 10px; min-height: 50px; font-size: 14px; background: linear-gradient(135deg, var(--gold-bright), var(--gold)); }
+#mpEntry input { width: 150px; text-align: center; user-select: text; -webkit-user-select: text; }
+#mpRoom { margin-top: 10px; color: #f5d58e; font: 700 11px/1.5 'Barlow'; letter-spacing: .12em; }
+body.multiplayer-dev #go { display: none !important; }
 #ov .hint { font: 500 12px/1.6 'Barlow'; letter-spacing: .1em; color: #6f859d; margin-top: 18px; }
 #end { font: 400 clamp(30px, 7vw, 54px)/1 'Marker'; }
 #ov > div { max-height: 100svh; overflow-y: auto; padding: 18px 0; width: min(680px, 100%); }
@@ -208,6 +219,7 @@ body.weapon-selecting #interactPrompt, body.weapon-selecting #tInteract { opacit
   <div id="hurt"></div>
   <div id="interactPrompt"></div>
   <div id="spawnProtection" role="status" aria-live="polite"></div>
+  <div id="mpStatus" role="status" aria-live="polite"></div>
   <div id="ammo"><div id="wname">AK-47</div><div><span class="mag" id="mag">30</span><span class="res" id="res">180</span><span class="ab" id="kills">1 ☠</span></div></div>
 </div>
 
@@ -249,6 +261,11 @@ body.weapon-selecting #interactPrompt, body.weapon-selecting #tInteract { opacit
     <div id="lboard"></div>
     <div id="idrow"><input id="gname" maxlength="16" placeholder="GAMERTAG" autocomplete="off" spellcheck="false"><input id="gwallet" maxlength="42" placeholder="BASE WALLET (COMING SOON)" autocomplete="off" spellcheck="false" disabled aria-label="Base wallet integration coming soon"></div>
     <button id="go">Enter City</button>
+    <div id="mpEntry" aria-label="Six-player multiplayer development preview">
+      <button id="mpPublic" type="button">Enter Public City</button>
+      <div class="row"><button id="mpHost" type="button">Host Private Room</button><input id="mpCode" maxlength="12" placeholder="PRIVATE CODE" autocomplete="off" spellcheck="false"><button id="mpJoin" type="button">Join Private</button></div>
+      <div id="mpRoom">Public matchmaking fills the active city automatically · 6-player capacity</div>
+    </div>
     <div class="hint" id="ladder" role="status">LEADERBOARD · COMING SOON</div>
     <div class="hint" id="hint"><b>FREE ROAM</b> · expanded city · no timer · no forced fights<br>WASD move · mouse look · Shift sprint · Space jump · E enter buildings · V camera</div>
   </div>
