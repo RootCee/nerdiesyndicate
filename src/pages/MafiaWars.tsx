@@ -3,7 +3,8 @@ import Seo from '../components/Seo';
 
 // The public preview uses the game's built-in lite destruction fallback so
 // WebGPU driver initialization cannot strand visitors on the loading screen.
-const GAME_PATH = '/mafia-wars/game/?phys=0';
+const MULTIPLAYER_GAME_PATH = '/mafia-wars/game/?phys=0&multiplayer=1';
+const SINGLE_PLAYER_GAME_PATH = '/mafia-wars/game/?phys=0';
 
 const controls = [
   { keys: 'W A S D', action: 'Move through the neighborhood' },
@@ -47,10 +48,16 @@ export default function MafiaWars() {
 
             <div className="mt-9 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <a
-                href={GAME_PATH}
+                href={MULTIPLAYER_GAME_PATH}
                 className="mafia-preview-play inline-flex min-w-[240px] items-center justify-center rounded-full px-8 py-4 text-base font-black uppercase tracking-[0.13em] transition sm:text-lg"
               >
-                Play Test Version
+                Enter Public City
+              </a>
+              <a
+                href={SINGLE_PLAYER_GAME_PATH}
+                className="inline-flex min-w-[240px] items-center justify-center rounded-full border border-amber-200/35 bg-black/25 px-8 py-4 text-base font-bold uppercase tracking-[0.1em] text-amber-100 transition hover:border-amber-200/70 hover:text-white"
+              >
+                Single-Player City
               </a>
               <Link
                 to="/"

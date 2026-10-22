@@ -31,12 +31,13 @@ import { restorePracticeLoadout } from './loadout.js';
 import { PracticeResupply } from './practice-resupply.js';
 import { RESPAWN_CONFIG, UNDERGROUND_SPAWN_CANDIDATES, selectRespawnCandidate } from './respawn-rules.js';
 import { MultiplayerClient } from './multiplayer-client.js';
+import { resolveMultiplayerService } from './multiplayer-endpoint.js';
 import { RemotePlayer } from './remote-player.js';
 import { MULTIPLAYER_LIMITS, MULTIPLAYER_SPAWNS } from './multiplayer-protocol.js';
 
 const qs = new URLSearchParams(location.search);
 const multiplayerDev = qs.get('multiplayer') === '1';
-const multiplayerServiceUrl = qs.get('mp') || 'http://127.0.0.1:8787';
+const multiplayerServiceUrl = resolveMultiplayerService(location);
 const performanceProfile = createPerformanceProfiler(qs.get('perf') === '1');
 // Legacy ladder support remains developer-only. Public Base identity and rankings are coming later.
 const API = qs.get('api') || '';
