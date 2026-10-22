@@ -1,4 +1,4 @@
-export const PRODUCTION_MULTIPLAYER_SERVICE = 'https://nerdie-city-multiplayer-preview.buddieroots.workers.dev';
+export const PRODUCTION_MULTIPLAYER_SERVICE = 'https://nerdie-city-multiplayer-5-3b-preview.buddieroots.workers.dev';
 export const AVATAR_PREVIEW_MULTIPLAYER_SERVICE = 'https://nerdie-city-multiplayer-5-3b-preview.buddieroots.workers.dev';
 export const LOCAL_MULTIPLAYER_SERVICE = 'http://127.0.0.1:8787';
 
