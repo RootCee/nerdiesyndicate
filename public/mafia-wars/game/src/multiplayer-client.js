@@ -16,7 +16,12 @@ export class MultiplayerClient extends EventTarget {
   async matchmake() { return this.#request('/matchmake', { method: 'POST', body: JSON.stringify({ name: this.name }) }); }
   async joinRoom(room) { return this.#request(`/rooms/${encodeURIComponent(room)}/join`, { method: 'POST', body: JSON.stringify({ name: this.name }) }); }
   async #request(path, options) {
-    const response = await fetch(this.serviceUrl + path, { ...options, headers: { 'content-type': 'application/json' } });
+    let response;
+    try {
+      response = await fetch(this.serviceUrl + path, { ...options, headers: { 'content-type': 'application/json' }, signal: AbortSignal.timeout(10000) });
+    } catch {
+      throw Object.assign(new Error('Multiplayer service unavailable. Check your connection and try again.'), { code: 'service_unavailable' });
+    }
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw Object.assign(new Error(body.error || `HTTP ${response.status}`), { code: body.code || 'request_failed' });
     return body;
@@ -26,9 +31,13 @@ export class MultiplayerClient extends EventTarget {
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(wsUrl(this.serviceUrl, credentials.roomCode, credentials.ticket));
       this.socket = socket; let settled = false;
-      socket.addEventListener('open', () => { this.reconnectAttempts = 0; this.connectedAt ||= performance.now(); this.setState('connected', credentials); settled = true; resolve(credentials); });
+      const timeout = setTimeout(() => {
+        if (settled) return;
+        settled = true; socket.close(); this.setState('connection-lost'); reject(new Error('Connection timed out. Please try again.'));
+      }, 10000);
+      socket.addEventListener('open', () => { if (settled) return; clearTimeout(timeout); this.reconnectAttempts = 0; this.connectedAt ||= performance.now(); this.setState('connected', credentials); settled = true; resolve(credentials); });
       socket.addEventListener('message', (event) => { this.metrics.received++; this.metrics.receivedBytes += typeof event.data === 'string' ? event.data.length : event.data?.byteLength || 0; this.#message(event.data); });
-      socket.addEventListener('error', () => { if (!settled) reject(new Error('WebSocket connection failed')); });
+      socket.addEventListener('error', () => { if (!settled) { clearTimeout(timeout); settled = true; this.setState('connection-lost'); reject(new Error('WebSocket connection failed. Please try again.')); } });
       socket.addEventListener('close', (event) => { if (this.socket !== socket) return; this.socket = null; if (!this.closedByUser) this.#reconnect(event.code); else this.setState('disconnected'); });
     });
   }
