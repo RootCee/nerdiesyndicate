@@ -12,7 +12,21 @@ export const ROSTER = {
 const HEIGHT = 1.8; // metres, top of head
 const CLIP_MAP = { Idle_Gun: 'idle', Idle_Gun_Shoot: 'idle', Run: 'run', Run_Shoot: 'run', Walk: 'walk', Death: 'fall', HitRecieve: 'hit_to_body_01' };
 
-const lib = { models: {}, loading: {}, clips: {}, gun: null, ready: false };
+const lib = { models: {}, loading: {}, clips: {}, weapons: new Map(), ready: false };
+
+const WEAPON_PROFILES = Object.freeze({
+  ak: Object.freeze({ length: 0.86, muzzle: -0.55, fore: -0.30, grip: 0 }),
+  mac10: Object.freeze({ length: 0.36, muzzle: -0.25, fore: -0.12, grip: 0.02 }),
+  mp5: Object.freeze({ length: 0.66, muzzle: -0.43, fore: -0.23, grip: 0.01 }),
+  m700: Object.freeze({ length: 1.02, muzzle: -0.64, fore: -0.38, grip: 0.02 }),
+  rpg: Object.freeze({ length: 1.10, muzzle: -0.68, fore: -0.34, grip: 0.04 }),
+});
+
+export function registerCharacterWeaponTemplate(id, template) {
+  if (!id || !template) return false;
+  lib.weapons.set(id, { template, profile: WEAPON_PROFILES[id] || WEAPON_PROFILES.ak });
+  return true;
+}
 
 function registerClips(glb) {
   for (const source of glb.animations || []) {
@@ -41,22 +55,31 @@ export async function loadCharacters(gunTemplate, names = [...ROSTER.blue, ...RO
   // when selected or required by combat.
   const requested = [...new Set(['blue_zip', ...names])];
   await Promise.all(requested.map((name) => ensureCharacterModel(name).catch(() => null)));
-  lib.gun = gunTemplate; lib.ready = Object.keys(lib.models).length > 0 && !!lib.clips.idle;
+  registerCharacterWeaponTemplate('ak', gunTemplate); lib.ready = Object.keys(lib.models).length > 0 && !!lib.clips.idle;
   return lib.ready;
 }
 export const charactersReady = () => lib.ready;
-export const characterAssetStats = () => ({ loaded: Object.keys(lib.models), pending: Object.keys(lib.loading), available: AVATAR_PRESETS.map(({ id }) => id) });
+export const characterAssetStats = () => ({ loaded: Object.keys(lib.models), pending: Object.keys(lib.loading), available: AVATAR_PRESETS.map(({ id }) => id), weaponTemplates: [...lib.weapons.keys()] });
 
 // A gun group whose origin is the pistol grip and whose muzzle points down -Z (0.86 m long).
-function makeGun() {
-  const g = new THREE.Group(); const inner = SkeletonUtils.clone(lib.gun); g.add(inner);
+function makeGun(id) {
+  const entry = lib.weapons.get(id); if (!entry) return null;
+  const g = new THREE.Group(); const inner = SkeletonUtils.clone(entry.template); g.add(inner);
   inner.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; o.frustumCulled = false; o.renderOrder = 0; } });
   // the template is normalised exactly like the viewmodel: centred, long axis on z, barrel toward -z
-  inner.position.set(0, 0.05, -0.10);          // template is centred: grip is ~0.10 m behind centre, below the bore
-  g.userData.muzzle = new THREE.Vector3(0, 0.07, -0.55);
-  g.userData.fore = new THREE.Vector3(0, 0.02, -0.30);   // left hand on the handguard
-  g.userData.grip = new THREE.Vector3(0, -0.02, 0.0);    // right hand on the pistol grip
+  const profile = entry.profile;
+  inner.position.set(0, id === 'rpg' ? 0.08 : 0.05, id === 'rpg' ? -0.03 : -0.10);
+  g.userData.weaponId = id;
+  g.userData.muzzle = new THREE.Vector3(0, id === 'rpg' ? 0.09 : 0.07, profile.muzzle);
+  g.userData.fore = new THREE.Vector3(0, id === 'rpg' ? 0.05 : 0.02, profile.fore);
+  g.userData.grip = new THREE.Vector3(0, -0.02, profile.grip);
   return g;
+}
+
+function disposeWeaponClone(gun) {
+  if (!gun) return;
+  const skeletons = new Set(); gun.traverse((object) => { if (object.isSkinnedMesh && object.skeleton) skeletons.add(object.skeleton); });
+  for (const skeleton of skeletons) skeleton.dispose();
 }
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _t = new THREE.Vector3(), _p = new THREE.Vector3();
@@ -85,9 +108,9 @@ function twoBoneIK(upper, lower, end, target, pole) {
 
 const UP = new THREE.Vector3(0, 1, 0);
 export class Character {
-  constructor(scene, modelName, ghostMat, { presenceOnly = false } = {}) {
+  constructor(scene, modelName, ghostMat, { presenceOnly = false, weaponId = presenceOnly ? null : 'ak', holstered = false } = {}) {
     const src = lib.models[modelName]; if (!src) throw new Error(`Character preset not loaded: ${modelName}`);
-    this.name = modelName; this.ghostMat = ghostMat;
+    this.name = modelName; this.ghostMat = ghostMat; this.scene = scene;
     this.presenceOnly = presenceOnly; this.ownsMaterials = !presenceOnly;
     const root = SkeletonUtils.clone(src.scene); prep(root, { cast: !presenceOnly, receive: false, env: 0.7 });
     root.traverse((o) => { if (o.isMesh) { o.frustumCulled = presenceOnly; if (this.ownsMaterials) o.material = o.material.clone(); } });
@@ -99,7 +122,7 @@ export class Character {
     this.b = { spine: bone('Spine2'), rArm: bone('RightArm'), rFore: bone('RightForeArm'), rHand: bone('RightHand'), lArm: bone('LeftArm'), lFore: bone('LeftForeArm'), lHand: bone('LeftHand'), head: bone('Head') };
     this.mixer = new THREE.AnimationMixer(root); this.actions = {};
     for (const [k, c] of Object.entries(lib.clips)) this.actions[k] = this.mixer.clipAction(c);
-    this.gun = presenceOnly ? null : makeGun(); if (this.gun) scene.add(this.gun);
+    this.gun = null; this.weaponId = null; this.holstered = true; this.setWeapon(weaponId, holstered);
     this.aimPitch = 0; this.ready = 1; this.dead = false;
     this.visualOffset = new THREE.Vector3();
     // x-ray ghost: extra skinned meshes bound to the same skeleton, drawn on top
@@ -108,6 +131,15 @@ export class Character {
     this.play('Idle_Gun', 0);
   }
   set ghostVisible(v) { for (const g of this.ghosts) g.visible = v; }
+  setWeapon(weaponId, holstered = false) {
+    if (this.weaponId === weaponId && this.gun) { this.holstered = !!holstered; this.gun.visible = this.obj.visible && !this.holstered && !this.dead; return true; }
+    if (this.gun) { this.scene.remove(this.gun); disposeWeaponClone(this.gun); this.gun = null; }
+    this.weaponId = weaponId || null; this.holstered = weaponId ? !!holstered : true;
+    if (!weaponId) return true;
+    this.gun = makeGun(weaponId); if (!this.gun) return false;
+    this.scene.add(this.gun); this.gun.visible = this.obj.visible && !this.holstered && !this.dead; return true;
+  }
+  setHolstered(holstered) { this.holstered = !!holstered || !this.weaponId; if (this.gun) this.gun.visible = this.obj.visible && !this.holstered && !this.dead; }
   play(name, fade = 0.15, once = false) {
     const key = CLIP_MAP[name] || name; if (this.cur === key && !once) return;
     const a = this.actions[key]; if (!a) return;
@@ -124,7 +156,7 @@ export class Character {
     if (!this.gun) return;
     this.obj.updateMatrixWorld(true);
     this.ready += ((aiming ? 1 : 0) - this.ready) * Math.min(1, dt * 8);
-    this.gun.visible = !dead;
+    this.gun.visible = this.obj.visible && !dead && !this.holstered;
     if (dead || !this.b.spine) return;
     // place the rifle relative to the chest, in the character's yaw frame
     const fwd = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)), right = new THREE.Vector3().crossVectors(fwd, UP).normalize(); // character's right side
@@ -141,9 +173,9 @@ export class Character {
     if (b.rArm && b.rFore && b.rHand) { b.rArm.getWorldPosition(_b); twoBoneIK(b.rArm, b.rFore, b.rHand, gr, _b.clone().addScaledVector(right, 0.5).addScaledVector(UP, -0.6).addScaledVector(fwd, -0.2)); }
     if (b.lArm && b.lFore && b.lHand) { b.lArm.getWorldPosition(_b); twoBoneIK(b.lArm, b.lFore, b.lHand, fo, _b.clone().addScaledVector(right, -0.4).addScaledVector(UP, -0.7)); }
   }
-  muzzleWorld(out = new THREE.Vector3()) { return out.copy(this.gun.userData.muzzle).applyMatrix4(this.gun.matrixWorld); }
+  muzzleWorld(out = new THREE.Vector3()) { return this.gun ? out.copy(this.gun.userData.muzzle).applyMatrix4(this.gun.matrixWorld) : out.copy(this.obj.position); }
   dispose(scene) {
-    scene.remove(this.obj); if (this.gun) scene.remove(this.gun);
+    scene.remove(this.obj); if (this.gun) { scene.remove(this.gun); disposeWeaponClone(this.gun); }
     this.mixer.stopAllAction(); this.mixer.uncacheRoot(this.inner);
     // SkeletonUtils gives each character independent skeletons. WebGL creates
     // one bone texture per skeleton, so dispose those on mode cleanup or every
@@ -159,7 +191,6 @@ export class Character {
     // The third-person rifle template is also cloned with SkeletonUtils and
     // can carry its own skinned submeshes. Its materials/textures are shared,
     // but its per-clone skeleton textures are not.
-    this.gun?.traverse((object) => { if (object.isSkinnedMesh && object.skeleton) skeletons.add(object.skeleton); });
     for (const skeleton of skeletons) skeleton.dispose();
     for (const material of materials) material.dispose();
   }

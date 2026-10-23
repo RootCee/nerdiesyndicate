@@ -5,12 +5,13 @@ import path from 'node:path';
 const sourceRoot = process.argv[2] ? path.resolve(process.argv[2]) : null;
 const projectRoot = path.resolve(import.meta.dirname, '..');
 const outputRoot = path.join(projectRoot, 'public', 'mafia-wars', 'game');
+const productionMultiplayerService = 'https://nerdie-city-multiplayer-v4.buddieroots.workers.dev';
 
 if (!sourceRoot) {
   throw new Error('Usage: node scripts/sync-mafia-wars-preview.mjs /absolute/path/to/game/source');
 }
 
-const expectedCommit = 'e4590f969edf9b3eb28743b93752c169092d860b';
+const expectedCommit = 'fdb480604355f28f5c4124186ed984d5d88c4c33';
 const runtimeFiles = ['index.html', 'version.txt'];
 const characterFiles = ['blue_zip.glb', 'navy.glb', 'red_hoodie.glb', 'red_jersey.glb'];
 const fontFiles = ['BarlowCondensed-Medium.ttf', 'BarlowCondensed-SemiBold.ttf', 'PermanentMarker-Regular.ttf'];
@@ -103,6 +104,19 @@ async function ensureMobileMemoryProfile() {
   });
 }
 
+async function applyProductionMultiplayerEndpoint() {
+  const endpointPath = path.join(outputRoot, 'src', 'multiplayer-endpoint.js');
+  const endpointSource = await readFile(endpointPath, 'utf8');
+  const endpointPatched = endpointSource.replace(
+    /export const PRODUCTION_MULTIPLAYER_SERVICE = '[^']+';/,
+    `export const PRODUCTION_MULTIPLAYER_SERVICE = '${productionMultiplayerService}';`,
+  );
+  if (endpointPatched === endpointSource && !endpointSource.includes(productionMultiplayerService)) {
+    throw new Error('Expected the Mafia Wars production multiplayer endpoint declaration');
+  }
+  await writeFile(endpointPath, endpointPatched);
+}
+
 function resolveAddonImport(importer, specifier) {
   if (specifier.startsWith('three/addons/')) return specifier.slice('three/addons/'.length);
   if (!specifier.startsWith('.')) return null;
@@ -161,6 +175,7 @@ await applyMobileAudioUnlock();
 // Milestone 4 carries the proven iOS safeguards in source. The legacy patch
 // remains as a fallback so older approved sources cannot silently lose them.
 await ensureMobileMemoryProfile();
+await applyProductionMultiplayerEndpoint();
 const avbdWorldPath = path.join(outputRoot, 'vendor', 'three-avbd', 'lib', 'world.js');
 await writeFile(
   avbdWorldPath,
