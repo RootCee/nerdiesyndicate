@@ -130,9 +130,6 @@ async function applyProductionMultiplayerEndpoint() {
   }
   await writeFile(endpointPath, endpointPatched);
 }
-  }
-  await writeFile(endpointPath, endpointPatched);
-}
 
 function resolveAddonImport(importer, specifier) {
   if (specifier.startsWith('three/addons/')) return specifier.slice('three/addons/'.length);
