@@ -1,7 +1,7 @@
 {
   "name": "Nerdie City: Mafia Wars",
   "channel": "early-development-preview",
-  "sourceCommit": "4904e895726a48456d17bc5a7f219b72aff7319c",
+  "sourceCommit": "fdb480604355f28f5c4124186ed984d5d88c4c33",
   "sourceBranch": "codex/mafia-wars-protocol-4-underground-combat",
   "entry": "/mafia-wars/game/?phys=0&multiplayer=1"
 }
