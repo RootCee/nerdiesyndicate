@@ -1,7 +1,7 @@
 {
   "name": "Nerdie City: Mafia Wars",
   "channel": "early-development-preview",
-  "sourceCommit": "f9a2c231a718f5224d5b57db047c55b8ea3f9a42",
+  "sourceCommit": "a376dd0e3bcd2d2113c6aa63c7ea8c935fc85fc8",
   "sourceBranch": "codex/mafia-wars-protocol-4-1-audio",
   "entry": "/mafia-wars/game/?phys=0&multiplayer=1"
 }

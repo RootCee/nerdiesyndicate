@@ -11,7 +11,7 @@ const [manifestText, endpoint, audio, main, workerAudio] = await Promise.all([
   readFile(path.join(root, 'src', 'weapon-audio.js'), 'utf8'),
 ]);
 const manifest = JSON.parse(manifestText);
-assert.equal(manifest.sourceCommit, 'f9a2c231a718f5224d5b57db047c55b8ea3f9a42');
+assert.equal(manifest.sourceCommit, 'a376dd0e3bcd2d2113c6aa63c7ea8c935fc85fc8');
 assert.equal(manifest.sourceBranch, 'codex/mafia-wars-protocol-4-1-audio');
 assert.match(endpoint, /AVATAR_PREVIEW_MULTIPLAYER_SERVICE = 'https:\/\/nerdie-city-p4-1-audio-dev\.buddieroots\.workers\.dev'/);
 assert.match(audio, /reloadWeaponAt\(weaponId, pos\)/);
