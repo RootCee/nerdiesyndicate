@@ -1,7 +1,9 @@
 {
   "name": "Nerdie City: Mafia Wars",
   "channel": "early-development-preview",
-  "sourceCommit": "e4590f969edf9b3eb28743b93752c169092d860b",
-  "sourceBranch": "codex/mafia-wars-milestone-5-3b-core",
+  "sourceCommit": "a4905f55a16586a3dea8d837d7d7bca8397add41",
+  "sourceBranch": "codex/mafia-wars-protocol-4-weapons",
+  "multiplayerProtocol": 4,
+  "multiplayerService": "https://nerdie-city-multiplayer-protocol-4-dev.buddieroots.workers.dev",
   "entry": "/mafia-wars/game/?phys=0&multiplayer=1"
 }

@@ -1,7 +1,7 @@
 // RPG-7 rocket launcher: viewmodel, rockets in flight, blast damage, and the wall destruction hook.
-import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
+import * as THREE from 'three';
 import { loadGLB, prep } from './assets.js';
-import * as SkeletonUtils from '/mafia-wars/game/vendor/three/jsm/utils/SkeletonUtils.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { raycastWorld } from './world.js';
 import { rayVsBots } from './bots.js';
 import { blast } from './destruction.js';
@@ -41,6 +41,7 @@ export class Launcher {
       const c = bb.getCenter(new THREE.Vector3()); vm.position.sub(c);
       inner.rotation.y += Math.PI; // the model's +axis end (warhead, per the reference image) forward
       this.model = inner; this.rig.add(inner);
+      this.template3p = SkeletonUtils.clone(inner); this.template3p.position.set(0, 0, 0);
       const far = Math.max(bb.max[axis] - c[axis], c[axis] - bb.min[axis]);
       this.muzzleLocal = new THREE.Vector3(0, 0.03, -far * sc - 0.05);
       inner.position.set(0, 0, -0.12);

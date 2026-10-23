@@ -1,17 +1,17 @@
 // Hood Warfare — browser build. Three.js, no build step. Look recipe studied from Stillwater:
 // ACES + pixel-budget DPR + HDR environment + warm/cool three-light rig + texel-snapped shadows + fog + light post.
-import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
-import { EffectComposer } from '/mafia-wars/game/vendor/three/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/UnrealBloomPass.js';
-import { ShaderPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/ShaderPass.js';
-import { OutputPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/OutputPass.js';
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { manager, loadHDR, loadGLB, setAniso, setLowMemoryAssets } from './assets.js';
 import { buildWorld, colliders, collisionBroadphaseStats, lamps, windowsLit, resolve, MAP, groundAt, lineClear } from './world.js';
 import { Player } from './player.js';
 import { FX, Weapon, GUN_SPECS } from './weapon.js';
 import { Bot, buildNav, rayVsBots, freeCellNear } from './bots.js';
-import { Character, loadCharacters, ensureCharacterModel, characterAssetStats } from './characters.js';
+import { Character, loadCharacters, ensureCharacterModel, characterAssetStats, registerCharacterWeaponTemplate } from './characters.js';
 import { Launcher } from './rocket.js';
 import { addWall, wallSpec, initDestruction, updateDestruction, updateDestructionStreaming, beginDestructionPrewarm, destruction, blast } from './destruction.js';
 import { WALL_LOTS, GEO, houseDescs } from './world.js';
@@ -35,6 +35,7 @@ import { resolveMultiplayerService } from './multiplayer-endpoint.js';
 import { RemotePlayer } from './remote-player.js';
 import { MULTIPLAYER_LIMITS, MULTIPLAYER_SPAWNS } from './multiplayer-protocol.js';
 import { AVATAR_PRESETS, normalizeAvatarAppearance, sameAvatarAppearance } from './avatar-schema.js';
+import { DEFAULT_EQUIPMENT, normalizeEquipment } from './multiplayer-equipment.js';
 
 const qs = new URLSearchParams(location.search);
 const multiplayerDev = qs.get('multiplayer') === '1';
@@ -152,6 +153,13 @@ const launcher = new Launcher(scene, camera, player, fx);
 const arsenal = { cur: 'ak', switchT: 0 };
 const practiceResupply = new PracticeResupply(scene, guns, launcher);
 let pendingWeapon = '';
+async function ensureWeaponVisual(weaponId) {
+  if (!weaponId) return true;
+  const asset = weaponId === 'rpg' ? launcher : guns[weaponId]; if (!asset) return false;
+  await asset.load();
+  const template = weaponId === 'rpg' ? launcher.template3p : asset.template3p;
+  return registerCharacterWeaponTemplate(weaponId, template);
+}
 async function selectWeapon(command) {
   const want = requestedWeapon(arsenal.cur, command, ORDER);
   if (!ORDER.includes(want) || want === arsenal.cur) return;
@@ -164,6 +172,7 @@ async function selectWeapon(command) {
     }
     if (pendingWeapon !== want || player.dead) return;
     arsenal.cur = want; for (const k in guns) guns[k].holstered = k !== want;
+    await ensureWeaponVisual(want); localAvatar?.setWeapon(want, false);
     const g = guns[want]; hud.callout(want === 'rpg' ? 'RPG-7' : g.name, want === 'rpg' ? `${launcher.loaded + launcher.reserve} ROCKETS` : `${g.mag + g.reserve} ROUNDS`);
   } catch (error) {
     console.error('weapon load:', want, error); hud.callout('WEAPON UNAVAILABLE', 'TRY AGAIN');
@@ -171,6 +180,7 @@ async function selectWeapon(command) {
 }
 const bots = []; let trooper = null, localAvatar = null, city = null, collisionDebug = null;
 let localAppearanceRequest = 0;
+let localEquipmentRequest = 0, localEquipment = normalizeEquipment(DEFAULT_EQUIPMENT), localEquipmentRevision = 0;
 let multiplayer = null, multiplayerActive = false, multiplayerServerOffset = 0, multiplayerSendAt = 0, multiplayerPingAt = 0, multiplayerStatusAt = 0;
 const remotePlayers = new Map();
 const avatarContactOffset = new THREE.Vector3();
@@ -216,11 +226,37 @@ async function applyLocalAppearance(appearance, { broadcast = true, persist = tr
   const wasVisible = localAvatar?.obj.visible ?? false, gunVisible = localAvatar?.gun?.visible ?? false;
   replacement.obj.visible = wasVisible; if (replacement.gun) replacement.gun.visible = gunVisible;
   replacement.aimPitch = player.pitch; localAvatar?.dispose(scene); localAvatar = replacement;
+  await ensureWeaponVisual(localEquipment.weaponId); localAvatar.setWeapon(localEquipment.weaponId, localEquipment.holstered);
   localAppearance = canonical; if (persist) persistAppearance(); setInteriorRenderLayer(interiorSceneState.active);
   if (multiplayer) multiplayer.appearance = canonical;
   syncAvatarSelectors('Character saved');
   if (broadcast && multiplayer?.state === 'connected') multiplayer.updateAppearance(canonical);
   return true;
+}
+async function applyLocalEquipment(equipment, revision = localEquipmentRevision + 1) {
+  if (revision < localEquipmentRevision) return false;
+  const canonical = normalizeEquipment(equipment), request = ++localEquipmentRequest;
+  localEquipment = canonical; localEquipmentRevision = revision;
+  if (canonical.weaponId && !await ensureWeaponVisual(canonical.weaponId)) return false;
+  if (request !== localEquipmentRequest) return false;
+  localAvatar?.setWeapon(canonical.weaponId, canonical.holstered);
+  if (localAvatar?.gun) localAvatar.gun.visible = localAvatar.obj.visible && !canonical.holstered && !player.dead;
+  if (canonical.weaponId) { arsenal.cur = canonical.weaponId; for (const key in guns) guns[key].holstered = key !== canonical.weaponId; }
+  for (const button of document.querySelectorAll('#weaponTray [data-weapon]')) button.classList.toggle('selected', button.dataset.weapon === canonical.weaponId && !canonical.holstered);
+  hud.callout(canonical.weaponId ? (canonical.holstered ? 'WEAPON HOLSTERED' : `${canonical.weaponId === 'rpg' ? 'RPG-7' : guns[canonical.weaponId]?.name || canonical.weaponId.toUpperCase()} EQUIPPED`) : 'UNARMED', 'MULTIPLAYER COMBAT REMAINS DISABLED');
+  return true;
+}
+async function requestMultiplayerEquipment(command) {
+  if (!multiplayer || multiplayer.state !== 'connected') return false;
+  if (command === 'holster') {
+    const weaponId = localEquipment.weaponId || arsenal.cur || 'ak';
+    return multiplayer.updateEquipment(weaponId, localEquipment.weaponId ? !localEquipment.holstered : false);
+  }
+  if (command === 'unarmed') return multiplayer.updateEquipment(null, true);
+  const current = localEquipment.weaponId || arsenal.cur || 'ak', want = requestedWeapon(current, command, ORDER);
+  if (!ORDER.includes(want)) return false;
+  try { await ensureWeaponVisual(want); return multiplayer.updateEquipment(want, false); }
+  catch (error) { console.error('multiplayer weapon visual:', want, error); hud.callout('WEAPON UNAVAILABLE', 'TRY AGAIN'); return false; }
 }
 function configureAvatarUi() {
   const makeButtons = (containerId) => {
@@ -381,7 +417,7 @@ function configureEntryUi() {
   document.body.classList.toggle('multiplayer-dev', multiplayerDev);
   if (multiplayerDev) {
     $('tagline').textContent = 'Two-player shared-city development preview';
-    $('hint').innerHTML = '<b>MULTIPLAYER FREE ROAM</b> · two guest players · movement and presence only<br>Combat, destruction, interiors, and The Underground remain single-player';
+    $('hint').innerHTML = '<b>MULTIPLAYER FREE ROAM · PROTOCOL 4</b> · shared movement, avatars, and visible weapons<br>H holsters · shooting, damage, destruction, interiors, and The Underground remain disabled';
     return;
   }
   $('tagline').textContent = developerCombat ? 'Developer combat test · 6 v 6' : 'The neighborhood is yours';
@@ -439,6 +475,7 @@ function startGame(mode = selectedMode, options = {}) {
   updateNeighborhoodLights(destructionStreamingStats.activeStreamingId);
   if (!combat && Number.isFinite(options.yaw)) player.yaw = options.yaw;
   for (const k in guns) guns[k].holstered = k !== 'ak'; arsenal.cur = 'ak'; pendingWeapon = ''; player.kills = 0; player.deaths = 0;
+  if (!multiplayerActive) { localEquipment = normalizeEquipment(DEFAULT_EQUIPMENT); localEquipmentRevision = 0; localAvatar?.setWeapon('ak', false); }
   if (freshCombatSession) console.log('new combat ammunition lifecycle:', MATCH.id);
   setCameraMode(!combat);
   document.body.classList.toggle('free-roam', !combat); $('modebadge').textContent = combat ? 'Original Combat' : 'Free Roam · V Camera';
@@ -453,7 +490,7 @@ function startGame(mode = selectedMode, options = {}) {
   modeCalloutTimer = setTimeout(() => {
     if (!MATCH.started || MATCH.over || MATCH.mode !== announcedMode) return;
     if (combat) hud.callout(Q.mobile ? 'TAP SWAP TO CYCLE GUNS' : 'PRESS 2 TO ARM THE RPG-7', Q.mobile ? 'MAC-10 · MP5 · M700 · RPG-7' : '3 MAC-10 · 7 MP5 · 8 SNIPER · Q CYCLES');
-    else if (multiplayerActive) hud.callout('MULTIPLAYER FREE ROAM', 'PRESENCE ONLY · COMBAT AND DESTRUCTION DISABLED');
+    else if (multiplayerActive) hud.callout('MULTIPLAYER FREE ROAM', 'WEAPON VISIBILITY ONLINE · SHOOTING AND DAMAGE DISABLED');
     else hud.callout('FREE ROAM', 'NO TIMER · NO FORCED COMBAT · PRESS [V] TO SWITCH CAMERA');
   }, 1200);
 }
@@ -463,8 +500,11 @@ function clearRemotePlayers() { for (const remote of remotePlayers.values()) rem
 function ensureRemote(playerInfo) {
   if (!playerInfo?.id || playerInfo.id === multiplayer?.credentials?.playerId) return null;
   let remote = remotePlayers.get(playerInfo.id);
-  if (!remote) { remote = new RemotePlayer(scene, playerInfo, ghostMat); remotePlayers.set(playerInfo.id, remote); }
-  else if (playerInfo.appearance) remote.setAppearance(playerInfo.appearance, playerInfo.appearanceRevision);
+  if (!remote) { remote = new RemotePlayer(scene, playerInfo, ghostMat, { ensureWeaponVisual }); remotePlayers.set(playerInfo.id, remote); }
+  else {
+    if (playerInfo.appearance) remote.setAppearance(playerInfo.appearance, playerInfo.appearanceRevision);
+    if (playerInfo.equipment) remote.setEquipment(playerInfo.equipment, playerInfo.equipmentRevision, playerInfo.context, playerInfo.contextRevision);
+  }
   return remote;
 }
 function configureMultiplayerClient() {
@@ -485,6 +525,7 @@ function configureMultiplayerClient() {
       if (Number.isInteger(message.spawnIndex)) multiplayer.credentials.spawnIndex = message.spawnIndex;
       if (Number.isInteger(message.capacity)) multiplayer.credentials.capacity = message.capacity;
       if (message.appearance) applyLocalAppearance(message.appearance, { broadcast: false });
+      if (message.equipment) applyLocalEquipment(message.equipment, message.equipmentRevision);
       for (const peer of message.peers || []) { const remote = ensureRemote(peer); if (remote && peer.state) remote.push(peer.state); }
     } else if (message.type === 'peer-joined') { ensureRemote(message.player); setMultiplayerStatus(`Connected · ${message.player.name} joined`); }
     else if (message.type === 'peer-left') { remotePlayers.get(message.playerId)?.dispose(); remotePlayers.delete(message.playerId); setMultiplayerStatus('Connected · a player is reconnecting'); }
@@ -492,6 +533,10 @@ function configureMultiplayerClient() {
     else if (message.type === 'appearance') {
       if (message.playerId === multiplayer.credentials?.playerId) applyLocalAppearance(message.appearance, { broadcast: false });
       else ensureRemote({ id: message.playerId, name: 'PLAYER', appearance: message.appearance, appearanceRevision: message.appearanceRevision });
+    }
+    else if (message.type === 'equipment') {
+      if (message.playerId === multiplayer.credentials?.playerId) applyLocalEquipment(message.equipment, message.equipmentRevision);
+      else ensureRemote({ id: message.playerId, name: 'PLAYER', equipment: message.equipment, equipmentRevision: message.equipmentRevision, context: message.context, contextRevision: message.contextRevision });
     }
     else if (message.type === 'correction' && message.state) player.pos.lerp(new THREE.Vector3(message.state.x, message.state.y, message.state.z), 0.35);
   });
@@ -633,8 +678,12 @@ async function boot() {
   else { await Promise.all(Object.values(guns).map((g) => g.load())); await launcher.load(); }
   pmsg.textContent = 'Calling the homies…';
   await loadCharacters(weapon.template3p, developerCombat ? undefined : [localAppearance.preset]);
+  for (const id of ORDER) {
+    const asset = id === 'rpg' ? launcher : guns[id];
+    if ((id === 'rpg' && launcher.loadedAsset) || (id !== 'rpg' && asset?.loaded)) await ensureWeaponVisual(id);
+  }
   localAvatar = new Character(scene, localAppearance.preset, ghostMat);
-  localAvatar.obj.visible = false; localAvatar.gun.visible = false;
+  localAvatar.obj.visible = false; if (localAvatar.gun) localAvatar.gun.visible = false;
   setInteriorRenderLayer(false);
   for (const g of Object.values(guns)) {
     g.rayTargets = (o, d, maxT) => rayVsBots(o, d, maxT, bots.filter((b) => b.team === 'red' || b.kind === 'bomber'));
@@ -784,7 +833,7 @@ function loop(now) {
       avatarContactOffset.set(0, 0, 0);
       if (player.collisionHit && player.planar > 0.25) avatarContactOffset.copy(player.collisionNormal).multiplyScalar(0.14);
       localAvatar.aimPitch = player.pitch; localAvatar.update(dt, player.pos, player.yaw + Math.PI, !!input.ads, player.dead, avatarContactOffset);
-      localAvatar.obj.visible = show; localAvatar.gun.visible = show;
+      localAvatar.obj.visible = show; if (localAvatar.gun) localAvatar.gun.visible = show && !localAvatar.holstered;
     }
     if (multiplayerActive && multiplayer?.state === 'connected') {
       if (now >= multiplayerSendAt) { multiplayer.sendMovement(player, now); multiplayerSendAt = now + 1000 / MULTIPLAYER_LIMITS.updateHz; }
@@ -801,7 +850,8 @@ function loop(now) {
     collisionDebug?.update();
     performanceProfile.end('camera-avatar', systemStarted); systemStarted = performanceProfile.start();
     if (input.swap && !player.dead) {
-      selectWeapon(input.swap);
+      if (multiplayerActive) requestMultiplayerEquipment(input.swap);
+      else if (input.swap !== 'holster' && input.swap !== 'unarmed') selectWeapon(input.swap);
     }
     input.swap = '';
     // The attack that cancels protection is consumed before any weapon update,
@@ -859,4 +909,4 @@ function loop(now) {
 }
 boot().catch((e) => { console.error(e); pmsg.textContent = 'Could not start: ' + e.message; });
 // expose for QA
-window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, remotePlayers, applyLocalAppearance, characterAssetStats, get localAppearance() { return localAppearance; }, get multiplayer() { return multiplayer; }, get multiplayerActive() { return multiplayerActive; }, get multiplayerDiagnostics() { return { client: multiplayer?.diagnostics?.() || null, remotes: [...remotePlayers.values()].map((remote) => ({ id: remote.id, appearance: remote.appearance, ...remote.diagnostics() })) }; }, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };
+window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, remotePlayers, applyLocalAppearance, applyLocalEquipment, requestMultiplayerEquipment, ensureWeaponVisual, characterAssetStats, get localAppearance() { return localAppearance; }, get localEquipment() { return localEquipment; }, get localEquipmentRevision() { return localEquipmentRevision; }, get multiplayer() { return multiplayer; }, get multiplayerActive() { return multiplayerActive; }, get multiplayerDiagnostics() { return { client: multiplayer?.diagnostics?.() || null, localEquipment, localEquipmentRevision, remotes: [...remotePlayers.values()].map((remote) => ({ id: remote.id, appearance: remote.appearance, ...remote.diagnostics() })) }; }, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };

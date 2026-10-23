@@ -1,7 +1,8 @@
-import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
+import * as THREE from 'three';
 import { Character, ensureCharacterModel } from './characters.js';
 import { normalizeAvatarAppearance } from './avatar-schema.js';
 import { MULTIPLAYER_LIMITS, interpolateSnapshots } from './multiplayer-protocol.js';
+import { normalizeEquipment } from './multiplayer-equipment.js';
 
 function makeLabel(name) {
   const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 64;
@@ -11,13 +12,15 @@ function makeLabel(name) {
 }
 
 export class RemotePlayer {
-  constructor(scene, { id, name, appearance, appearanceRevision = 0 }, ghostMat) {
+  constructor(scene, { id, name, appearance, appearanceRevision = 0, equipment, equipmentRevision = 0, context, contextRevision = 0 }, ghostMat, { ensureWeaponVisual = async () => false } = {}) {
     this.scene = scene; this.id = id; this.name = name; this.ghostMat = ghostMat; this.snapshots = []; this.character = null;
     this.label = makeLabel(name); this.label.visible = false; this.scene.add(this.label); this.position = new THREE.Vector3(); this.lastStateAt = performance.now();
     this.lastSeq = -1; this.lastServerAt = 0; this.lastArrivalAt = 0; this.animationAccum = 0; this.renderState = {};
     this.appearance = normalizeAvatarAppearance(appearance); this.appearanceRevision = -1; this.appearanceRequest = 0;
+    this.equipment = normalizeEquipment(equipment); this.equipmentRevision = -1; this.equipmentRequest = 0; this.ensureWeaponVisual = ensureWeaponVisual;
+    this.context = context || null; this.contextRevision = contextRevision;
     this.metrics = { snapshots: 0, staleSnapshots: 0, jitterMs: 0, interpolationMs: MULTIPLAYER_LIMITS.interpolationMs, snapshotAgeMs: 0, extrapolations: 0, animationUpdates: 0 };
-    this.setAppearance(this.appearance, appearanceRevision);
+    this.setAppearance(this.appearance, appearanceRevision); this.setEquipment(this.equipment, equipmentRevision);
   }
   async setAppearance(appearance, revision = this.appearanceRevision + 1) {
     if (revision < this.appearanceRevision) return false;
@@ -29,7 +32,21 @@ export class RemotePlayer {
     const replacement = new Character(this.scene, canonical.preset, this.ghostMat, { presenceOnly: true });
     replacement.obj.position.copy(this.position); replacement.obj.visible = this.character?.obj.visible ?? false;
     this.label.position.set(0, 2.25, 0); this.label.visible = true; replacement.obj.add(this.label); this.character?.dispose(this.scene); this.character = replacement;
-    this.appearance = canonical; this.appearanceRevision = revision; return true;
+    this.appearance = canonical; this.appearanceRevision = revision; await this.#applyEquipment(replacement); return true;
+  }
+  async #applyEquipment(character = this.character) {
+    if (!character) return false;
+    const request = ++this.equipmentRequest, equipment = this.equipment;
+    if (!equipment.weaponId) { character.setWeapon(null, true); return true; }
+    if (!await this.ensureWeaponVisual(equipment.weaponId)) return false;
+    if (request !== this.equipmentRequest || character !== this.character) return false;
+    return character.setWeapon(equipment.weaponId, equipment.holstered);
+  }
+  async setEquipment(equipment, revision = this.equipmentRevision + 1, context = this.context, contextRevision = this.contextRevision) {
+    if (revision < this.equipmentRevision) return false;
+    this.equipment = normalizeEquipment(equipment); this.equipmentRevision = revision;
+    if (context) this.context = context; if (Number.isSafeInteger(contextRevision)) this.contextRevision = contextRevision;
+    return this.#applyEquipment();
   }
   push(state) {
     if (!Number.isFinite(state?.serverTime) || !Number.isSafeInteger(state.seq) || state.seq <= this.lastSeq) { this.metrics.staleSnapshots++; return; }
@@ -61,6 +78,6 @@ export class RemotePlayer {
       this.animationAccum = 0; this.metrics.animationUpdates++;
     }
   }
-  diagnostics() { return { ...this.metrics, queuedSnapshots: this.snapshots.length }; }
-  dispose() { this.appearanceRequest++; this.scene.remove(this.label); this.label.material.map.dispose(); this.label.material.dispose(); this.character?.dispose(this.scene); }
+  diagnostics() { return { ...this.metrics, queuedSnapshots: this.snapshots.length, equipment: this.equipment, equipmentRevision: this.equipmentRevision, context: this.context }; }
+  dispose() { this.appearanceRequest++; this.equipmentRequest++; this.scene.remove(this.label); this.label.material.map.dispose(); this.label.material.dispose(); this.character?.dispose(this.scene); }
 }
