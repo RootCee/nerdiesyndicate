@@ -1,7 +1,7 @@
 // RPG-7 rocket launcher: viewmodel, rockets in flight, blast damage, and the wall destruction hook.
-import * as THREE from 'three';
+import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { loadGLB, prep } from './assets.js';
-import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import * as SkeletonUtils from '/mafia-wars/game/vendor/three/jsm/utils/SkeletonUtils.js';
 import { raycastWorld } from './world.js';
 import { rayVsBots } from './bots.js';
 import { blast } from './destruction.js';

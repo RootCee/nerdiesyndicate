@@ -14,6 +14,8 @@ export const MULTIPLAYER_LIMITS = Object.freeze({
   maxMessagesPerSecond: 30,
   maxAppearanceUpdatesPerSecond: 2,
   maxEquipmentUpdatesPerSecond: 4,
+  maxCombatMessagesPerSecond: 20,
+  maxSpaceUpdatesPerSecond: 3,
   maxSpeed: 8.5,
   maxAcceleration: 32,
   bounds: Object.freeze({ minX: -140, maxX: 244, minZ: -148, maxZ: 148 }),

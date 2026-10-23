@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { Character, ensureCharacterModel } from './characters.js';
 import { normalizeAvatarAppearance } from './avatar-schema.js';
 import { MULTIPLAYER_LIMITS, interpolateSnapshots } from './multiplayer-protocol.js';
@@ -18,7 +18,7 @@ export class RemotePlayer {
     this.lastSeq = -1; this.lastServerAt = 0; this.lastArrivalAt = 0; this.animationAccum = 0; this.renderState = {};
     this.appearance = normalizeAvatarAppearance(appearance); this.appearanceRevision = -1; this.appearanceRequest = 0;
     this.equipment = normalizeEquipment(equipment); this.equipmentRevision = -1; this.equipmentRequest = 0; this.ensureWeaponVisual = ensureWeaponVisual;
-    this.context = context || null; this.contextRevision = contextRevision;
+    this.context = context || { space: { id: 'city', instanceId: null } }; this.contextRevision = contextRevision;
     this.metrics = { snapshots: 0, staleSnapshots: 0, jitterMs: 0, interpolationMs: MULTIPLAYER_LIMITS.interpolationMs, snapshotAgeMs: 0, extrapolations: 0, animationUpdates: 0 };
     this.setAppearance(this.appearance, appearanceRevision); this.setEquipment(this.equipment, equipmentRevision);
   }
@@ -32,7 +32,7 @@ export class RemotePlayer {
     const replacement = new Character(this.scene, canonical.preset, this.ghostMat, { presenceOnly: true });
     replacement.obj.position.copy(this.position); replacement.obj.visible = this.character?.obj.visible ?? false;
     this.label.position.set(0, 2.25, 0); this.label.visible = true; replacement.obj.add(this.label); this.character?.dispose(this.scene); this.character = replacement;
-    this.appearance = canonical; this.appearanceRevision = revision; await this.#applyEquipment(replacement); return true;
+    this.appearance = canonical; this.appearanceRevision = revision; this.setContext(this.context, this.contextRevision); await this.#applyEquipment(replacement); return true;
   }
   async #applyEquipment(character = this.character) {
     if (!character) return false;
@@ -45,8 +45,15 @@ export class RemotePlayer {
   async setEquipment(equipment, revision = this.equipmentRevision + 1, context = this.context, contextRevision = this.contextRevision) {
     if (revision < this.equipmentRevision) return false;
     this.equipment = normalizeEquipment(equipment); this.equipmentRevision = revision;
-    if (context) this.context = context; if (Number.isSafeInteger(contextRevision)) this.contextRevision = contextRevision;
+    this.setContext(context, contextRevision);
     return this.#applyEquipment();
+  }
+  setContext(context, revision = this.contextRevision + 1) {
+    if (!context || revision < this.contextRevision) return false;
+    this.context = context; this.contextRevision = revision;
+    const layer = context.space?.id === 'city' ? 0 : 1;
+    this.character?.obj.traverse((object) => object.layers?.set(layer));
+    this.label.layers.set(layer); return true;
   }
   push(state) {
     if (!Number.isFinite(state?.serverTime) || !Number.isSafeInteger(state.seq) || state.seq <= this.lastSeq) { this.metrics.staleSnapshots++; return; }
@@ -60,14 +67,20 @@ export class RemotePlayer {
     this.snapshots.push({ ...state, at: state.serverTime }); if (this.snapshots.length > 12) this.snapshots.splice(0, this.snapshots.length - 12);
     this.lastStateAt = arrivedAt; this.metrics.snapshots++;
   }
-  update(dt, serverNow, viewerPosition) {
+  teleport(state) {
+    if (!state || !Number.isFinite(state.serverTime)) return;
+    this.snapshots = [{ ...state, at: state.serverTime }];
+    this.position.set(state.x, state.y, state.z);
+    if (this.character) this.character.obj.position.copy(this.position);
+  }
+  update(dt, serverNow, viewerPosition, viewerSpace = 'city') {
     const state = interpolateSnapshots(this.snapshots, serverNow - this.metrics.interpolationMs, this.renderState, MULTIPLAYER_LIMITS.maxExtrapolationMs);
     if (!state) return;
     this.metrics.snapshotAgeMs = Math.max(0, serverNow - this.lastServerAt); if (state.extrapolated) this.metrics.extrapolations++;
     this.position.set(state.x, state.y, state.z);
     const distance = viewerPosition ? viewerPosition.distanceTo(this.position) : 0;
     if (!this.character) { this.label.position.copy(this.position); this.label.position.y += 2.25; return; }
-    this.character.obj.visible = distance < 180;
+    this.character.obj.visible = distance < 180 && (this.context?.space?.id || 'city') === viewerSpace;
     if (!this.character.obj.visible) return;
     this.character.obj.position.copy(this.position); this.character.obj.rotation.y = state.yaw + Math.PI;
     this.character.play(state.state === 'run' ? 'Run' : state.state === 'walk' ? 'Walk' : 'Idle_Gun', 0.12);

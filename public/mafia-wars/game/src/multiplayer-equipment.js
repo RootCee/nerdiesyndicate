@@ -34,11 +34,12 @@ export function normalizeEquipment(input) {
   };
 }
 
-export function normalizePlayerContext() {
+export function normalizePlayerContext(input) {
+  const space = typeof input?.space?.id === 'string' ? input.space : DEFAULT_PLAYER_CONTEXT.space;
   return {
     schemaVersion: DEFAULT_PLAYER_CONTEXT.schemaVersion,
     team: { ...DEFAULT_PLAYER_CONTEXT.team },
-    space: { ...DEFAULT_PLAYER_CONTEXT.space },
+    space: { id: space.id, instanceId: typeof space.instanceId === 'string' ? space.instanceId : null },
   };
 }
 
