@@ -83,31 +83,33 @@ export class Launcher {
     p.kick += 0.05; p.kickYaw += (Math.random() - 0.5) * 0.01; this.kickZ += 0.12; sfx.rocket();
   }
   // a rocket that anyone can launch (bots later): glowing head + smoke trail + a point light
-  launch(origin, dir, owner, time) {
+  launch(origin, dir, owner, time, { cosmetic = false } = {}) {
     const slot = this.pool.find((s) => !s.busy) || this.pool[0]; slot.busy = true;
     const { obj, light } = slot; obj.visible = true; obj.position.copy(origin); light.intensity = 14; light.position.copy(origin);
-    this.rockets.push({ obj, light, slot, pos: origin.clone(), vel: dir.clone().multiplyScalar(38), owner, born: time, trail: 0 });
+    this.rockets.push({ obj, light, slot, pos: origin.clone(), vel: dir.clone().multiplyScalar(38), owner, born: time, trail: 0, cosmetic });
   }
   stepRocket(r, dt, time) {
     const prev = r.pos.clone(); r.vel.y -= 2.5 * dt; r.pos.addScaledVector(r.vel, dt);
     const seg = new THREE.Vector3().subVectors(r.pos, prev); const len = seg.length(); const dir = seg.clone().normalize();
     // world (houses, props, standing walls) then bots
     const hitW = { t: 1, n: new THREE.Vector3() }; raycastWorld(prev, seg, 1, true, hitW);
-    const bot = this.rayTargets ? this.rayTargets(prev, dir, len * hitW.t, r.owner) : null;
+    const bot = !r.cosmetic && this.rayTargets ? this.rayTargets(prev, dir, len * hitW.t, r.owner) : null;
     let hit = null;
     if (bot) hit = prev.clone().addScaledVector(dir, bot.t);
     else if (hitW.t < 1) hit = prev.clone().addScaledVector(dir, len * hitW.t - 0.05);
     else if (r.pos.y <= 0.05) { hit = r.pos.clone(); hit.y = 0.05; }
-    if (hit) { this.explode(hit, r.owner, time, dir); return false; }
+    if (hit) { this.explode(hit, r.owner, time, dir, { destructive: !r.cosmetic }); return false; }
     if (time - r.born > 5) return false;
     r.obj.position.copy(r.pos); r.light.position.copy(r.pos);
     r.trail += dt; if (r.trail > 0.014) { r.trail = 0; this.fx.billow('puff', r.pos.clone().addScaledVector(dir, -0.35), new THREE.Vector3((Math.random() - 0.5) * 0.5, 0.25 + Math.random() * 0.3, (Math.random() - 0.5) * 0.5), 1.1 + Math.random() * 0.6, 0.16, 1.2 + Math.random() * 0.5, { op: 0.4, tint: [0.045, 0.043, 0.04], drag: 1.2, spin: 0.8 }); if (Math.random() < 0.35) this.fx.billow('fire', r.pos.clone().addScaledVector(dir, -0.25), new THREE.Vector3(), 0.08, 0.25, 0.45, { op: 0.9, tint: [1.6, 1.1, 0.7], drag: 0 }); }
     return true;
   }
-  explode(p, owner, time, dir) {
+  explode(p, owner, time, dir, { destructive = true } = {}) {
     // the fireball sits in front of the surface it hit, so the wall doesn't swallow it
     this.fx.explosion(dir ? p.clone().addScaledVector(dir, -1.0) : p); sfx.explode(p);
-    blast(p, 3.6, 7.5);
-    this.onExplode?.(p, owner, time);
+    if (destructive) {
+      blast(p, 3.6, 7.5);
+      this.onExplode?.(p, owner, time);
+    }
   }
 }

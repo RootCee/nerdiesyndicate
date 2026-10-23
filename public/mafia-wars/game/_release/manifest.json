@@ -1,7 +1,7 @@
 {
   "name": "Nerdie City: Mafia Wars",
   "channel": "early-development-preview",
-  "sourceCommit": "a4cb8d356b800f9e2ef89b06b04538ebeec6d59c",
+  "sourceCommit": "b636d558955c50b25f0a1ab333b23a6e212bc2b6",
   "sourceBranch": "codex/mafia-wars-protocol-4-combat-interiors",
   "entry": "/mafia-wars/game/?phys=0&multiplayer=1"
 }

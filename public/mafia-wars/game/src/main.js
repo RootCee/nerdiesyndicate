@@ -524,8 +524,13 @@ function playNetworkShot(message) {
   const remote = remotePlayers.get(message.playerId), muzzle = new THREE.Vector3();
   if (remote?.character?.gun) remote.character.gun.getWorldPosition(muzzle); else if (message.playerId === multiplayer?.credentials?.playerId && localAvatar?.gun) localAvatar.gun.getWorldPosition(muzzle); else muzzle.copy(origin);
   fx.flash(muzzle, message.weaponId === 'rpg' ? 0.65 : 0.38, message.playerId === multiplayer?.credentials?.playerId);
-  fx.tracer(muzzle.clone().addScaledVector(direction, 0.5), muzzle.clone().addScaledVector(direction, message.weaponId === 'rpg' ? 24 : 65), message.weaponId === 'rpg' ? 0xffa040 : 0xffd9a0, message.weaponId === 'rpg' ? 1.8 : 1);
-  if (message.playerId === multiplayer?.credentials?.playerId) sfx.shot({ rate: message.weaponId === 'rpg' ? 0.65 : 1 });
+  if (message.weaponId === 'rpg') {
+    launcher.launch(muzzle.clone().addScaledVector(direction, 0.55), direction, remote?.character || player, time, { cosmetic: true });
+    if (message.playerId === multiplayer?.credentials?.playerId) sfx.rocket();
+  } else {
+    fx.tracer(muzzle.clone().addScaledVector(direction, 0.5), muzzle.clone().addScaledVector(direction, 65), 0xffd9a0, 1);
+    if (message.playerId === multiplayer?.credentials?.playerId) sfx.shot({ rate: 1 });
+  }
 }
 function ensureRemote(playerInfo) {
   if (!playerInfo?.id || playerInfo.id === multiplayer?.credentials?.playerId) return null;
