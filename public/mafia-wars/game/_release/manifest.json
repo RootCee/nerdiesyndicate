@@ -1,7 +1,7 @@
 {
   "name": "Nerdie City: Mafia Wars",
   "channel": "early-development-preview",
-  "sourceCommit": "763896aa22c23d998915d26246b442ecf409440d",
+  "sourceCommit": "9643362c7b0c8512d4a1c81b59a76cab37a1832b",
   "sourceBranch": "codex/nerdie-city-environment-road-paint",
   "entry": "/mafia-wars/game/?phys=0&multiplayer=1"
 }

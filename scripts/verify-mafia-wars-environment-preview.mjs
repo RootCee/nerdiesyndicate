@@ -13,11 +13,11 @@ const [manifestText, main, expansion, markings, layout, endpoint] = await Promis
 ]);
 
 const manifest = JSON.parse(manifestText);
-assert.equal(manifest.sourceCommit, '763896aa22c23d998915d26246b442ecf409440d');
+assert.equal(manifest.sourceCommit, '9643362c7b0c8512d4a1c81b59a76cab37a1832b');
 assert.equal(manifest.sourceBranch, 'codex/nerdie-city-environment-road-paint');
 assert.match(main, /Q\.roadPaint = qs\.get\('roadPaint'\) !== '0'/);
 assert.match(expansion, /buildCityRoadMarkings\(infrastructure, plan\.roads\)/);
 assert.match(markings, /\/mafia-wars\/game\/vendor\/three\/three\.module\.js/);
 assert.match(layout, /createRoadPaintLayout/);
-assert.match(endpoint, /AVATAR_PREVIEW_MULTIPLAYER_SERVICE = 'https:\/\/nerdie-city-p4-1-audio-dev\.buddieroots\.workers\.dev'/);
+assert.match(endpoint, /AVATAR_PREVIEW_MULTIPLAYER_SERVICE = 'https:\/\/nerdie-city-environment-preview-dev\.buddieroots\.workers\.dev'/);
 console.log('Environment preview verified: exact game source, single road-paint pass, rollback flag, and isolated Protocol 4.1 preview endpoint.');
