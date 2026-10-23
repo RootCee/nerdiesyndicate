@@ -73,6 +73,7 @@ async function submitMatch() {
 const Q = { mobile: TOUCH || qs.get('mobile') === '1', silent: qs.get('silent') === '1', fps: 0, houses: qs.get('houses') !== '0' };
 Q.lowMemory = Q.mobile && qs.get('full') !== '1' && qs.get('dev') !== 'combat';
 Q.cityExpansion = qs.get('city') !== '0';
+Q.roadPaint = qs.get('roadPaint') !== '0';
 setLowMemoryAssets(Q.lowMemory);
 const $ = (id) => document.getElementById(id);
 const canvas = $('gl');

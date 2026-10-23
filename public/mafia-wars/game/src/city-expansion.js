@@ -4,6 +4,7 @@ import { createCityPlan, chunkVisible } from './city-layout.js';
 import { HybridApartmentSystem } from './apartment-system.js';
 import { HybridHouseSystem } from './house-system.js';
 import { CombatVenueSystem } from './combat-venue.js';
+import { buildCityRoadMarkings } from './city-road-markings.js';
 
 const material = (color, roughness = 0.88, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
 const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
@@ -107,6 +108,10 @@ export function buildCityExpansion(scene, Q = {}) {
       }
     }
   }
+  // Slop New York-inspired procedural road paint: all lane dashes and
+  // crosswalks share one geometry and material, keeping the upgrade to one
+  // lightweight draw call on both desktop and mobile.
+  const roadPaint = Q.roadPaint === false ? null : buildCityRoadMarkings(infrastructure, plan.roads);
 
   const chunks = [], cityLightSites = [];
   let apartment = null, house = null, originalHouse = null, duplicatedHouse = null, combatVenue = null;
@@ -218,6 +223,8 @@ export function buildCityExpansion(scene, Q = {}) {
         duplicatedEnterableHouse: duplicatedHouse?.site.id || null,
         duplicatedOriginalHouses: plan.duplicatedOriginalNeighborhood.houseCount,
         activeCityLights: cityLightPool.filter((light) => light.intensity > 0).length,
+        roadPaintQuads: roadPaint?.quads || 0,
+        roadPaintTriangles: roadPaint?.triangles || 0,
         combatVenue: combatVenue?.site.id || null,
         bounds: { ...MAP },
       };
