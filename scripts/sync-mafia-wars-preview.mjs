@@ -10,7 +10,8 @@ if (!sourceRoot) {
   throw new Error('Usage: node scripts/sync-mafia-wars-preview.mjs /absolute/path/to/game/source');
 }
 
-const expectedCommit = 'fdb480604355f28f5c4124186ed984d5d88c4c33';
+const expectedCommit = 'f9a2c231a718f5224d5b57db047c55b8ea3f9a42';
+const previewMultiplayerService = 'https://nerdie-city-p4-1-audio-dev.buddieroots.workers.dev';
 const runtimeFiles = ['index.html', 'version.txt'];
 const characterFiles = ['blue_zip.glb', 'navy.glb', 'red_hoodie.glb', 'red_jersey.glb'];
 const fontFiles = ['BarlowCondensed-Medium.ttf', 'BarlowCondensed-SemiBold.ttf', 'PermanentMarker-Regular.ttf'];
@@ -103,6 +104,19 @@ async function ensureMobileMemoryProfile() {
   });
 }
 
+async function applyPreviewMultiplayerEndpoint() {
+  const endpointPath = path.join(outputRoot, 'src', 'multiplayer-endpoint.js');
+  const endpointSource = await readFile(endpointPath, 'utf8');
+  const endpointPatched = endpointSource.replace(
+    /export const AVATAR_PREVIEW_MULTIPLAYER_SERVICE = '[^']+';/,
+    `export const AVATAR_PREVIEW_MULTIPLAYER_SERVICE = '${previewMultiplayerService}';`,
+  );
+  if (endpointPatched === endpointSource && !endpointSource.includes(previewMultiplayerService)) {
+    throw new Error('Expected the Mafia Wars preview multiplayer endpoint declaration');
+  }
+  await writeFile(endpointPath, endpointPatched);
+}
+
 function resolveAddonImport(importer, specifier) {
   if (specifier.startsWith('three/addons/')) return specifier.slice('three/addons/'.length);
   if (!specifier.startsWith('.')) return null;
@@ -161,6 +175,7 @@ await applyMobileAudioUnlock();
 // Milestone 4 carries the proven iOS safeguards in source. The legacy patch
 // remains as a fallback so older approved sources cannot silently lose them.
 await ensureMobileMemoryProfile();
+await applyPreviewMultiplayerEndpoint();
 const avbdWorldPath = path.join(outputRoot, 'vendor', 'three-avbd', 'lib', 'world.js');
 await writeFile(
   avbdWorldPath,

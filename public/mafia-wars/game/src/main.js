@@ -38,6 +38,7 @@ import { AVATAR_PRESETS, normalizeAvatarAppearance, sameAvatarAppearance } from 
 import { DEFAULT_EQUIPMENT, normalizeEquipment } from './multiplayer-equipment.js';
 import { MULTIPLAYER_WEAPON_RULES } from './multiplayer-combat.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
+import { createNetworkAudioDeduper } from './weapon-audio.js';
 
 const qs = new URLSearchParams(location.search);
 const multiplayerDev = qs.get('multiplayer') === '1';
@@ -188,6 +189,7 @@ let localCombat = null, localContext = { space: { id: 'city', instanceId: null }
 let multiplayer = null, multiplayerActive = false, multiplayerServerOffset = 0, multiplayerSendAt = 0, multiplayerPingAt = 0, multiplayerStatusAt = 0;
 const multiplayerAim = new THREE.Vector3();
 const remotePlayers = new Map();
+const networkAudioEvents = createNetworkAudioDeduper();
 const avatarContactOffset = new THREE.Vector3();
 const score = { red: 0, blue: 0 }; const MATCH = { id: '', limit: 100, time: 600, left: 600, over: false, started: false, mode: GAME_MODES.FREE_ROAM };
 const developerCombat = qs.get('dev') === 'combat';
@@ -501,7 +503,7 @@ function startGame(mode = selectedMode, options = {}) {
 }
 
 function setMultiplayerStatus(text, on = true) { const el = $('mpStatus'); if (el.textContent !== text) el.textContent = text; el.classList.toggle('on', on); }
-function clearRemotePlayers() { for (const remote of remotePlayers.values()) remote.dispose(); remotePlayers.clear(); }
+function clearRemotePlayers() { for (const remote of remotePlayers.values()) remote.dispose(); remotePlayers.clear(); networkAudioEvents.clear(); }
 function applyLocalCombat(combat) {
   if (!combat) return;
   const prior = localCombat || {}, wasDead = !!player.dead;
@@ -553,17 +555,27 @@ function applyLocalContext(context, revision = localContextRevision + 1, state =
   }
 }
 function playNetworkShot(message) {
+  if (!networkAudioEvents.accept('shot', message)) return;
   const origin = new THREE.Vector3(message.origin.x, message.origin.y, message.origin.z), direction = new THREE.Vector3(message.direction.x, message.direction.y, message.direction.z).normalize();
   const remote = remotePlayers.get(message.playerId), muzzle = new THREE.Vector3();
   if (remote?.character?.gun) remote.character.gun.getWorldPosition(muzzle); else if (message.playerId === multiplayer?.credentials?.playerId && localAvatar?.gun) localAvatar.gun.getWorldPosition(muzzle); else muzzle.copy(origin);
   fx.flash(muzzle, message.weaponId === 'rpg' ? 0.65 : 0.38, message.playerId === multiplayer?.credentials?.playerId);
+  const localShot = message.playerId === multiplayer?.credentials?.playerId;
+  const audibleHere = localShot || (message.spaceId || 'city') === (localContext.space?.id || 'city');
   if (message.weaponId === 'rpg') {
     launcher.launch(muzzle.clone().addScaledVector(direction, 0.55), direction, remote?.character || player, time, { cosmetic: true });
-    if (message.playerId === multiplayer?.credentials?.playerId) sfx.rocket();
+    if (audibleHere) { if (localShot) sfx.weaponShot('rpg'); else sfx.weaponShotAt('rpg', origin); }
   } else {
     fx.tracer(muzzle.clone().addScaledVector(direction, 0.5), muzzle.clone().addScaledVector(direction, 65), 0xffd9a0, 1);
-    if (message.playerId === multiplayer?.credentials?.playerId) sfx.shot({ rate: 1 });
+    if (audibleHere) { if (localShot) sfx.weaponShot(message.weaponId); else sfx.weaponShotAt(message.weaponId, origin); }
   }
+}
+function playNetworkReload(message) {
+  if (!networkAudioEvents.accept('reload', message)) return;
+  const localReload = message.playerId === multiplayer?.credentials?.playerId;
+  if (!localReload && (message.spaceId || 'city') !== (localContext.space?.id || 'city')) return;
+  if (localReload) sfx.reloadWeapon(message.weaponId);
+  else sfx.reloadWeaponAt(message.weaponId, new THREE.Vector3(message.origin.x, message.origin.y, message.origin.z));
 }
 function ensureRemote(playerInfo) {
   if (!playerInfo?.id || playerInfo.id === multiplayer?.credentials?.playerId) return null;
@@ -626,6 +638,7 @@ function configureMultiplayerClient() {
       if (message.elimination) hud.killText(message.elimination.killerId === localId ? 'ELIMINATION' : message.elimination.victimId === localId ? 'YOU WERE ELIMINATED' : 'PLAYER ELIMINATED');
     }
     else if (message.type === 'shot') playNetworkShot(message);
+    else if (message.type === 'reload') playNetworkReload(message);
     else if (message.type === 'space') {
       if (message.playerId === multiplayer.credentials?.playerId) { applyLocalContext(message.context, message.contextRevision, message.state); if (message.combat) applyLocalCombat(message.combat); }
       else { const remote = ensureRemote({ id: message.playerId, name: 'PLAYER', context: message.context, contextRevision: message.contextRevision, combat: message.combat }); remote?.setContext(message.context, message.contextRevision); remote?.setCombat(message.combat); if (remote && message.state) remote.teleport(message.state); }

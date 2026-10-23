@@ -1,3 +1,5 @@
+import { weaponAudioProfile } from './weapon-audio.js';
+
 // Audio: ElevenLabs-generated samples (assets/sfx/*.mp3) on three buses (sfx / ambience / music),
 // positional playback for anything that happens in the world (distance falloff + stereo pan),
 // and the old WebAudio synth kept as a fallback whenever a sample is missing or not decoded yet.
@@ -93,6 +95,22 @@ export const sfx = {
     if (dist < 35) { if (!playAt('shot', pos, { vol: 0.75, ref: 5 })) noise(0.18, { f: 900, gain: 0.6 / (1 + dist * 0.06), decay: 0.16 }); }
     else playAt('shot_far', pos, { vol: 0.5, ref: 35, max: 160 });
   },
+  weaponShot(weaponId) {
+    const profile = weaponAudioProfile(weaponId);
+    if (profile.rocket) return this.rocket();
+    return this.shot({ rate: profile.shotRate, vol: profile.shotVolume });
+  },
+  weaponShotAt(weaponId, pos) {
+    if (!ctx) return;
+    const profile = weaponAudioProfile(weaponId);
+    if (profile.rocket) {
+      if (!playAt('rocket', pos, { vol: profile.shotVolume, ref: 8, max: 150, rate: profile.shotRate })) return;
+      return;
+    }
+    const { dist } = spatial(pos);
+    if (dist < 35) playAt('shot', pos, { vol: profile.shotVolume * 0.82, ref: 5, max: 120, rate: profile.shotRate });
+    else playAt('shot_far', pos, { vol: profile.shotVolume * 0.55, ref: 35, max: 160, rate: profile.shotRate });
+  },
   dry() { if (!ctx) return; tone(1200, 900, 0.03, { type: 'square', gain: 0.12 }); },
   // player's bullet connects: crisp marker + body thud (the ElevenLabs thud is quiet, so a small synth thump sits under it)
   hit() { if (!ctx) return; if (!play('hitmarker', { vol: 0.55, jitter: 0.02 })) tone(2200, 1800, 0.05, { type: 'triangle', gain: 0.22 }); play('bodyhit', { vol: 0.6, delay: 0.01 }); tone(140, 60, 0.09, { gain: 0.18 }); },
@@ -102,6 +120,16 @@ export const sfx = {
   death() { if (!ctx) return; play('death', { vol: 0.8, jitter: 0.03 }); },
   deathAt(pos) { if (!ctx) return; playAt('death', pos, { vol: 0.6, ref: 4, max: 45 }); },
   reload({ rate = 1, vol } = {}) { if (!ctx) return; if (!play('reload', { vol: vol ?? 0.7, rate, jitter: 0 })) { tone(700, 300, 0.05, { type: 'square', gain: 0.1 }); noise(0.08, { f: 3000, gain: 0.3, decay: 0.07, delay: 1.5 }); } },
+  reloadWeapon(weaponId) {
+    const profile = weaponAudioProfile(weaponId);
+    if (profile.rocket) return this.rocketReload();
+    return this.reload({ rate: profile.reloadRate, vol: profile.reloadVolume });
+  },
+  reloadWeaponAt(weaponId, pos) {
+    if (!ctx) return;
+    const profile = weaponAudioProfile(weaponId), sample = profile.rocket ? 'rocket_reload' : 'reload';
+    playAt(sample, pos, { vol: profile.reloadVolume * 0.78, ref: 4, max: 55, rate: profile.reloadRate });
+  },
   ability() { if (!ctx) return; if (!play('ability', { vol: 0.75, jitter: 0 })) tone(660, 1320, 0.3, { type: 'sine', gain: 0.18 }); },
   ding() { this.ability(); },
   snitch() { if (!ctx) return; play('snitch', { vol: 0.7, jitter: 0 }); },

@@ -1,5 +1,5 @@
 export const PRODUCTION_MULTIPLAYER_SERVICE = 'https://nerdie-city-multiplayer-preview.buddieroots.workers.dev';
-export const AVATAR_PREVIEW_MULTIPLAYER_SERVICE = 'https://nerdie-city-p4-underground-dev.buddieroots.workers.dev';
+export const AVATAR_PREVIEW_MULTIPLAYER_SERVICE = 'https://nerdie-city-p4-1-audio-dev.buddieroots.workers.dev';
 export const LOCAL_MULTIPLAYER_SERVICE = 'http://127.0.0.1:8787';
 
 export function resolveMultiplayerService(locationLike = globalThis.location) {
