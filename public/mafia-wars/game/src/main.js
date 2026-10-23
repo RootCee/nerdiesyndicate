@@ -37,9 +37,11 @@ import { MULTIPLAYER_LIMITS, MULTIPLAYER_SPAWNS } from './multiplayer-protocol.j
 import { AVATAR_PRESETS, normalizeAvatarAppearance, sameAvatarAppearance } from './avatar-schema.js';
 import { DEFAULT_EQUIPMENT, normalizeEquipment } from './multiplayer-equipment.js';
 import { MULTIPLAYER_WEAPON_RULES } from './multiplayer-combat.js';
+import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 
 const qs = new URLSearchParams(location.search);
 const multiplayerDev = qs.get('multiplayer') === '1';
+const multiplayerArenaQa = multiplayerDev && qs.get('mpArena') === '1';
 const multiplayerServiceUrl = resolveMultiplayerService(location);
 const performanceProfile = createPerformanceProfiler(qs.get('perf') === '1');
 // Legacy ladder support remains developer-only. Public Base identity and rankings are coming later.
@@ -501,11 +503,24 @@ function startGame(mode = selectedMode, options = {}) {
 function setMultiplayerStatus(text, on = true) { const el = $('mpStatus'); if (el.textContent !== text) el.textContent = text; el.classList.toggle('on', on); }
 function clearRemotePlayers() { for (const remote of remotePlayers.values()) remote.dispose(); remotePlayers.clear(); }
 function applyLocalCombat(combat) {
-  if (!combat?.ammo) return; localCombat = combat;
-  for (const [id, ammo] of Object.entries(combat.ammo)) {
+  if (!combat) return;
+  const prior = localCombat || {}, wasDead = !!player.dead;
+  localCombat = { ...prior, ...combat, ammo: combat.ammo || prior.ammo };
+  if (combat.ammo) for (const [id, ammo] of Object.entries(combat.ammo)) {
     if (id === 'rpg') { launcher.loaded = ammo.magazine; launcher.reserve = ammo.reserve; }
     else if (guns[id]) { guns[id].mag = ammo.magazine; guns[id].reserve = ammo.reserve; }
   }
+  if (Number.isFinite(combat.health)) player.hp = combat.health;
+  if (Number.isFinite(combat.maxHealth)) player.maxHp = combat.maxHealth;
+  if (combat.team === 'blue' || combat.team === 'red' || combat.team === null) player.team = combat.team;
+  if (Number.isSafeInteger(combat.kills)) player.kills = combat.kills;
+  if (Number.isSafeInteger(combat.deaths)) player.deaths = combat.deaths;
+  player.dead = combat.dead === true;
+  const serverNow = Date.now() + multiplayerServerOffset;
+  player.protectedUntil = time + Math.max(0, ((combat.protectionUntil || 0) - serverNow) / 1000);
+  respawnAt = time + Math.max(0, ((combat.respawnAt || 0) - serverNow) / 1000);
+  if (!wasDead && player.dead) { hud.hurt(1); sfx.death(); hud.callout('ELIMINATED', 'RESPAWNING…'); }
+  else if (wasDead && !player.dead) { hud.hurt(0); hud.callout('BACK IN THE FIGHT', 'SPAWN SHIELD ACTIVE'); }
 }
 function interiorForSpace(spaceId) {
   if (!city) return null;
@@ -513,11 +528,29 @@ function interiorForSpace(spaceId) {
 }
 function applyLocalContext(context, revision = localContextRevision + 1, state = null) {
   if (!context || revision < localContextRevision) return;
+  const priorSpace = localContext?.space?.id || 'city';
   localContext = context; localContextRevision = revision;
   const spaceId = context.space?.id || 'city', target = interiorForSpace(spaceId);
   for (const interior of [city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = interior === target; interior.interior.visible = interior === target; }
-  setInteriorRenderLayer(spaceId !== 'city');
-  if (state && ['x', 'y', 'z'].every((key) => Number.isFinite(state[key]))) player.pos.set(state.x, state.y, state.z);
+  setInteriorRenderLayer(!!target);
+  if (state && ['x', 'y', 'z'].every((key) => Number.isFinite(state[key]))) {
+    if (spaceId === 'underground' || priorSpace === 'underground') {
+      player.respawn(new THREE.Vector3(state.x, state.y, state.z));
+      if (Number.isFinite(localCombat?.health)) { player.hp = localCombat.health; player.dead = localCombat.dead === true; }
+    }
+    else player.pos.set(state.x, state.y, state.z);
+  }
+  if (spaceId === 'underground') {
+    city?.setMode('combat'); setCameraMode(true); document.body.classList.add('free-roam');
+    destructionStreamingStats = updateDestructionStreaming(player.pos, Q.lowMemory ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.mobile : DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.desktop, ORIGINAL_NEIGHBORHOOD_LAYOUT.id);
+    updateNeighborhoodLights(destructionStreamingStats.activeStreamingId);
+    $('modebadge').textContent = 'Multiplayer Underground'; $('state').textContent = 'LIVE COMBAT'; $('timer').textContent = 'NO TIME LIMIT'; $('combatExit').classList.add('on');
+    hud.callout('THE UNDERGROUND', 'SERVER-AUTHORITATIVE MULTIPLAYER COMBAT');
+  } else if (priorSpace === 'underground') {
+    city?.setMode('free-roam'); $('modebadge').textContent = 'Multiplayer City'; $('state').textContent = '6-PLAYER CITY'; $('timer').textContent = 'NO TIME LIMIT'; $('combatExit').classList.remove('on');
+    destructionStreamingStats = updateDestructionStreaming(player.pos, Q.lowMemory ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.mobile : DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.desktop);
+    updateNeighborhoodLights(destructionStreamingStats.activeStreamingId); hud.callout('BACK IN NERDIE CITY', 'MULTIPLAYER FREE ROAM');
+  }
 }
 function playNetworkShot(message) {
   const origin = new THREE.Vector3(message.origin.x, message.origin.y, message.origin.z), direction = new THREE.Vector3(message.direction.x, message.direction.y, message.direction.z).normalize();
@@ -541,6 +574,7 @@ function ensureRemote(playerInfo) {
     if (playerInfo.equipment) remote.setEquipment(playerInfo.equipment, playerInfo.equipmentRevision, playerInfo.context, playerInfo.contextRevision);
     else if (playerInfo.context) remote.setContext(playerInfo.context, playerInfo.contextRevision);
   }
+  if (playerInfo.combat) remote.setCombat(playerInfo.combat);
   return remote;
 }
 function configureMultiplayerClient() {
@@ -551,7 +585,8 @@ function configureMultiplayerClient() {
     setMultiplayerStatus(labels[detail.state] || detail.state);
     if (detail.state === 'connected' && !multiplayerActive) {
       const target = MULTIPLAYER_SPAWNS[(detail.spawnIndex || 0) % MULTIPLAYER_SPAWNS.length];
-      startGame(GAME_MODES.FREE_ROAM, { multiplayer: true, spawn: freeCellNear(target.x, target.z, 4) });
+      const spawn = multiplayerArenaQa ? new THREE.Vector3(MULTIPLAYER_SPACES.underground.entry.x, MULTIPLAYER_SPACES.underground.entry.y, MULTIPLAYER_SPACES.underground.entry.z) : freeCellNear(target.x, target.z, 4);
+      startGame(GAME_MODES.FREE_ROAM, { multiplayer: true, spawn });
     }
     if (['connection-lost', 'session-expired', 'room-full', 'disconnected'].includes(detail.state)) clearRemotePlayers();
   });
@@ -576,13 +611,26 @@ function configureMultiplayerClient() {
       if (message.playerId === multiplayer.credentials?.playerId) applyLocalEquipment(message.equipment, message.equipmentRevision);
       else ensureRemote({ id: message.playerId, name: 'PLAYER', equipment: message.equipment, equipmentRevision: message.equipmentRevision, context: message.context, contextRevision: message.contextRevision });
     }
-    else if (message.type === 'combat') applyLocalCombat(message.combat);
+    else if (message.type === 'combat') {
+      if (message.respawn && message.state) player.respawn(new THREE.Vector3(message.state.x, message.state.y, message.state.z));
+      applyLocalCombat(message.combat);
+    }
+    else if (message.type === 'combat-public') {
+      if (message.playerId === multiplayer.credentials?.playerId) applyLocalCombat(message.combat);
+      else ensureRemote({ id: message.playerId, name: 'PLAYER', combat: message.combat })?.setCombat(message.combat);
+    }
+    else if (message.type === 'combat-impact') {
+      const localId = multiplayer.credentials?.playerId, localImpact = message.impacts?.find((impact) => impact.targetId === localId);
+      if (message.shooterId === localId && message.impacts?.length) hud.hit(!!message.elimination);
+      if (localImpact && !localImpact.dead) { hurtK = 1; sfx.hurt(); }
+      if (message.elimination) hud.killText(message.elimination.killerId === localId ? 'ELIMINATION' : message.elimination.victimId === localId ? 'YOU WERE ELIMINATED' : 'PLAYER ELIMINATED');
+    }
     else if (message.type === 'shot') playNetworkShot(message);
     else if (message.type === 'space') {
-      if (message.playerId === multiplayer.credentials?.playerId) applyLocalContext(message.context, message.contextRevision, message.state);
-      else { const remote = ensureRemote({ id: message.playerId, name: 'PLAYER', context: message.context, contextRevision: message.contextRevision }); remote?.setContext(message.context, message.contextRevision); if (remote && message.state) remote.teleport(message.state); }
+      if (message.playerId === multiplayer.credentials?.playerId) { applyLocalContext(message.context, message.contextRevision, message.state); if (message.combat) applyLocalCombat(message.combat); }
+      else { const remote = ensureRemote({ id: message.playerId, name: 'PLAYER', context: message.context, contextRevision: message.contextRevision, combat: message.combat }); remote?.setContext(message.context, message.contextRevision); remote?.setCombat(message.combat); if (remote && message.state) remote.teleport(message.state); }
     }
-    else if (message.type === 'reject' && message.context) applyLocalContext(message.context, message.contextRevision || localContextRevision, message.state);
+    else if (message.type === 'reject') { if (message.context) applyLocalContext(message.context, message.contextRevision || localContextRevision, message.state); if (message.combat) applyLocalCombat(message.combat); }
     else if (message.type === 'correction' && message.state) player.pos.lerp(new THREE.Vector3(message.state.x, message.state.y, message.state.z), 0.35);
   });
   const connectWith = async (credentials, label) => {
@@ -783,7 +831,10 @@ async function boot() {
   $('go').addEventListener('click', () => { if (MATCH.over && practiceCombat) returnToCity(); else startGame(selectedMode); });
   $('practiceMatch').addEventListener('click', startPracticeMatch);
   $('backToCity').addEventListener('click', () => setCombatLobby(false));
-  $('combatExit').addEventListener('click', returnToCity);
+  $('combatExit').addEventListener('click', () => {
+    if (multiplayerActive && localContext.space?.id === 'underground') multiplayer?.updateSpace('underground', 'exit');
+    else returnToCity();
+  });
   $('gname').value = ident.name || ''; $('gwallet').value = ident.wallet || ''; for (const id of ['gname', 'gwallet']) $(id).addEventListener('change', saveIdent);
   if (Q.mobile) pmsg.textContent += ' · SWAP opens all weapons';
   if (qs.get('auto') === '1') startGame(selectedMode);
@@ -816,8 +867,24 @@ function loop(now) {
     if (!MATCH.over && isCombatMode(MATCH.mode)) { MATCH.left -= dt; hud.timer(MATCH.left); if (MATCH.left <= 0) endMatch(); }
     if (input.ab) { if (isCombatMode(MATCH.mode)) useAbility(input.ab); input.ab = 0; }
     player.update(dt, MATCH.over || combatLobbyOpen ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
+    if (multiplayerActive && localContext.space?.id === 'underground' && Number.isFinite(localCombat?.health)) {
+      // Health is authoritative in this space. Player.update retains its
+      // single-player regeneration for every other mode, so pin only the
+      // multiplayer arena representation to the last server snapshot.
+      player.hp = localCombat.health; player.dead = localCombat.dead === true;
+    }
     performanceProfile.end('player', systemStarted); systemStarted = performanceProfile.start();
-    if (city && MATCH.mode === GAME_MODES.FREE_ROAM) {
+    const multiplayerUnderground = multiplayerActive && localContext.space?.id === 'underground';
+    if (multiplayerUnderground) {
+      const exit = MULTIPLAYER_SPACES.underground.exit;
+      const nearExit = Math.hypot(player.pos.x - exit.x, player.pos.y - exit.y, player.pos.z - exit.z) <= 3.6;
+      hud.prompt(nearExit ? (Q.mobile ? 'TAP EXIT TO CITY' : '[E] EXIT TO CITY') : '', false, 'EXIT');
+      $('combatExit').classList.toggle('on', nearExit);
+      if (nearExit && input.interact) multiplayer?.updateSpace('underground', 'exit');
+      input.interact = false;
+      destructionStreamingStats = updateDestructionStreaming(player.pos, Q.lowMemory ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.mobile : DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.desktop, ORIGINAL_NEIGHBORHOOD_LAYOUT.id);
+      updateNeighborhoodLights(destructionStreamingStats.activeStreamingId);
+    } else if (city && MATCH.mode === GAME_MODES.FREE_ROAM) {
       const apartmentState = city.apartment.update(player, input, time);
       const originalHouseState = apartmentState.active || apartmentState.transitioned
         ? { active: false, transitioned: false, prompt: '' }
@@ -829,10 +896,13 @@ function loop(now) {
         ? { active: false, transitioned: false, prompt: '' }
         : city.house.update(player, input, time);
       const interiorActive = apartmentState.active || originalHouseState.active || duplicatedHouseState.active || houseState.active;
-      const venueState = multiplayerActive || interiorActive || apartmentState.transitioned || originalHouseState.transitioned || duplicatedHouseState.transitioned || houseState.transitioned
+      const venueState = interiorActive || apartmentState.transitioned || originalHouseState.transitioned || duplicatedHouseState.transitioned || houseState.transitioned
         ? { prompt: '', requestedLobby: false }
         : city.combatVenue.update(player, !!input.interact, time, combatLobbyOpen);
-      if (venueState.requestedLobby) setCombatLobby(true);
+      if (venueState.requestedLobby) {
+        if (multiplayerActive) multiplayer?.updateSpace('underground', 'enter');
+        else setCombatLobby(true);
+      }
       const prompt = apartmentState.prompt || originalHouseState.prompt || duplicatedHouseState.prompt || houseState.prompt || venueState.prompt;
       const activeHouseState = [originalHouseState, duplicatedHouseState, houseState].find((state) => state.prompt) || houseState;
       const mobileLabel = venueState.prompt ? 'ENTER COMBAT' : activeHouseState.prompt && !activeHouseState.blocked ? (activeHouseState.active ? 'EXIT HOUSE' : 'ENTER HOUSE') : '';
@@ -901,7 +971,7 @@ function loop(now) {
     input.swap = '';
     // The attack that cancels protection is consumed before any weapon update,
     // so it can never deal damage while the player is still invulnerable.
-    if (input.fire && time < player.protectedUntil) {
+    if (!multiplayerActive && input.fire && time < player.protectedUntil) {
       player.protectedUntil = time; input.fire = false;
       hud.callout('SPAWN PROTECTION ENDED', 'ATTACK CANCELLED PROTECTION');
     }
@@ -925,7 +995,7 @@ function loop(now) {
       if (b.dead && b.respawnAt && time > b.respawnAt && !b.expires && !MATCH.over) { const spawn = selectArenaSpawn(b.team, b); b.respawn(spawn.position, time, spawn.protectionSeconds); }
       b.update(dt, time);
     }
-    if (player.dead && time > respawnAt && !MATCH.over) {
+    if (!multiplayerActive && player.dead && time > respawnAt && !MATCH.over) {
       const spawn = isCombatMode(MATCH.mode) ? selectArenaSpawn('blue', player) : null;
       player.respawn(spawn ? spawn.position : freeCellNear(0, 28, 5)); player.team = isCombatMode(MATCH.mode) ? 'blue' : null;
       player.protectedUntil = spawn ? time + spawn.protectionSeconds : 0; hud.hurt(0);
