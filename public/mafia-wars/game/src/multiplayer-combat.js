@@ -130,7 +130,7 @@ export function applyFireIntent(player, message, now, protocolVersion) {
   const length = Math.hypot(message.direction.x, message.direction.y, message.direction.z) || 1;
   const direction = { x: message.direction.x / length, y: message.direction.y / length, z: message.direction.z / length };
   const origin = { x: player.state?.x || 0, y: (player.state?.y || 0) + 1.35, z: player.state?.z || 0 };
-  return { ok: true, shot: { playerId: player.id, weaponId: message.weaponId, origin, direction, serverTime: now }, combat: combatView(player.combat, now) };
+  return { ok: true, shot: { playerId: player.id, weaponId: message.weaponId, origin, direction, sequence: message.seq, spaceId: player.context?.space?.id || 'city', serverTime: now }, combat: combatView(player.combat, now) };
 }
 
 export function publicCombatView(state, now = Date.now()) {
