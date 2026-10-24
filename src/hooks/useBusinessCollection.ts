@@ -33,6 +33,7 @@ interface UseBusinessCollectionReturn {
   businesses: BusinessCollectionItem[];
   loading: boolean;
   error: string | null;
+  loadedWalletAddress: string | null;
   refetch: () => void;
 }
 
@@ -106,10 +107,13 @@ export function useBusinessCollection(walletAddress: string | null): UseBusiness
   const [businesses, setBusinesses] = useState<BusinessCollectionItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadedWalletAddress, setLoadedWalletAddress] = useState<string | null>(null);
   const [fetchKey, setFetchKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    setBusinesses([]);
+    setLoadedWalletAddress(null);
 
     async function load() {
       setLoading(true);
@@ -172,6 +176,7 @@ export function useBusinessCollection(walletAddress: string | null): UseBusiness
       } finally {
         if (!cancelled) {
           setLoading(false);
+          setLoadedWalletAddress(walletAddress);
         }
       }
     }
@@ -186,6 +191,7 @@ export function useBusinessCollection(walletAddress: string | null): UseBusiness
     businesses,
     loading,
     error,
+    loadedWalletAddress,
     refetch: () => setFetchKey((value) => value + 1),
   };
 }

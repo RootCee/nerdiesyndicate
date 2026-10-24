@@ -22,6 +22,7 @@ interface UseNFTsReturn {
   balance: number;
   loading: boolean;
   error: string | null;
+  loadedWalletAddress: string | null;
   debug: {
     walletAddress: string | null;
     contractAddress: string;
@@ -34,6 +35,7 @@ interface UseNFTsReturn {
 }
 
 const IPFS_GATEWAY = 'https://gateway.pinata.cloud/ipfs/';
+const OWNER_SCAN_BATCH_SIZE = 10;
 
 function resolveIPFS(uri: string): string {
   if (uri.startsWith('ipfs://')) {
@@ -92,6 +94,7 @@ export function useNFTs(walletAddress: string | null): UseNFTsReturn {
   const [fetchKey, setFetchKey] = useState(0);
   const [totalSupply, setTotalSupply] = useState<number | null>(null);
   const [ownedTokenIds, setOwnedTokenIds] = useState<number[]>([]);
+  const [loadedWalletAddress, setLoadedWalletAddress] = useState<string | null>(null);
 
   const refetch = useCallback(() => setFetchKey((k) => k + 1), []);
 
@@ -101,12 +104,18 @@ export function useNFTs(walletAddress: string | null): UseNFTsReturn {
       setBalance(0);
       setTotalSupply(null);
       setOwnedTokenIds([]);
+      setLoadedWalletAddress(null);
       setLoading(false);
       setError(null);
       return;
     }
 
     let cancelled = false;
+    setNfts([]);
+    setBalance(0);
+    setTotalSupply(null);
+    setOwnedTokenIds([]);
+    setLoadedWalletAddress(null);
 
     async function load() {
       setLoading(true);
@@ -125,6 +134,7 @@ export function useNFTs(walletAddress: string | null): UseNFTsReturn {
         if (balNum === 0) {
           setNfts([]);
           setOwnedTokenIds([]);
+          setLoadedWalletAddress(walletAddress);
           setLoading(false);
           return;
         }
@@ -136,9 +146,8 @@ export function useNFTs(walletAddress: string | null): UseNFTsReturn {
 
         const nextOwnedTokenIds: number[] = [];
         // Batch ownerOf calls — check all minted tokens
-        const batchSize = 50;
-        for (let start = 0; start < total && nextOwnedTokenIds.length < balNum; start += batchSize) {
-          const end = Math.min(start + batchSize, total);
+        for (let start = 0; start < total && nextOwnedTokenIds.length < balNum; start += OWNER_SCAN_BATCH_SIZE) {
+          const end = Math.min(start + OWNER_SCAN_BATCH_SIZE, total);
           const promises = [];
           for (let id = start; id < end; id++) {
             promises.push(
@@ -180,7 +189,10 @@ export function useNFTs(walletAddress: string | null): UseNFTsReturn {
           setError(err instanceof Error ? err.message : 'Failed to load NFTs');
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setLoadedWalletAddress(walletAddress);
+        }
       }
     }
 
@@ -193,6 +205,7 @@ export function useNFTs(walletAddress: string | null): UseNFTsReturn {
     balance,
     loading,
     error,
+    loadedWalletAddress,
     debug: {
       walletAddress,
       contractAddress: CONTRACTS.NFT,

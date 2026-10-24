@@ -40,8 +40,10 @@ import { DEFAULT_EQUIPMENT, normalizeEquipment } from './multiplayer-equipment.j
 import { MULTIPLAYER_WEAPON_RULES } from './multiplayer-combat.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
+import { createRendererDiagnostics } from './render-diagnostics.js';
+import { setupCityWalletBridge } from './wallet-bridge.js?build=m6.4-wallet-preview-rc1';
 
-const GAME_BUILD_ID = 'm6.3-cross-device-diagnostics-rc1';
+const GAME_BUILD_ID = 'm6.4-wallet-preview-rc1';
 const qs = new URLSearchParams(location.search);
 const multiplayerDev = qs.get('multiplayer') === '1';
 const lanIPv4 = location.hostname.split('.').map(Number);
@@ -84,6 +86,17 @@ Q.roadPaint = qs.get('roadPaint') !== '0';
 setLowMemoryAssets(Q.lowMemory);
 const $ = (id) => document.getElementById(id);
 const canvas = $('gl');
+const walletBridge = setupCityWalletBridge({
+  onWalletState(state) {
+    const button = $('cityBankButton');
+    if (!button) return;
+    button.textContent = state.connected ? 'BANK · WALLET LINKED' : 'BANK · WALLET';
+    button.title = state.connected
+      ? `Connected ${state.address.slice(0, 6)}…${state.address.slice(-4)} · chain ${state.chainId ?? 'unknown'}`
+      : 'Open the read-only wallet bank';
+  },
+});
+$('cityBankButton')?.addEventListener('click', () => walletBridge.openBank());
 
 // ---------- renderer ----------
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', alpha: false, stencil: false });
@@ -226,6 +239,28 @@ let combatAssetsReady = developerCombat, combatAssetsLoading = false;
 const ab = { 4: { need: 3, have: 0, name: 'SNITCH', sub: 'PRESS [4]' }, 5: { need: 5, have: 0, name: 'HOMIES', sub: 'PRESS [5]' }, 6: { need: 4, have: 0, name: 'SUICIDE BOMBER', sub: 'PRESS [6]' } };
 let snitchUntil = 0, killStreak = 0, streakT = 0, time = 0, hurtK = 0, respawnAt = 0;
 const ghostMat = new THREE.MeshBasicMaterial({ color: 0xff3040, transparent: true, opacity: 0.4, depthTest: false, depthWrite: false, toneMapped: false });
+const renderDiagnosticsEnabled = qs.get('renderDiag') === '1' && (
+  location.hostname === 'localhost'
+  || location.hostname === '127.0.0.1'
+  || location.hostname.endsWith('.vercel.app')
+);
+const renderDiagnostics = createRendererDiagnostics({
+  canvas,
+  renderer,
+  scene,
+  camera,
+  buildId: GAME_BUILD_ID,
+  diagnosticsBuildId: 'm6.3-mobile-render-diagnostics-rc1',
+  enabled: renderDiagnosticsEnabled,
+  getWorldState: () => ({
+    city: city?.stats() || null,
+    destruction: { ...destructionStreamingStats },
+    multiplayerRemotePlayers: remotePlayers.size,
+  }),
+});
+if (renderDiagnosticsEnabled) {
+  window.__nerdieRenderDiagnostics = renderDiagnostics.snapshot;
+}
 
 function syncAvatarSelectors(status = '') {
   for (const containerId of ['avatarPresets', 'avatarPresetsLive']) for (const button of $(containerId)?.querySelectorAll('[data-avatar-preset]') || []) button.setAttribute('aria-checked', String(button.dataset.avatarPreset === localAppearance.preset));
@@ -963,6 +998,7 @@ addEventListener('keydown', (e) => {
 });
 const labelItems = [], dots = [];
 function loop(now) {
+  renderDiagnostics.frame(now);
   const frameStarted = performanceProfile.start();
   requestAnimationFrame(loop);
   const dt = Math.min(0.1, (now - last) / 1000); last = now; time += dt;

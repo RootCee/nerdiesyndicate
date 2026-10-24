@@ -3,8 +3,8 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '..', 'public', 'mafia-wars', 'game', 'src');
-const [main, assets, audio, world, characters, avatarSchema, cityExpansion, apartment, combatVenue, player, collision, weaponCycle, loadout, resupply, resupplyRules, respawnRules, startupFallback, endpoint, index] = await Promise.all(
-  ['main.js', 'assets.js', 'audio.js', 'world.js', 'characters.js', 'avatar-schema.js', 'city-expansion.js', 'apartment-system.js', 'combat-venue.js', 'player.js', 'collision-math.js', 'weapon-cycle.js', 'loadout.js', 'practice-resupply.js', 'resupply-rules.js', 'respawn-rules.js', 'startup-fallback.js', 'multiplayer-endpoint.js'].map((file) => readFile(path.join(root, file), 'utf8')).concat([
+const [main, assets, audio, world, characters, avatarSchema, cityExpansion, apartment, combatVenue, player, collision, weaponCycle, loadout, resupply, resupplyRules, respawnRules, startupFallback, endpoint, walletBridge, index] = await Promise.all(
+  ['main.js', 'assets.js', 'audio.js', 'world.js', 'characters.js', 'avatar-schema.js', 'city-expansion.js', 'apartment-system.js', 'combat-venue.js', 'player.js', 'collision-math.js', 'weapon-cycle.js', 'loadout.js', 'practice-resupply.js', 'resupply-rules.js', 'respawn-rules.js', 'startup-fallback.js', 'multiplayer-endpoint.js', 'wallet-bridge.js'].map((file) => readFile(path.join(root, file), 'utf8')).concat([
     readFile(path.resolve(root, '..', 'index.html'), 'utf8'),
   ]),
 );
@@ -71,10 +71,16 @@ assert.match(index, /id="mpDiagRoom"/);
 assert.match(index, /id="mpDiagPlayers"/);
 assert.match(index, /id="mpDiagStatus"/);
 assert.match(index, /id="mpDiagMode"/);
-assert.match(index, /src="src\/main\.js\?build=m6\.3-cross-device-diagnostics-rc1"/);
+assert.match(index, /id="cityBankButton"[^>]*aria-label="Open read-only Nerdie City bank and wallet inventory"/);
+assert.match(index, /src="src\/main\.js\?build=m6\.4-wallet-preview-rc1"/);
 assert.match(main, /multiplayer-endpoint\.js\?build=m6\.3-cross-device-diagnostics-rc1/);
-assert.match(main, /const GAME_BUILD_ID = 'm6\.3-cross-device-diagnostics-rc1'/);
+assert.match(main, /wallet-bridge\.js\?build=m6\.4-wallet-preview-rc1/);
+assert.match(main, /const GAME_BUILD_ID = 'm6\.4-wallet-preview-rc1'/);
 assert.match(main, /function renderMultiplayerDiagnostics\(\)/);
+assert.match(walletBridge, /event\.origin !== targetOrigin \|\| event\.source !== windowObject\.parent/);
+assert.match(walletBridge, /'connected', 'address', 'chainId'/);
+assert.match(walletBridge, /windowObject\.location\.assign\('\/mafia-wars\/bank'\)/);
+assert.match(await readFile(path.resolve(root, '../../../../src/pages/MafiaWarsBank.tsx'), 'utf8'), /useNFTs\(inventoryRequested \? walletAddress : null\)/);
 assert.match(endpoint, /nerdie-city-multiplayer-v4\.buddieroots\.workers\.dev/);
 assert.match(endpoint, /nerdie-city-m6-3-preview\.buddieroots\.workers\.dev/);
 assert.match(endpoint, /override && \(isLocal \|\| isPrivateLan\)/);
@@ -113,4 +119,4 @@ const southNearestBuildingEdge = Math.max(...mobile.districts[1].buildings.map((
 assert.ok(-24 - southNearestBuildingEdge > 40, 'south geometry must stream in well before the player can reach it');
 assert.match(cityExpansion, /chunk\.group\.visible = visible/);
 
-console.log('Mafia Wars mobile, city, and M6.3 network diagnostics verified');
+console.log('Mafia Wars mobile, city, M6.3 network diagnostics, and M6.4 wallet bridge verified');

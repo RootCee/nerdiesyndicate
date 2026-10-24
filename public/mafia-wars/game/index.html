@@ -67,6 +67,8 @@ canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block
 #spawnProtection.on { opacity: 1; transform: translateX(-50%); }
 #mpStatus { position: absolute; left: calc(14px + var(--sal)); top: calc(14px + var(--sat)); display: none; max-width: min(360px, 72vw); padding: 8px 11px; border: 1px solid rgba(217,172,88,.55); border-radius: 16px; background: rgba(7,9,12,.78); color: #f5d58e; font: 700 10px/1.2 'Barlow'; letter-spacing: .1em; text-transform: uppercase; pointer-events: none; }
 #mpStatus.on { display: block; }
+#cityBankButton { position: fixed; z-index: 12; top: calc(10px + var(--sat)); left: 50%; transform: translateX(-50%); pointer-events: auto; min-height: 40px; padding: 9px 13px; border: 1px solid rgba(217,172,88,.72); border-radius: 999px; background: rgba(8,8,7,.9); color: var(--gold-bright); font: 700 10px/1 'Barlow'; letter-spacing: .14em; text-transform: uppercase; white-space: nowrap; touch-action: manipulation; }
+#cityBankButton:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
 #mpDiagnosticsToggle { position: fixed; z-index: 12; top: calc(10px + var(--sat)); right: calc(10px + var(--sar)); pointer-events: auto; padding: 8px 10px; border: 1px solid rgba(217,172,88,.7); border-radius: 6px; background: rgba(8,8,7,.88); color: var(--gold-bright); font: 700 10px/1 'Barlow'; letter-spacing: .12em; }
 #mpDiagnostics { position: fixed; z-index: 13; top: calc(48px + var(--sat)); right: calc(10px + var(--sar)); width: min(350px, calc(100vw - 20px)); max-height: min(60vh, 440px); overflow: auto; padding: 14px; border: 1px solid rgba(217,172,88,.72); border-radius: 8px; background: rgba(8,8,7,.96); color: var(--ink); font: 500 13px/1.4 'Barlow'; pointer-events: auto; }
 #mpDiagnostics[hidden] { display: none; }
@@ -227,6 +229,7 @@ body.multiplayer-active #avatarToggle { display: block; }
 <div id="hud">
   <div class="fps" id="fps">FPS --</div>
   <div id="modebadge">Original Combat</div>
+  <button id="cityBankButton" type="button" aria-label="Open read-only Nerdie City bank and wallet inventory">BANK · WALLET</button>
   <div id="mapwrap"><canvas id="map" width="300" height="300"></canvas></div>
   <div id="labels"></div>
   <div id="score">
@@ -322,6 +325,6 @@ body.multiplayer-active #avatarToggle { display: block; }
 </div>
 
 <script src="src/startup-fallback.js"></script>
-<script type="module" src="src/main.js?build=m6.3-cross-device-diagnostics-rc1"></script>
+<script type="module" src="src/main.js?build=m6.4-wallet-preview-rc1"></script>
 </body>
 </html>

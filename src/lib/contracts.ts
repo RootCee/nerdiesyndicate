@@ -13,13 +13,15 @@ export const CONTRACTS = {
     '0x4d410D24fAcd00EB9470d4261db855b57c9CDc0e',
   ERC6551_REGISTRY: import.meta.env.VITE_ERC6551_REGISTRY as string,
   TBA_IMPLEMENTATION: import.meta.env.VITE_TBA_IMPLEMENTATION as string,
-  BUSINESS_NFT: import.meta.env.VITE_BUSINESS_NFT as string,
+  BUSINESS_NFT:
+    (import.meta.env.VITE_BUSINESS_NFT as `0x${string}` | undefined) ||
+    '0x57e2166e2B3455589085f09506B9aaA28E7Dc695',
   STAKING: import.meta.env.VITE_STAKING_CONTRACT as string,
   CERTIFICATION_SBT:
     (import.meta.env.VITE_CERTIFICATION_SBT as string | undefined) ||
     DEFAULT_CERTIFICATION_CONTRACT_ADDRESS,
   NERDIE_TOKEN:
-    (import.meta.env.VITE_NERDIE_TOKEN as string | undefined) ||
+    (import.meta.env.VITE_NERDIE_TOKEN as `0x${string}` | undefined) ||
     '0x4b138bd7e18a3a725a4672814f84b00711c1939d',
 } as const;
 

@@ -21,6 +21,7 @@ import Contact from './pages/Contact';
 import Fit from './pages/Fit';
 import HopeBridge from './pages/HopeBridge';
 import MafiaWars from './pages/MafiaWars';
+import MafiaWarsBank from './pages/MafiaWarsBank';
 
 function ScrollToTop() {
   const location = useLocation();
@@ -249,6 +250,7 @@ function AppRoutes() {
       <Route path="/fit" element={<Fit />} />
       <Route path="/hope-bridge" element={<HopeBridge />} />
       <Route path="/mafia-wars" element={<MafiaWars />} />
+      <Route path="/mafia-wars/bank" element={<MafiaWarsBank />} />
       <Route path="/music/thank-you" element={<MusicThankYou />} />
       <Route path="/music/checkout-cancelled" element={<MusicCheckoutCancelled />} />
       <Route path="/merch" element={<Merch />} />
@@ -272,6 +274,7 @@ export function AppShell({
   connectButton?: ReactNode;
 }) {
   const [isHydrated, setIsHydrated] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
     setIsHydrated(true);
@@ -282,7 +285,7 @@ export function AppShell({
       <ScrollToTop />
       <Navbar />
 
-      {showConnectButton && isHydrated ? (
+      {showConnectButton && isHydrated && location.pathname !== '/mafia-wars/bank' ? (
         <div className="wallet-shell fixed top-3 right-4 z-50">{connectButton}</div>
       ) : null}
 

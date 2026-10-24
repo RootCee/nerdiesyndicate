@@ -60,6 +60,12 @@ export default function MafiaWars() {
                 Single-Player City
               </a>
               <Link
+                to="/mafia-wars/bank"
+                className="inline-flex min-w-[240px] items-center justify-center rounded-full border border-amber-200/35 bg-black/25 px-8 py-4 text-base font-bold uppercase tracking-[0.1em] text-amber-100 transition hover:border-amber-200/70 hover:text-white"
+              >
+                Bank & Wallet
+              </Link>
+              <Link
                 to="/"
                 className="inline-flex min-w-[240px] items-center justify-center rounded-full border border-white/15 bg-black/25 px-8 py-4 text-base font-bold text-neutral-200 transition hover:border-amber-200/40 hover:text-white"
               >

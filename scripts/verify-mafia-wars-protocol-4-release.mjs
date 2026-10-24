@@ -14,7 +14,7 @@ const [manifestText, endpoint, protocol, combat, spaces, main] = await Promise.a
 ]);
 const manifest = JSON.parse(manifestText);
 
-assert.equal(manifest.sourceCommit, 'f08884dcccef7727e8ba006d60ecf089ad0d257a');
+assert.equal(manifest.sourceCommit, '65232f8b4e0a5ac57d2d3d13c54c9005061136a2');
 assert.equal(manifest.sourceBranch, 'codex/nerdie-city-m6-3-production-rc');
 assert.match(endpoint, /PRODUCTION_MULTIPLAYER_SERVICE = 'https:\/\/nerdie-city-multiplayer-v4\.buddieroots\.workers\.dev'/);
 assert.match(endpoint, /AVATAR_PREVIEW_MULTIPLAYER_SERVICE = 'https:\/\/nerdie-city-m6-3-preview\.buddieroots\.workers\.dev'/);
