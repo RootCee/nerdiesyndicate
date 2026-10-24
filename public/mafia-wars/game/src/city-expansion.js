@@ -4,13 +4,28 @@ import { createCityPlan, chunkVisible } from './city-layout.js';
 import { HybridApartmentSystem } from './apartment-system.js';
 import { HybridHouseSystem } from './house-system.js';
 import { CombatVenueSystem } from './combat-venue.js';
+import { buildCityRoadMarkings } from './city-road-markings.js';
 
 const material = (color, roughness = 0.88, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
 const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
 const UNIT_CYLINDER = new THREE.CylinderGeometry(1, 1, 1, 8);
 const buildingMaterials = new Map();
+const facadeTextures = new Map();
+const facadeTexture = (tint) => {
+  if (facadeTextures.has(tint)) return facadeTextures.get(tint);
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 64;
+  const ctx = canvas.getContext('2d'), base = new THREE.Color(tint);
+  ctx.fillStyle = base.getStyle(); ctx.fillRect(0, 0, 64, 64);
+  for (let y = 5; y < 64; y += 7) { ctx.fillStyle = 'rgba(18,14,12,.12)'; ctx.fillRect(0, y, 64, 1); }
+  for (let y = 5, row = 0; y < 64; y += 7, row++) for (let x = row % 2 ? 8 : 0; x < 64; x += 16) {
+    ctx.fillStyle = 'rgba(255,245,225,.055)'; ctx.fillRect(x, y + 1, 1, 6);
+  }
+  const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping; texture.repeat.set(2, 2); texture.anisotropy = 2;
+  facadeTextures.set(tint, texture); return texture;
+};
 const buildingMaterial = (tint) => {
-  if (!buildingMaterials.has(tint)) buildingMaterials.set(tint, material(tint));
+  if (!buildingMaterials.has(tint)) buildingMaterials.set(tint, new THREE.MeshStandardMaterial({ color: 0xffffff, map: facadeTexture(tint), roughness: 0.9 }));
   return buildingMaterials.get(tint);
 };
 
@@ -36,6 +51,9 @@ function addBuilding(group, spec, profile, mats) {
   if (profile.roofDetails) addBox(group, mats.metal, 1.6, 1.1, 1.5, x + width * 0.2, height + 0.72, z - depth * 0.18, `city-roof-unit-${spec.id}`);
   const frontDirection = spec.facing === 'east' ? 1 : spec.facing === 'west' ? -1 : x > 0 ? -1 : 1;
   const frontX = x + frontDirection * (width / 2 + 0.03);
+  const trimX = x + frontDirection * (width / 2 + 0.08);
+  addBox(group, mats.trim, 0.16, 0.42, depth + 0.22, trimX, 0.28, z, `city-plinth-${spec.id}`);
+  addBox(group, mats.trim, 0.19, 0.32, depth + 0.34, trimX, height - 0.22, z, `city-cornice-${spec.id}`);
   if (kind === 'house' && spec.driveway) {
     const sidewalkEdge = frontDirection > 0 ? 82 : 94;
     const buildingEdge = x + frontDirection * width / 2;
@@ -47,6 +65,10 @@ function addBuilding(group, spec, profile, mats) {
   if (kind === 'storefront') {
     addBox(group, mats.awning, 0.7, 0.24, depth * 0.72, frontX + (x > 0 ? -0.28 : 0.28), 2.75, z, `city-awning-${spec.id}`);
     addBox(group, mats.window, 0.1, 1.55, depth * 0.64, frontX + (x > 0 ? -0.06 : 0.06), 1.35, z, `city-shopfront-${spec.id}`);
+  }
+  if (!spec.enterableHouseId && kind !== 'storefront') {
+    addBox(group, mats.door, 0.14, 2.25, 1.12, frontX + frontDirection * 0.04, 1.13, z + depth * 0.24, `city-door-${spec.id}`);
+    addBox(group, mats.trim, 0.48, 0.16, 1.55, frontX + frontDirection * 0.2, 2.42, z + depth * 0.24, `city-door-canopy-${spec.id}`);
   }
   const floors = Math.max(2, Math.floor(height / 2.7));
   const stride = profile.windowStride;
@@ -85,6 +107,7 @@ export function buildCityExpansion(scene, Q = {}) {
     road: material(0x252a31), sidewalk: material(0x777a78), ground: material(0x34452e),
     yard: material(0x3e5033), roof: material(0x34383d), metal: material(0x555b61, 0.55, 0.35),
     window: material(0x162536, 0.2, 0.35), awning: material(0x8b5b32), car: material(0x4d5966, 0.55, 0.25),
+    trim: material(0x292b2d, 0.82), door: material(0x38261d, 0.72),
     tire: material(0x111214), driveway: material(0x888984), bulb: new THREE.MeshBasicMaterial({ color: 0xffd39a, toneMapped: false }),
   };
   const infrastructure = new THREE.Group(); infrastructure.name = 'city-infrastructure'; scene.add(infrastructure);
@@ -107,6 +130,10 @@ export function buildCityExpansion(scene, Q = {}) {
       }
     }
   }
+  // Slop New York-inspired procedural road paint: all lane dashes and
+  // crosswalks share one geometry and material, keeping the upgrade to one
+  // lightweight draw call on both desktop and mobile.
+  const roadPaint = Q.roadPaint === false ? null : buildCityRoadMarkings(infrastructure, plan.roads);
 
   const chunks = [], cityLightSites = [];
   let apartment = null, house = null, originalHouse = null, duplicatedHouse = null, combatVenue = null;
@@ -218,6 +245,8 @@ export function buildCityExpansion(scene, Q = {}) {
         duplicatedEnterableHouse: duplicatedHouse?.site.id || null,
         duplicatedOriginalHouses: plan.duplicatedOriginalNeighborhood.houseCount,
         activeCityLights: cityLightPool.filter((light) => light.intensity > 0).length,
+        roadPaintQuads: roadPaint?.quads || 0,
+        roadPaintTriangles: roadPaint?.triangles || 0,
         combatVenue: combatVenue?.site.id || null,
         bounds: { ...MAP },
       };

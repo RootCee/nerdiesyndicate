@@ -8,6 +8,7 @@ import { ShaderPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/Sha
 import { OutputPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/OutputPass.js';
 import { manager, loadHDR, loadGLB, setAniso, setLowMemoryAssets } from './assets.js';
 import { buildWorld, colliders, collisionBroadphaseStats, lamps, windowsLit, resolve, MAP, groundAt, lineClear } from './world.js';
+import { createNaturalSkyTexture } from './natural-sky.js';
 import { Player } from './player.js';
 import { FX, Weapon, GUN_SPECS } from './weapon.js';
 import { Bot, buildNav, rayVsBots, freeCellNear } from './bots.js';
@@ -73,6 +74,7 @@ async function submitMatch() {
 const Q = { mobile: TOUCH || qs.get('mobile') === '1', silent: qs.get('silent') === '1', fps: 0, houses: qs.get('houses') !== '0' };
 Q.lowMemory = Q.mobile && qs.get('full') !== '1' && qs.get('dev') !== 'combat';
 Q.cityExpansion = qs.get('city') !== '0';
+Q.roadPaint = qs.get('roadPaint') !== '0';
 setLowMemoryAssets(Q.lowMemory);
 const $ = (id) => document.getElementById(id);
 const canvas = $('gl');
@@ -670,6 +672,8 @@ function configureMultiplayerClient() {
   $('mpPublic').addEventListener('pointerdown', unlockAudio, { passive: true });
   $('mpPublic').addEventListener('click', enterPublic);
   $('mpHost').addEventListener('click', () => enter(true)); $('mpJoin').addEventListener('click', () => enter(false));
+  for (const id of ['mpPublic', 'mpHost', 'mpJoin']) { const button = $(id); button.disabled = false; button.removeAttribute('aria-disabled'); }
+  $('mpRoom').textContent = `Public matchmaking fills the active city automatically · ${MULTIPLAYER_LIMITS.maxPlayers}-player capacity`;
   const requestedRoom = qs.get('room'); if (requestedRoom) { $('mpCode').value = requestedRoom; setTimeout(() => enter(false), 0); }
 }
 function returnToCity() {
@@ -705,7 +709,8 @@ let loadedFrac = 0; manager.onProgress = (u, l, t) => { pbar.style.width = Math.
 async function boot() {
   initInput(canvas, () => unlockAudio());
   pmsg.textContent = 'Lighting the sky…';
-  // sky: a real photographed dusk HDRI, unblurred, used for both the backdrop and the PBR environment.
+  // A shared procedural sky keeps mobile and desktop visually coherent. Desktop
+  // retains the lightweight HDR environment for reflections only.
   // ?sky=<slug>&skyi=<bg intensity>&skyr=<rotation rad>&envi=<env intensity> for comparisons.
   // Presets measured with qa/sky-analyze.mjs: rotation puts the afterglow down the street, clamp kills the
   // photographed floodlights (rooftop_night has three at ~20-33x), fog = the sky's own horizon colour.
@@ -728,9 +733,10 @@ async function boot() {
     }
     const pm = new THREE.PMREMGenerator(renderer); pm.compileEquirectangularShader();
     scene.environment = pm.fromEquirectangular(hdr).texture; scene.environmentIntensity = SKY.env; scene.environmentRotation = new THREE.Euler(0, SKY.rot, 0);
-    scene.background = hdr; scene.backgroundIntensity = SKY.bg; scene.backgroundBlurriness = 0; scene.backgroundRotation = new THREE.Euler(0, SKY.rot, 0);
-  } else scene.background = new THREE.Color(SKY.fog);
-  window.__sky = SKY;
+  }
+  scene.background = createNaturalSkyTexture({ mobile: Q.lowMemory });
+  scene.backgroundIntensity = 1; scene.backgroundBlurriness = 0; scene.backgroundRotation = new THREE.Euler(0, SKY.rot, 0);
+  window.__sky = { ...SKY, background: 'procedural-natural' };
   pmsg.textContent = 'Building the block…';
   await buildWorld(scene, Q, (f) => { loadedFrac = f; pbar.style.width = Math.round(f * 100) + '%'; });
   if (Q.cityExpansion) { city = buildCityExpansion(scene, Q); console.log('city expansion:', JSON.stringify(city.stats())); }
