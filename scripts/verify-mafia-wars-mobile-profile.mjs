@@ -3,8 +3,10 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '..', 'public', 'mafia-wars', 'game', 'src');
-const [main, assets, audio, world, characters, avatarSchema, cityExpansion, apartment, combatVenue, player, collision, weaponCycle, loadout, resupply, resupplyRules, respawnRules] = await Promise.all(
-  ['main.js', 'assets.js', 'audio.js', 'world.js', 'characters.js', 'avatar-schema.js', 'city-expansion.js', 'apartment-system.js', 'combat-venue.js', 'player.js', 'collision-math.js', 'weapon-cycle.js', 'loadout.js', 'practice-resupply.js', 'resupply-rules.js', 'respawn-rules.js'].map((file) => readFile(path.join(root, file), 'utf8')),
+const [main, assets, audio, world, characters, avatarSchema, cityExpansion, apartment, combatVenue, player, collision, weaponCycle, loadout, resupply, resupplyRules, respawnRules, startupFallback, index] = await Promise.all(
+  ['main.js', 'assets.js', 'audio.js', 'world.js', 'characters.js', 'avatar-schema.js', 'city-expansion.js', 'apartment-system.js', 'combat-venue.js', 'player.js', 'collision-math.js', 'weapon-cycle.js', 'loadout.js', 'practice-resupply.js', 'resupply-rules.js', 'respawn-rules.js', 'startup-fallback.js'].map((file) => readFile(path.join(root, file), 'utf8')).concat([
+    readFile(path.resolve(root, '..', 'index.html'), 'utf8'),
+  ]),
 );
 
 assert.match(main, /Q\.lowMemory = Q\.mobile && qs\.get\('full'\) !== '1'/);
@@ -51,6 +53,16 @@ assert.match(world, /'covered-car'/);
 assert.match(player, /moveAndSlide\(this\.pos, moveX, moveZ/);
 assert.match(collision, /PLAYER_COLLISION_RADIUS = 0\.62/);
 assert.match(collision, /resolveCircleAabbs/);
+assert.match(index, /html\.menu-open, body\.menu-open \{ touch-action: pan-y; \}/);
+assert.match(index, /#ov > div \{[^}]*overflow-y: auto;[^}]*touch-action: pan-y;/);
+assert.match(index, /id="entryFeedback"[^>]*aria-live="polite"/);
+assert.match(index, /src="src\/startup-fallback\.js"/);
+assert.match(startupFallback, /window\.addEventListener\('error'/);
+assert.match(startupFallback, /window\.addEventListener\('unhandledrejection'/);
+assert.match(startupFallback, /Reload and retry/);
+assert.match(main, /button\.textContent = 'Retry Public City'/);
+assert.match(main, /Could not join the public city:/);
+assert.match(main, /window\.__markGameReady\?\.\(\)/);
 
 const { CITY_BOUNDS, createCityPlan, chunkVisible } = await import(
   new URL('../public/mafia-wars/game/src/city-layout.js', import.meta.url)

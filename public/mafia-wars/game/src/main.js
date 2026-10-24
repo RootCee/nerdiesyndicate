@@ -497,7 +497,8 @@ function startGame(mode = selectedMode, options = {}) {
   $('combatExit').classList.toggle('on', practiceCombat);
   $('state').textContent = combat ? 'TIED' : multiplayerActive ? '20-PLAYER CITY' : 'FREE ROAM'; $('timer').textContent = combat ? '10:00' : 'NO TIME LIMIT';
   hud.score(0, 0); if (!combat) { $('state').textContent = multiplayerActive ? '20-PLAYER CITY' : 'FREE ROAM'; $('timer').textContent = 'NO TIME LIMIT'; }
-  $('ov').classList.add('off'); $('lmsg').textContent = ''; $('lboard').classList.remove('on'); requestLock(); unlockAudio();
+  $('ov').classList.add('off'); document.documentElement.classList.remove('menu-open'); document.body.classList.remove('menu-open'); $('lmsg').textContent = ''; $('lboard').classList.remove('on'); requestLock(); unlockAudio();
+  window.__showGameEntryFeedback?.('');
   console.log('game mode:', MATCH.mode, 'camera:', thirdCamera.enabled ? 'third-person' : 'first-person', 'bots:', bots.length);
   clearTimeout(modeCalloutTimer);
   const announcedMode = MATCH.mode;
@@ -614,7 +615,21 @@ function configureMultiplayerClient() {
     if (detail.state === 'connected' && !multiplayerActive) {
       const target = MULTIPLAYER_SPAWNS[(detail.spawnIndex || 0) % MULTIPLAYER_SPAWNS.length];
       const spawn = freeCellNear(target.x, target.z, 4);
-      startGame(GAME_MODES.FREE_ROAM, { multiplayer: true, spawn });
+      try {
+        startGame(GAME_MODES.FREE_ROAM, { multiplayer: true, spawn });
+      } catch (error) {
+        multiplayer.close();
+        document.body.classList.add('menu-open');
+        $('ov').classList.remove('off');
+        const button = $('mpPublic');
+        button.disabled = false;
+        button.textContent = 'Retry Public City';
+        window.__showGameEntryFeedback?.(`Connected, but the city could not be entered: ${error.message}`, {
+          error: true,
+          retryLabel: 'Try again',
+          onRetry: () => button.click(),
+        });
+      }
     }
     if (['connection-lost', 'session-expired', 'room-full', 'disconnected'].includes(detail.state)) clearRemotePlayers();
   });
@@ -670,11 +685,25 @@ function configureMultiplayerClient() {
     await multiplayer.connect(credentials);
   };
   const enterPublic = async () => {
+    const button = $('mpPublic');
+    if (button.disabled) return;
+    button.disabled = true;
+    button.textContent = 'Connecting…';
+    window.__showGameEntryFeedback?.('Connecting to the public city…');
     try {
       multiplayer.name = ($('gname').value.trim() || 'Guest').slice(0, 16);
       setMultiplayerStatus('Finding the active public city…');
       await connectWith(await multiplayer.matchmake(), 'PUBLIC ROOM');
-    } catch (error) { setMultiplayerStatus(`Could not join public city · ${error.message}`); }
+    } catch (error) {
+      setMultiplayerStatus(`Could not join public city · ${error.message}`);
+      button.disabled = false;
+      button.textContent = 'Retry Public City';
+      window.__showGameEntryFeedback?.(`Could not join the public city: ${error.message}`, {
+        error: true,
+        retryLabel: 'Try again',
+        onRetry: () => button.click(),
+      });
+    }
   };
   const enter = async (host) => {
     try {
@@ -863,7 +892,20 @@ async function boot() {
   configureEntryUi();
   configureMultiplayerClient();
   $('go').addEventListener('pointerdown', unlockAudio, { passive: true });
-  $('go').addEventListener('click', () => { if (MATCH.over && practiceCombat) returnToCity(); else startGame(selectedMode); });
+  $('go').addEventListener('click', () => {
+    try {
+      if (MATCH.over && practiceCombat) returnToCity();
+      else startGame(selectedMode);
+    } catch (error) {
+      document.body.classList.add('menu-open');
+      $('ov').classList.remove('off');
+      window.__showGameEntryFeedback?.(`Could not enter the city: ${error.message}`, {
+        error: true,
+        retryLabel: 'Try again',
+        onRetry: () => $('go').click(),
+      });
+    }
+  });
   $('practiceMatch').addEventListener('click', startPracticeMatch);
   $('backToCity').addEventListener('click', () => setCombatLobby(false));
   $('combatExit').addEventListener('click', () => {
@@ -873,6 +915,7 @@ async function boot() {
   $('gname').value = ident.name || ''; $('gwallet').value = ident.wallet || ''; for (const id of ['gname', 'gwallet']) $(id).addEventListener('change', saveIdent);
   if (Q.mobile) pmsg.textContent += ' · SWAP opens all weapons';
   if (qs.get('auto') === '1') startGame(selectedMode);
+  window.__markGameReady?.();
   requestAnimationFrame(loop);
 }
 
@@ -1064,6 +1107,10 @@ function loop(now) {
   performanceProfile.end('render', systemStarted);
   performanceProfile.frame(frameStarted);
 }
-boot().catch((e) => { console.error(e); pmsg.textContent = 'Could not start: ' + e.message; });
+boot().catch((e) => {
+  console.error(e);
+  pmsg.textContent = 'Could not start: ' + e.message;
+  window.__showGameEntryFeedback?.(`The city could not finish loading: ${e.message}`, { error: true, retryLabel: 'Reload and retry' });
+});
 // expose for QA
 window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, remotePlayers, applyLocalAppearance, applyLocalEquipment, requestMultiplayerEquipment, ensureWeaponVisual, characterAssetStats, get localAppearance() { return localAppearance; }, get localEquipment() { return localEquipment; }, get localEquipmentRevision() { return localEquipmentRevision; }, get localCombat() { return localCombat; }, get localContext() { return localContext; }, get multiplayer() { return multiplayer; }, get multiplayerActive() { return multiplayerActive; }, get multiplayerDiagnostics() { return { client: multiplayer?.diagnostics?.() || null, localEquipment, localEquipmentRevision, localCombat, localContext, remotes: [...remotePlayers.values()].map((remote) => ({ id: remote.id, appearance: remote.appearance, ...remote.diagnostics() })) }; }, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };

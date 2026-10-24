@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="menu-open">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
@@ -14,6 +14,7 @@
   --red: #ff3b4a; --blue: #4aa8ff; --gold: #d9ac58; --gold-bright: #f2d28b; --ink: #f4efe5; }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; background: #080807; color: var(--ink); font-family: 'Barlow', 'Segoe UI', sans-serif; overflow: hidden; overscroll-behavior: none; touch-action: none; -webkit-user-select: none; user-select: none; }
+html.menu-open, body.menu-open { touch-action: pan-y; }
 canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 #hud { position: fixed; inset: 0; z-index: 2; pointer-events: none; opacity: 0; transition: opacity .4s; }
 #hud.on { opacity: 1; }
@@ -137,7 +138,7 @@ body.weapon-selecting #interactPrompt, body.weapon-selecting #tInteract { opacit
 #combatLobby button { width: min(330px, 100%); margin: 6px auto; display: block; padding: 15px 18px; border-radius: 6px; border: 1px solid rgba(255,255,255,.24); background: rgba(255,255,255,.07); color: #fff; font: 600 15px/1 'Barlow'; letter-spacing: .2em; text-transform: uppercase; cursor: pointer; }
 #combatLobby button.primary { border-color: #ffe6ad; background: linear-gradient(135deg, var(--gold-bright), var(--gold)); color: #15120d; }
 /* start / end overlays */
-#ov { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(circle at 50% 30%, rgba(87,67,31,.28), transparent 34%), radial-gradient(ellipse at 50% 45%, #1a1916 0%, #080807 68%); z-index: 5; text-align: center; padding: 20px; isolation: isolate; }
+#ov { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(circle at 50% 30%, rgba(87,67,31,.28), transparent 34%), radial-gradient(ellipse at 50% 45%, #1a1916 0%, #080807 68%); z-index: 5; text-align: center; padding: 20px; isolation: isolate; touch-action: pan-y; }
 #ov::before { content: ''; position: absolute; inset: 0; z-index: -1; opacity: .2; background: repeating-linear-gradient(115deg, transparent 0 42px, rgba(217,172,88,.08) 43px, transparent 44px 86px), linear-gradient(180deg, transparent 72%, rgba(0,0,0,.72)); mask-image: linear-gradient(to bottom, #000, transparent 70%); }
 #ov.off { display: none; }
 #ov .presenter { color: var(--gold); font: 600 clamp(11px, 2.4vw, 14px)/1 'Barlow'; letter-spacing: .36em; text-transform: uppercase; margin-bottom: 17px; }
@@ -148,18 +149,23 @@ body.weapon-selecting #interactPrompt, body.weapon-selecting #tInteract { opacit
 #ov .bar { width: min(380px, 80vw); height: 4px; background: rgba(255,255,255,.12); margin: 22px auto 0; border-radius: 2px; overflow: hidden; }
 #ov .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #896526, var(--gold-bright)); transition: width .2s; }
 #ov .msg { font: 500 12px/1 'Barlow'; letter-spacing: .2em; color: #8f8675; margin-top: 10px; text-transform: uppercase; }
-#go { margin-top: 26px; font: 600 18px/1 'Barlow'; letter-spacing: .25em; text-transform: uppercase; color: #15120d; background: linear-gradient(135deg, var(--gold-bright), var(--gold)); border: 1px solid #ffe6ad; border-radius: 6px; padding: 17px 42px; cursor: pointer; display: none; box-shadow: 0 12px 38px rgba(0,0,0,.58), 0 0 26px rgba(217,172,88,.12); }
+#go { margin-top: 26px; font: 600 18px/1 'Barlow'; letter-spacing: .25em; text-transform: uppercase; color: #15120d; background: linear-gradient(135deg, var(--gold-bright), var(--gold)); border: 1px solid #ffe6ad; border-radius: 6px; padding: 17px 42px; cursor: pointer; display: none; box-shadow: 0 12px 38px rgba(0,0,0,.58), 0 0 26px rgba(217,172,88,.12); touch-action: manipulation; }
 #go:hover { filter: brightness(1.08); transform: translateY(-1px); }
 #go.on { display: inline-block; }
 #mpEntry { display: none; width: min(430px, 92vw); margin: 18px auto 0; padding: 14px; border: 1px solid rgba(217,172,88,.35); border-radius: 9px; background: rgba(0,0,0,.22); }
 body.multiplayer-dev #mpEntry { display: block; }
 #mpEntry .row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 #mpEntry button, #mpEntry input { min-height: 42px; border: 1px solid rgba(217,172,88,.6); border-radius: 6px; background: rgba(255,255,255,.07); color: #fff; font: 700 11px/1 'Barlow'; letter-spacing: .12em; text-transform: uppercase; padding: 10px 12px; }
-#mpEntry button { cursor: pointer; color: #17130c; background: var(--gold); }
+#mpEntry button { cursor: pointer; color: #17130c; background: var(--gold); touch-action: manipulation; }
 #mpEntry button:disabled { cursor: wait; opacity: .48; filter: saturate(.35); }
 #mpEntry #mpPublic { width: 100%; margin-bottom: 10px; min-height: 50px; font-size: 14px; background: linear-gradient(135deg, var(--gold-bright), var(--gold)); }
 #mpEntry input { width: 150px; text-align: center; user-select: text; -webkit-user-select: text; }
 #mpRoom { margin-top: 10px; color: #f5d58e; font: 700 11px/1.5 'Barlow'; letter-spacing: .12em; }
+#entryFeedback { width: min(430px, 92vw); margin: 12px auto 0; padding: 12px; border: 1px solid rgba(217,172,88,.55); border-radius: 8px; background: rgba(7,9,12,.9); color: #f5d58e; font: 600 13px/1.4 'Barlow'; letter-spacing: .06em; }
+#entryFeedback[hidden] { display: none; }
+#entryFeedback.error { border-color: rgba(255,110,110,.75); color: #ffd0d0; }
+#entryRetry { display: block; min-height: 44px; margin: 10px auto 0; padding: 11px 18px; border: 1px solid #ffe6ad; border-radius: 6px; background: linear-gradient(135deg, var(--gold-bright), var(--gold)); color: #15120d; font: 700 12px/1 'Barlow'; letter-spacing: .12em; text-transform: uppercase; touch-action: manipulation; }
+#entryRetry[hidden] { display: none; }
 body.multiplayer-dev #go { display: none !important; }
 .avatar-creator { width: min(500px, 92vw); margin: 15px auto 0; padding: 13px; border: 1px solid rgba(217,172,88,.3); border-radius: 9px; background: rgba(0,0,0,.24); }
 .avatar-creator h3 { margin: 0 0 10px; color: #f4e7c9; font: 700 11px/1 'Barlow'; letter-spacing: .2em; text-transform: uppercase; }
@@ -176,7 +182,7 @@ body.multiplayer-active #avatarToggle { display: block; }
 @media (max-width: 620px) { .avatar-presets { grid-template-columns: repeat(2, 1fr); } .avatar-preset { min-height: 54px; } #avatarToggle { top: calc(48px + var(--sat)); } #avatarPanel { top: calc(90px + var(--sat)); } }
 #ov .hint { font: 500 12px/1.6 'Barlow'; letter-spacing: .1em; color: #6f859d; margin-top: 18px; }
 #end { font: 400 clamp(30px, 7vw, 54px)/1 'Marker'; }
-#ov > div { max-height: 100svh; overflow-y: auto; padding: 18px 0; width: min(680px, 100%); }
+#ov > div { max-height: 100svh; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; padding: 18px 0; width: min(680px, 100%); }
 #ov .hint b { color: #fff; }
 #lmsg { color: #ffd166; margin-top: 8px; min-height: 12px; }
 #idrow { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
@@ -207,7 +213,7 @@ body.multiplayer-active #avatarToggle { display: block; }
 @media (max-width: 520px) { #lboard .tiers { grid-template-columns: repeat(2, 1fr); } #lboard .hs { display: none; } }
 </style>
 </head>
-<body>
+<body class="menu-open">
 <canvas id="gl"></canvas>
 
 <div id="hud">
@@ -276,13 +282,14 @@ body.multiplayer-active #avatarToggle { display: block; }
     <p id="tagline">The neighborhood is yours</p>
     <div class="bar"><i id="pbar"></i></div>
     <div class="msg" id="pmsg">Loading the block…</div>
+    <div id="entryFeedback" hidden aria-live="polite"><span id="entryFeedbackMessage"></span><button id="entryRetry" type="button" hidden>Reload and retry</button></div>
     <div id="end"></div>
     <div class="msg" id="lmsg"></div>
     <div id="lboard"></div>
     <div id="idrow"><input id="gname" maxlength="16" placeholder="GAMERTAG" autocomplete="off" spellcheck="false"><input id="gwallet" maxlength="42" placeholder="BASE WALLET (COMING SOON)" autocomplete="off" spellcheck="false" disabled aria-label="Base wallet integration coming soon"></div>
     <div class="avatar-creator"><h3>Choose Your Character</h3><div class="avatar-presets" id="avatarPresets" role="radiogroup" aria-label="Character preset"></div><div class="avatar-status" id="avatarStatus" role="status">Four original character presets · appearance saves on this device</div></div>
     <button id="go">Enter City</button>
-    <div id="mpEntry" aria-label="Six-player multiplayer development preview">
+    <div id="mpEntry" aria-label="Twenty-player public-city multiplayer">
       <button id="mpPublic" type="button" disabled aria-disabled="true">Enter Public City</button>
       <div class="row"><button id="mpHost" type="button" disabled aria-disabled="true">Host Private Room</button><input id="mpCode" maxlength="12" placeholder="PRIVATE CODE" autocomplete="off" spellcheck="false"><button id="mpJoin" type="button" disabled aria-disabled="true">Join Private</button></div>
       <div id="mpRoom">Finishing city setup… multiplayer activates when ready.</div>
@@ -292,6 +299,7 @@ body.multiplayer-active #avatarToggle { display: block; }
   </div>
 </div>
 
+<script src="src/startup-fallback.js"></script>
 <script type="module" src="src/main.js"></script>
 </body>
 </html>

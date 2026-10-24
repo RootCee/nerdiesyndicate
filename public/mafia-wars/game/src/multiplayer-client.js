@@ -31,15 +31,23 @@ export class MultiplayerClient extends EventTarget {
   async connect(credentials) {
     this.credentials = credentials; this.closedByUser = false; this.setState('connecting');
     return new Promise((resolve, reject) => {
-      const socket = new WebSocket(wsUrl(this.serviceUrl, credentials.roomCode, credentials.ticket));
+      let socket;
+      try {
+        socket = new WebSocket(wsUrl(this.serviceUrl, credentials.roomCode, credentials.ticket));
+      } catch {
+        this.closedByUser = true;
+        this.setState('connection-lost');
+        reject(new Error('WebSocket is unavailable in this browser. Please reload and try again.'));
+        return;
+      }
       this.socket = socket; let settled = false;
       const timeout = setTimeout(() => {
         if (settled) return;
-        settled = true; socket.close(); this.setState('connection-lost'); reject(new Error('Connection timed out. Please try again.'));
+        settled = true; this.closedByUser = true; socket.close(); this.setState('connection-lost'); reject(new Error('Connection timed out. Please try again.'));
       }, 10000);
       socket.addEventListener('open', () => { if (settled) return; clearTimeout(timeout); this.reconnectAttempts = 0; this.connectedAt ||= performance.now(); this.setState('connected', credentials); settled = true; resolve(credentials); });
       socket.addEventListener('message', (event) => { this.metrics.received++; this.metrics.receivedBytes += typeof event.data === 'string' ? event.data.length : event.data?.byteLength || 0; this.#message(event.data); });
-      socket.addEventListener('error', () => { if (!settled) { clearTimeout(timeout); settled = true; this.setState('connection-lost'); reject(new Error('WebSocket connection failed. Please try again.')); } });
+      socket.addEventListener('error', () => { if (!settled) { clearTimeout(timeout); settled = true; this.closedByUser = true; socket.close(); this.setState('connection-lost'); reject(new Error('WebSocket connection failed. Please try again.')); } });
       socket.addEventListener('close', (event) => { if (this.socket !== socket) return; this.socket = null; if (!this.closedByUser) this.#reconnect(event.code); else this.setState('disconnected'); });
     });
   }
