@@ -67,6 +67,14 @@ canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block
 #spawnProtection.on { opacity: 1; transform: translateX(-50%); }
 #mpStatus { position: absolute; left: calc(14px + var(--sal)); top: calc(14px + var(--sat)); display: none; max-width: min(360px, 72vw); padding: 8px 11px; border: 1px solid rgba(217,172,88,.55); border-radius: 16px; background: rgba(7,9,12,.78); color: #f5d58e; font: 700 10px/1.2 'Barlow'; letter-spacing: .1em; text-transform: uppercase; pointer-events: none; }
 #mpStatus.on { display: block; }
+#mpDiagnosticsToggle { position: fixed; z-index: 12; top: calc(10px + var(--sat)); right: calc(10px + var(--sar)); pointer-events: auto; padding: 8px 10px; border: 1px solid rgba(217,172,88,.7); border-radius: 6px; background: rgba(8,8,7,.88); color: var(--gold-bright); font: 700 10px/1 'Barlow'; letter-spacing: .12em; }
+#mpDiagnostics { position: fixed; z-index: 13; top: calc(48px + var(--sat)); right: calc(10px + var(--sar)); width: min(350px, calc(100vw - 20px)); max-height: min(60vh, 440px); overflow: auto; padding: 14px; border: 1px solid rgba(217,172,88,.72); border-radius: 8px; background: rgba(8,8,7,.96); color: var(--ink); font: 500 13px/1.4 'Barlow'; pointer-events: auto; }
+#mpDiagnostics[hidden] { display: none; }
+#mpDiagnostics h2 { margin: 0 0 10px; color: var(--gold-bright); font: 700 14px/1.2 'Barlow'; letter-spacing: .12em; }
+#mpDiagnostics dl { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 6px 8px; margin: 0; overflow-wrap: anywhere; }
+#mpDiagnostics dt { color: #a59b87; }
+#mpDiagnostics dd { margin: 0; color: #f5d58e; }
+#mpDiagnosticsClose { position: absolute; top: 8px; right: 8px; padding: 5px 8px; border: 1px solid rgba(255,255,255,.3); border-radius: 4px; background: transparent; color: var(--ink); }
 #kill { font: 400 18px/1 'Marker'; color: #fff; text-shadow: 0 2px 0 #000; margin-top: 44px; opacity: 0; transition: opacity .2s; }
 #kill.on { opacity: 1; }
 #pts { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -78px); font: 400 15px/1 'Marker'; color: #fff; text-shadow: 0 2px 0 #000; opacity: 0; }
@@ -246,6 +254,20 @@ body.multiplayer-active #avatarToggle { display: block; }
 </div>
 
 <button id="combatExit" type="button">Return to City · X</button>
+<button id="mpDiagnosticsToggle" type="button" aria-expanded="false" aria-controls="mpDiagnostics">NETWORK INFO</button>
+<section id="mpDiagnostics" hidden role="region" aria-labelledby="mpDiagnosticsTitle">
+  <button id="mpDiagnosticsClose" type="button" aria-label="Close network diagnostics">×</button>
+  <h2 id="mpDiagnosticsTitle">MULTIPLAYER DIAGNOSTICS</h2>
+  <dl>
+    <dt>Build</dt><dd id="mpDiagBuild">Loading…</dd>
+    <dt>Worker</dt><dd id="mpDiagWorker">Loading…</dd>
+    <dt>Protocol</dt><dd id="mpDiagProtocol">Loading…</dd>
+    <dt>Room</dt><dd id="mpDiagRoom">Not joined</dd>
+    <dt>Players</dt><dd id="mpDiagPlayers">0/20</dd>
+    <dt>Status</dt><dd id="mpDiagStatus">Not connected</dd>
+    <dt>Mode</dt><dd id="mpDiagMode">Public City</dd>
+  </dl>
+</section>
 <button id="avatarToggle" type="button" aria-expanded="false" aria-controls="avatarPanel">Character</button>
 <div id="avatarPanel" role="dialog" aria-label="Change character">
   <div class="avatar-creator"><h3>Change Character</h3><div class="avatar-presets" id="avatarPresetsLive" role="radiogroup" aria-label="Character preset"></div><div class="avatar-status" id="avatarStatusLive" role="status"></div></div>
@@ -300,6 +322,6 @@ body.multiplayer-active #avatarToggle { display: block; }
 </div>
 
 <script src="src/startup-fallback.js"></script>
-<script type="module" src="src/main.js"></script>
+<script type="module" src="src/main.js?build=m6.3-cross-device-diagnostics-rc1"></script>
 </body>
 </html>

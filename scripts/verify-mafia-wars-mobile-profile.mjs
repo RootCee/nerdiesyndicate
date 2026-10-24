@@ -3,8 +3,8 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '..', 'public', 'mafia-wars', 'game', 'src');
-const [main, assets, audio, world, characters, avatarSchema, cityExpansion, apartment, combatVenue, player, collision, weaponCycle, loadout, resupply, resupplyRules, respawnRules, startupFallback, index] = await Promise.all(
-  ['main.js', 'assets.js', 'audio.js', 'world.js', 'characters.js', 'avatar-schema.js', 'city-expansion.js', 'apartment-system.js', 'combat-venue.js', 'player.js', 'collision-math.js', 'weapon-cycle.js', 'loadout.js', 'practice-resupply.js', 'resupply-rules.js', 'respawn-rules.js', 'startup-fallback.js'].map((file) => readFile(path.join(root, file), 'utf8')).concat([
+const [main, assets, audio, world, characters, avatarSchema, cityExpansion, apartment, combatVenue, player, collision, weaponCycle, loadout, resupply, resupplyRules, respawnRules, startupFallback, endpoint, index] = await Promise.all(
+  ['main.js', 'assets.js', 'audio.js', 'world.js', 'characters.js', 'avatar-schema.js', 'city-expansion.js', 'apartment-system.js', 'combat-venue.js', 'player.js', 'collision-math.js', 'weapon-cycle.js', 'loadout.js', 'practice-resupply.js', 'resupply-rules.js', 'respawn-rules.js', 'startup-fallback.js', 'multiplayer-endpoint.js'].map((file) => readFile(path.join(root, file), 'utf8')).concat([
     readFile(path.resolve(root, '..', 'index.html'), 'utf8'),
   ]),
 );
@@ -63,6 +63,21 @@ assert.match(startupFallback, /Reload and retry/);
 assert.match(main, /button\.textContent = 'Retry Public City'/);
 assert.match(main, /Could not join the public city:/);
 assert.match(main, /window\.__markGameReady\?\.\(\)/);
+assert.match(index, /id="mpDiagnosticsToggle"/);
+assert.match(index, /id="mpDiagBuild"/);
+assert.match(index, /id="mpDiagWorker"/);
+assert.match(index, /id="mpDiagProtocol"/);
+assert.match(index, /id="mpDiagRoom"/);
+assert.match(index, /id="mpDiagPlayers"/);
+assert.match(index, /id="mpDiagStatus"/);
+assert.match(index, /id="mpDiagMode"/);
+assert.match(index, /src="src\/main\.js\?build=m6\.3-cross-device-diagnostics-rc1"/);
+assert.match(main, /multiplayer-endpoint\.js\?build=m6\.3-cross-device-diagnostics-rc1/);
+assert.match(main, /const GAME_BUILD_ID = 'm6\.3-cross-device-diagnostics-rc1'/);
+assert.match(main, /function renderMultiplayerDiagnostics\(\)/);
+assert.match(endpoint, /nerdie-city-multiplayer-v4\.buddieroots\.workers\.dev/);
+assert.match(endpoint, /nerdie-city-m6-3-preview\.buddieroots\.workers\.dev/);
+assert.match(endpoint, /override && \(isLocal \|\| isPrivateLan\)/);
 
 const { CITY_BOUNDS, createCityPlan, chunkVisible } = await import(
   new URL('../public/mafia-wars/game/src/city-layout.js', import.meta.url)
@@ -98,4 +113,4 @@ const southNearestBuildingEdge = Math.max(...mobile.districts[1].buildings.map((
 assert.ok(-24 - southNearestBuildingEdge > 40, 'south geometry must stream in well before the player can reach it');
 assert.match(cityExpansion, /chunk\.group\.visible = visible/);
 
-console.log('Mafia Wars Milestone 5 mobile and city profile verified');
+console.log('Mafia Wars mobile, city, and M6.3 network diagnostics verified');

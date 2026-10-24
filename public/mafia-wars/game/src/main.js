@@ -32,15 +32,16 @@ import { restorePracticeLoadout } from './loadout.js';
 import { PracticeResupply } from './practice-resupply.js';
 import { RESPAWN_CONFIG, UNDERGROUND_SPAWN_CANDIDATES, selectRespawnCandidate } from './respawn-rules.js';
 import { MultiplayerClient } from './multiplayer-client.js';
-import { resolveMultiplayerService } from './multiplayer-endpoint.js';
+import { resolveMultiplayerService } from './multiplayer-endpoint.js?build=m6.3-cross-device-diagnostics-rc1';
 import { RemotePlayer } from './remote-player.js';
-import { MULTIPLAYER_LIMITS, MULTIPLAYER_SPAWNS } from './multiplayer-protocol.js';
+import { MULTIPLAYER_LIMITS, MULTIPLAYER_SPAWNS, PROTOCOL_VERSION } from './multiplayer-protocol.js';
 import { AVATAR_PRESETS, normalizeAvatarAppearance, sameAvatarAppearance } from './avatar-schema.js';
 import { DEFAULT_EQUIPMENT, normalizeEquipment } from './multiplayer-equipment.js';
 import { MULTIPLAYER_WEAPON_RULES } from './multiplayer-combat.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 
+const GAME_BUILD_ID = 'm6.3-cross-device-diagnostics-rc1';
 const qs = new URLSearchParams(location.search);
 const multiplayerDev = qs.get('multiplayer') === '1';
 const lanIPv4 = location.hostname.split('.').map(Number);
@@ -510,7 +511,29 @@ function startGame(mode = selectedMode, options = {}) {
   }, 1200);
 }
 
-function setMultiplayerStatus(text, on = true) { const el = $('mpStatus'); if (el.textContent !== text) el.textContent = text; el.classList.toggle('on', on); }
+function renderMultiplayerDiagnostics() {
+  const capacity = multiplayer?.credentials?.capacity || MULTIPLAYER_LIMITS.maxPlayers;
+  const players = multiplayerPlayerCount || (multiplayer?.credentials ? 1 : 0);
+  const space = localContext?.space?.id || multiplayer?.credentials?.context?.space?.id || 'city';
+  $('mpDiagBuild').textContent = GAME_BUILD_ID;
+  $('mpDiagWorker').textContent = new URL(multiplayerServiceUrl).host;
+  $('mpDiagProtocol').textContent = String(PROTOCOL_VERSION);
+  $('mpDiagRoom').textContent = multiplayer?.credentials?.roomCode || 'Not joined';
+  $('mpDiagPlayers').textContent = multiplayer?.credentials ? `${players}/${capacity}` : `0/${MULTIPLAYER_LIMITS.maxPlayers}`;
+  $('mpDiagStatus').textContent = multiplayer?.state || 'Not connected';
+  $('mpDiagMode').textContent = space === 'underground' ? 'Underground' : multiplayerDev ? 'Public City' : 'Solo';
+}
+function setMultiplayerStatus(text, on = true) {
+  const el = $('mpStatus');
+  if (el.textContent !== text) el.textContent = text;
+  el.classList.toggle('on', on);
+  renderMultiplayerDiagnostics();
+}
+function setDiagnosticsOpen(open) {
+  $('mpDiagnostics').hidden = !open;
+  $('mpDiagnosticsToggle').setAttribute('aria-expanded', String(open));
+  if (open) renderMultiplayerDiagnostics();
+}
 function clearRemotePlayers() { for (const remote of remotePlayers.values()) remote.dispose(); remotePlayers.clear(); multiplayerPlayerCount = 0; networkAudioEvents.clear(); }
 function applyLocalCombat(combat) {
   if (!combat) return;
@@ -568,6 +591,7 @@ function applyLocalContext(context, revision = localContextRevision + 1, state =
     destructionStreamingStats = updateDestructionStreaming(player.pos, Q.lowMemory ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.mobile : DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.desktop);
     updateNeighborhoodLights(destructionStreamingStats.activeStreamingId); hud.callout('BACK IN NERDIE CITY', 'MULTIPLAYER FREE ROAM');
   }
+  renderMultiplayerDiagnostics();
 }
 function playNetworkShot(message) {
   const localShot = message.playerId === multiplayer?.credentials?.playerId;
@@ -682,6 +706,7 @@ function configureMultiplayerClient() {
   const connectWith = async (credentials, label) => {
     multiplayer.credentials = credentials; multiplayerPlayerCount = credentials.playerCount || 1; $('mpCode').blur();
     $('mpRoom').textContent = `${label} ${credentials.roomCode} · ${credentials.capacity || MULTIPLAYER_LIMITS.maxPlayers} player capacity`;
+    renderMultiplayerDiagnostics();
     await multiplayer.connect(credentials);
   };
   const enterPublic = async () => {
@@ -709,7 +734,7 @@ function configureMultiplayerClient() {
     try {
       multiplayer.name = ($('gname').value.trim() || 'Guest').slice(0, 16);
       const credentials = host ? await multiplayer.createRoom() : await multiplayer.joinRoom($('mpCode').value.trim().toUpperCase());
-      const share = new URL(location.href); share.searchParams.set('multiplayer', '1'); share.searchParams.set('room', credentials.roomCode); share.searchParams.set('mp', multiplayerServiceUrl);
+      const share = new URL(location.href); share.searchParams.set('multiplayer', '1'); share.searchParams.set('room', credentials.roomCode);
       await connectWith(credentials, host ? 'PRIVATE ROOM' : 'ROOM');
       navigator.clipboard?.writeText(share.href).catch(() => {});
     } catch (error) { setMultiplayerStatus(error.code === 'room_full' ? 'Room full' : `Could not connect · ${error.message}`); }
@@ -717,6 +742,12 @@ function configureMultiplayerClient() {
   $('mpPublic').addEventListener('pointerdown', unlockAudio, { passive: true });
   $('mpPublic').addEventListener('click', enterPublic);
   $('mpHost').addEventListener('click', () => enter(true)); $('mpJoin').addEventListener('click', () => enter(false));
+  renderMultiplayerDiagnostics();
+  $('mpDiagnosticsToggle').addEventListener('click', () => setDiagnosticsOpen($('mpDiagnostics').hidden));
+  $('mpDiagnosticsClose').addEventListener('click', () => setDiagnosticsOpen(false));
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !$('mpDiagnostics').hidden) setDiagnosticsOpen(false);
+  });
   for (const id of ['mpPublic', 'mpHost', 'mpJoin']) { const button = $(id); button.disabled = false; button.removeAttribute('aria-disabled'); }
   $('mpRoom').textContent = `Public matchmaking fills the active city automatically · ${MULTIPLAYER_LIMITS.maxPlayers}-player capacity`;
   const requestedRoom = qs.get('room'); if (requestedRoom) { $('mpCode').value = requestedRoom; setTimeout(() => enter(false), 0); }
