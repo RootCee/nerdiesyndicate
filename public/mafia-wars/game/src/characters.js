@@ -123,7 +123,7 @@ export class Character {
     this.mixer = new THREE.AnimationMixer(root); this.actions = {};
     for (const [k, c] of Object.entries(lib.clips)) this.actions[k] = this.mixer.clipAction(c);
     this.gun = null; this.weaponId = null; this.holstered = true; this.setWeapon(weaponId, holstered);
-    this.aimPitch = 0; this.ready = 1; this.dead = false;
+    this.aimPitch = 0; this.ready = 1; this.dead = false; this.recoil = 0;
     this.visualOffset = new THREE.Vector3();
     // x-ray ghost: extra skinned meshes bound to the same skeleton, drawn on top
     this.ghosts = [];
@@ -153,6 +153,7 @@ export class Character {
     const targetOffset = contactOffset || _t.set(0, 0, 0);
     this.visualOffset.lerp(targetOffset, 1 - Math.exp(-18 * Math.max(0, dt)));
     this.obj.position.copy(pos).add(this.visualOffset); this.obj.rotation.y = yaw; this.mixer.update(dt);
+    this.recoil *= Math.exp(-dt * 20);
     if (!this.gun) return;
     this.obj.updateMatrixWorld(true);
     this.ready += ((aiming ? 1 : 0) - this.ready) * Math.min(1, dt * 8);
@@ -164,7 +165,7 @@ export class Character {
     const r = this.ready;
     const grip = _a.clone().addScaledVector(right, THREE.MathUtils.lerp(0.16, 0.12, r)).addScaledVector(UP, THREE.MathUtils.lerp(-0.16, 0.12, r)).addScaledVector(fwd, THREE.MathUtils.lerp(0.22, 0.3, r));
     this.gun.position.copy(grip);
-    const pitch = THREE.MathUtils.lerp(-0.6, this.aimPitch, r), yawOff = THREE.MathUtils.lerp(-0.55, -0.04, r); // muzzle swings across the body at low ready
+    const pitch = THREE.MathUtils.lerp(-0.6, this.aimPitch, r) - this.recoil * 0.08, yawOff = THREE.MathUtils.lerp(-0.55, -0.04, r); // muzzle swings across the body at low ready
     this.gun.quaternion.setFromEuler(new THREE.Euler(pitch, yaw + Math.PI + yawOff, 0, 'YXZ'));
     this.gun.updateMatrixWorld(true);
     // IK both arms onto the gun
@@ -173,6 +174,7 @@ export class Character {
     if (b.rArm && b.rFore && b.rHand) { b.rArm.getWorldPosition(_b); twoBoneIK(b.rArm, b.rFore, b.rHand, gr, _b.clone().addScaledVector(right, 0.5).addScaledVector(UP, -0.6).addScaledVector(fwd, -0.2)); }
     if (b.lArm && b.lFore && b.lHand) { b.lArm.getWorldPosition(_b); twoBoneIK(b.lArm, b.lFore, b.lHand, fo, _b.clone().addScaledVector(right, -0.4).addScaledVector(UP, -0.7)); }
   }
+  triggerFire() { this.recoil = Math.min(1.2, this.recoil + 0.9); }
   muzzleWorld(out = new THREE.Vector3()) { return this.gun ? out.copy(this.gun.userData.muzzle).applyMatrix4(this.gun.matrixWorld) : out.copy(this.obj.position); }
   dispose(scene) {
     scene.remove(this.obj); if (this.gun) { scene.remove(this.gun); disposeWeaponClone(this.gun); }

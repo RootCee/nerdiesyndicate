@@ -1,7 +1,7 @@
 {
   "name": "Nerdie City: Mafia Wars",
-  "channel": "environment-preview",
-  "sourceCommit": "3f0c5d0",
-  "sourceBranch": "local-environment-update",
+  "channel": "m6.3-production-candidate",
+  "sourceCommit": "f08884dcccef7727e8ba006d60ecf089ad0d257a",
+  "sourceBranch": "codex/nerdie-city-m6-3-production-rc",
   "entry": "/mafia-wars/game/?phys=0&multiplayer=1"
 }

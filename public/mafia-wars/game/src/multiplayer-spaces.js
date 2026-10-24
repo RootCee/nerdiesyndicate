@@ -3,11 +3,25 @@ export const SPACE_SCHEMA_VERSION = 1;
 export const MULTIPLAYER_SPACES = Object.freeze({
   city: Object.freeze({ id: 'city', layer: 0 }),
   underground: Object.freeze({ id: 'underground', layer: 0, entry: { x: -97, y: 0, z: -72 }, inside: { x: 0, y: 0, z: 36 }, exit: { x: 0, y: 0, z: 43 }, outside: { x: -96.2, y: 0, z: -72 }, bounds: { minX: -43, maxX: 43, minY: -4, maxY: 40, minZ: -46, maxZ: 46 } }),
-  'north-court': Object.freeze({ id: 'north-court', layer: 1, entry: { x: 18.6, y: 0, z: 100 }, inside: { x: 23.7, y: 40, z: 100 }, exit: { x: 23.3, y: 40, z: 100 }, outside: { x: 18.8, y: 0, z: 100 }, bounds: { minX: 22.2, maxX: 35.8, minY: 39, maxY: 45, minZ: 94.5, maxZ: 105.5 } }),
-  'east-73': Object.freeze({ id: 'east-73', layer: 1, entry: { x: 105.15, y: 0, z: 73 }, inside: { x: 107.3, y: 55, z: 73 }, exit: { x: 106.9, y: 55, z: 73 }, outside: { x: 105.05, y: 0, z: 73 }, bounds: { minX: 105.5, maxX: 118.5, minY: 54, maxY: 60, minZ: 67.5, maxZ: 78.5 } }),
-  'hood-cross-west': Object.freeze({ id: 'hood-cross-west', layer: 1, entry: { x: -48.45, y: 0, z: 53.75 }, inside: { x: -54.7, y: 70, z: 62 }, exit: { x: -55.1, y: 70, z: 62 }, outside: { x: -48.45, y: 0, z: 53.45 }, bounds: { minX: -56.5, maxX: -43.5, minY: 69, maxY: 75, minZ: 56.5, maxZ: 67.5 } }),
-  'hood-duplicate-west-5': Object.freeze({ id: 'hood-duplicate-west-5', layer: 1, entry: { x: 173.25, y: 0, z: 5.55 }, inside: { x: 159.7, y: 85, z: 4 }, exit: { x: 159.9, y: 85, z: 4 }, outside: { x: 173.55, y: 0, z: 5.55 }, bounds: { minX: 158.5, maxX: 171.5, minY: 84, maxY: 90, minZ: -1.5, maxZ: 9.5 } }),
+  'north-court': Object.freeze({ id: 'north-court', layer: 1, safeZone: true, entry: { x: 18.6, y: 0, z: 100 }, inside: { x: 23.7, y: 40, z: 100 }, exit: { x: 23.3, y: 40, z: 100 }, outside: { x: 18.8, y: 0, z: 100 }, bounds: { minX: 22.2, maxX: 35.8, minY: 39, maxY: 45, minZ: 94.5, maxZ: 105.5 } }),
+  'east-73': Object.freeze({ id: 'east-73', layer: 1, safeZone: true, entry: { x: 105.15, y: 0, z: 73 }, inside: { x: 107.3, y: 55, z: 73 }, exit: { x: 106.9, y: 55, z: 73 }, outside: { x: 105.05, y: 0, z: 73 }, bounds: { minX: 105.5, maxX: 118.5, minY: 54, maxY: 60, minZ: 67.5, maxZ: 78.5 } }),
+  'hood-cross-west': Object.freeze({ id: 'hood-cross-west', layer: 1, safeZone: true, entry: { x: -48.45, y: 0, z: 53.75 }, inside: { x: -54.7, y: 70, z: 62 }, exit: { x: -55.1, y: 70, z: 62 }, outside: { x: -48.45, y: 0, z: 53.45 }, bounds: { minX: -56.5, maxX: -43.5, minY: 69, maxY: 75, minZ: 56.5, maxZ: 67.5 } }),
+  'hood-duplicate-west-5': Object.freeze({ id: 'hood-duplicate-west-5', layer: 1, safeZone: true, entry: { x: 173.25, y: 0, z: 5.55 }, inside: { x: 159.7, y: 85, z: 4 }, exit: { x: 159.9, y: 85, z: 4 }, outside: { x: 173.55, y: 0, z: 5.55 }, bounds: { minX: 158.5, maxX: 171.5, minY: 84, maxY: 90, minZ: -1.5, maxZ: 9.5 } }),
 });
+
+export const MULTIPLAYER_SAFE_ZONES = Object.freeze(Object.values(MULTIPLAYER_SPACES)
+  .filter((space) => space.safeZone && space.bounds)
+  .map((space) => Object.freeze({ id: space.id, bounds: space.bounds })));
+
+export const isProtectedSpace = (spaceId) => MULTIPLAYER_SPACES[spaceId]?.safeZone === true;
+
+export function isInsideSafeZone(position) {
+  if (!position || !['x', 'y', 'z'].every((key) => Number.isFinite(position[key]))) return false;
+  return MULTIPLAYER_SAFE_ZONES.some(({ bounds }) =>
+    position.x >= bounds.minX && position.x <= bounds.maxX
+    && position.y >= bounds.minY && position.y <= bounds.maxY
+    && position.z >= bounds.minZ && position.z <= bounds.maxZ);
+}
 
 const distance = (a, b) => Math.hypot((a?.x || 0) - b.x, (a?.y || 0) - b.y, (a?.z || 0) - b.z);
 

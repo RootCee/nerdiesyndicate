@@ -1,4 +1,6 @@
 import { isMultiplayerWeapon } from './multiplayer-equipment.js';
+import { MULTIPLAYER_SPAWNS } from './multiplayer-protocol.js';
+import { isInsideSafeZone, isProtectedSpace, MULTIPLAYER_SAFE_ZONES } from './multiplayer-spaces.js';
 
 export const COMBAT_SCHEMA_VERSION = 1;
 export const MULTIPLAYER_WEAPON_RULES = Object.freeze({
@@ -28,8 +30,9 @@ const UNDERGROUND_HOUSE_WALLS = Object.freeze(Array.from({ length: 10 }, (_, ind
   { minX: x - 5, maxX: x + 5, minY: 0.75, maxY: 10, minZ: z + 3.0, maxZ: z + 3.2 },
 ])));
 
-const FORBIDDEN = ['playerId', 'targetId', 'damage', 'hit', 'health', 'team', 'admin'];
+const FORBIDDEN = ['playerId', 'targetId', 'targetIds', 'targets', 'damage', 'hit', 'health', 'team', 'admin', 'origin', 'position', 'context', 'spaceId', 'instanceId'];
 const finiteVector = (value) => value && ['x', 'y', 'z'].every((key) => Number.isFinite(value[key]));
+const protectedPlayer = (player) => isProtectedSpace(player.context?.space?.id) || isInsideSafeZone(player.state);
 
 export function createCombatState() {
   return {
@@ -183,6 +186,13 @@ export function undergroundShotOccluded(origin, direction, distance) {
   });
 }
 
+export function publicCityShotOccluded(origin, direction, distance) {
+  return MULTIPLAYER_SAFE_ZONES.some(({ bounds }) => {
+    const hit = rayAabbDistance(origin, direction, bounds);
+    return hit !== null && hit > 0.03 && hit < distance - 0.05;
+  });
+}
+
 function segmentOccluded(start, end, occluded) {
   const dx = end.x - start.x, dy = end.y - start.y, dz = end.z - start.z;
   const distance = Math.hypot(dx, dy, dz);
@@ -190,36 +200,56 @@ function segmentOccluded(start, end, occluded) {
   return occluded(start, { x: dx / distance, y: dy / distance, z: dz / distance }, distance);
 }
 
-export function resolveAuthoritativeShot(shooter, shot, players, now, { occluded = () => false } = {}) {
-  if (shooter.context?.space?.id !== 'underground' || !shooter.combat?.team) return { impacts: [], elimination: null };
+export function resolveAuthoritativeShot(shooter, shot, players, now, { occluded } = {}) {
+  const spaceId = shooter.context?.space?.id || 'city';
+  const underground = spaceId === 'underground';
+  if ((!underground && spaceId !== 'city') || (underground && !shooter.combat?.team) || (spaceId === 'city' && protectedPlayer(shooter))) return { impacts: [], elimination: null };
+  const blocked = occluded === undefined ? (underground ? undergroundShotOccluded : publicCityShotOccluded) : occluded;
   const roster = [...players], rule = MULTIPLAYER_WEAPON_RULES[shot.weaponId], candidates = [];
   for (const target of roster) {
-    if (target.id === shooter.id || !target.connected || target.context?.space?.id !== 'underground') continue;
+    if (target.id === shooter.id || !target.connected || target.context?.space?.id !== spaceId) continue;
     target.combat = normalizeCombatState(target.combat);
-    if (target.combat.dead || target.combat.team === shooter.combat.team || !target.state) continue;
+    if (target.combat.dead || (underground && target.combat.team === shooter.combat.team) || (spaceId === 'city' && protectedPlayer(target)) || !target.state) continue;
     const distance = targetDistance(shot.origin, shot.direction, target.state);
-    if (distance !== null && distance <= rule.range && !occluded(shot.origin, shot.direction, distance)) candidates.push({ target, distance });
+    if (distance !== null && distance <= rule.range && !blocked(shot.origin, shot.direction, distance)) candidates.push({ target, distance });
   }
   candidates.sort((a, b) => a.distance - b.distance);
   const primary = candidates[0]; if (!primary) return { impacts: [], elimination: null };
   const impacted = shot.weaponId === 'rpg'
-    ? roster.filter((target) => target.connected && target.context?.space?.id === 'underground' && target.combat?.team !== shooter.combat.team && !target.combat?.dead && target.state && Math.hypot(target.state.x - primary.target.state.x, target.state.y - primary.target.state.y, target.state.z - primary.target.state.z) <= rule.splash)
+    ? roster.filter((target) => target.connected && target.context?.space?.id === spaceId && (!underground || target.combat?.team !== shooter.combat.team) && !target.combat?.dead && (spaceId !== 'city' || !protectedPlayer(target)) && target.state && Math.hypot(target.state.x - primary.target.state.x, target.state.y - primary.target.state.y, target.state.z - primary.target.state.z) <= rule.splash)
     : [primary.target];
   const impacts = []; let elimination = null;
   for (const target of impacted) {
     const distanceFromShot = targetDistance(shot.origin, shot.direction, target.state);
     const primaryCenter = { x: primary.target.state.x, y: primary.target.state.y + 1.05, z: primary.target.state.z };
     const targetCenter = { x: target.state.x, y: target.state.y + 1.05, z: target.state.z };
-    const blocked = target === primary.target
-      ? distanceFromShot !== null && occluded(shot.origin, shot.direction, distanceFromShot)
-      : segmentOccluded(primaryCenter, targetCenter, occluded);
-    if (target.combat.protectionUntil > now || blocked) continue;
+    const targetBlocked = target === primary.target
+      ? distanceFromShot !== null && (occluded === undefined ? (underground ? undergroundShotOccluded : publicCityShotOccluded) : occluded)(shot.origin, shot.direction, distanceFromShot)
+      : segmentOccluded(primaryCenter, targetCenter, occluded === undefined ? (underground ? undergroundShotOccluded : publicCityShotOccluded) : occluded);
+    if (target.combat.protectionUntil > now || targetBlocked) continue;
     const damage = shot.weaponId === 'rpg' ? Math.max(20, Math.round(rule.damage * (1 - Math.min(rule.splash, Math.hypot(target.state.x - primary.target.state.x, target.state.z - primary.target.state.z)) / rule.splash))) : rule.damage;
     target.combat.health = Math.max(0, target.combat.health - damage);
     if (target.combat.health === 0) { target.combat.dead = true; target.combat.deaths++; target.combat.respawnAt = now + MULTIPLAYER_COMBAT_RULES.respawnMs; shooter.combat.kills++; elimination = { killerId: shooter.id, victimId: target.id }; }
     impacts.push({ targetId: target.id, damage, health: target.combat.health, dead: target.combat.dead });
   }
   return { impacts, elimination };
+}
+
+export function respawnPublicPlayer(player, players, now, random = Math.random) {
+  player.combat = normalizeCombatState(player.combat);
+  if (!player.combat.dead || now < player.combat.respawnAt || (player.context?.space?.id || 'city') !== 'city') return null;
+  const enemies = [...players].filter((other) => other.id !== player.id && other.connected
+    && (other.context?.space?.id || 'city') === 'city' && !other.combat?.dead && other.state);
+  const candidates = MULTIPLAYER_SPAWNS
+    .map((spawn, index) => ({ spawn, index, nearest: enemies.reduce((best, enemy) => Math.min(best, Math.hypot(spawn.x - enemy.state.x, spawn.z - enemy.state.z)), Infinity), recent: index === player.combat.spawnCursor }))
+    .filter(({ spawn }) => !isInsideSafeZone({ x: spawn.x, y: 0, z: spawn.z }));
+  candidates.sort((a, b) => (b.nearest - a.nearest) || (Number(a.recent) - Number(b.recent)) || (random() - 0.5));
+  const chosen = candidates[0];
+  if (!chosen) return null;
+  player.combat.spawnCursor = chosen.index; player.combat.health = MULTIPLAYER_COMBAT_RULES.maxHealth; player.combat.dead = false; player.combat.respawnAt = 0; player.combat.protectionUntil = now + MULTIPLAYER_COMBAT_RULES.spawnProtectionMs;
+  const seq = Number.isSafeInteger(player.lastSeq) ? ++player.lastSeq : (player.state?.seq || 0) + 1;
+  player.state = { ...player.state, seq, x: chosen.spawn.x, y: 0, z: chosen.spawn.z, serverTime: now };
+  return { playerId: player.id, state: player.state, combat: combatView(player.combat, now), reason: 'safest-city-candidate' };
 }
 
 export function respawnUndergroundPlayer(player, players, now, random = Math.random) {
@@ -229,7 +259,8 @@ export function respawnUndergroundPlayer(player, players, now, random = Math.ran
   const scored = candidates.map((spawn, index) => ({ spawn, index, nearest: enemies.reduce((best, enemy) => Math.min(best, Math.hypot(spawn.x - enemy.state.x, spawn.z - enemy.state.z)), Infinity), recent: index === player.combat.spawnCursor }));
   scored.sort((a, b) => (b.nearest - a.nearest) || (Number(a.recent) - Number(b.recent)) || (random() - 0.5));
   const chosen = scored[0]; player.combat.spawnCursor = chosen.index; player.combat.health = MULTIPLAYER_COMBAT_RULES.maxHealth; player.combat.dead = false; player.combat.respawnAt = 0; player.combat.protectionUntil = now + MULTIPLAYER_COMBAT_RULES.spawnProtectionMs;
-  player.state = { ...player.state, ...chosen.spawn, serverTime: now };
+  const seq = Number.isSafeInteger(player.lastSeq) ? ++player.lastSeq : (player.state?.seq || 0) + 1;
+  player.state = { ...player.state, ...chosen.spawn, seq, serverTime: now };
   return { playerId: player.id, state: player.state, combat: combatView(player.combat, now), reason: 'safest-candidate' };
 }
 

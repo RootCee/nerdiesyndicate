@@ -43,7 +43,12 @@ import { createNetworkAudioDeduper } from './weapon-audio.js';
 
 const qs = new URLSearchParams(location.search);
 const multiplayerDev = qs.get('multiplayer') === '1';
-const multiplayerArenaQa = multiplayerDev && qs.get('mpArena') === '1';
+const lanIPv4 = location.hostname.split('.').map(Number);
+const isPrivateLanIPv4 = lanIPv4.length === 4 && lanIPv4.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)
+  && (lanIPv4[0] === 10 || (lanIPv4[0] === 172 && lanIPv4[1] >= 16 && lanIPv4[1] <= 31) || (lanIPv4[0] === 192 && lanIPv4[1] === 168));
+if (qs.get('devLoadTest') === '1' && isPrivateLanIPv4) {
+  import('../qa/dev-multiplayer-load-test.js').catch((error) => console.error('Development load test could not start:', error));
+}
 const multiplayerServiceUrl = resolveMultiplayerService(location);
 const performanceProfile = createPerformanceProfiler(qs.get('perf') === '1');
 // Legacy ladder support remains developer-only. Public Base identity and rankings are coming later.
@@ -187,8 +192,8 @@ async function selectWeapon(command) {
 const bots = []; let trooper = null, localAvatar = null, city = null, collisionDebug = null;
 let localAppearanceRequest = 0;
 let localEquipmentRequest = 0, localEquipment = normalizeEquipment(DEFAULT_EQUIPMENT), localEquipmentRevision = 0;
-let localCombat = null, localContext = { space: { id: 'city', instanceId: null } }, localContextRevision = 0, multiplayerNextShotAt = 0, multiplayerTriggerHeld = false;
-let multiplayer = null, multiplayerActive = false, multiplayerServerOffset = 0, multiplayerSendAt = 0, multiplayerPingAt = 0, multiplayerStatusAt = 0;
+let localCombat = null, localContext = { space: { id: 'city', instanceId: null } }, localContextRevision = 0, localSafeZone = false, multiplayerNextShotAt = 0, multiplayerTriggerHeld = false;
+let multiplayer = null, multiplayerActive = false, multiplayerPlayerCount = 0, multiplayerServerOffset = 0, multiplayerSendAt = 0, multiplayerPingAt = 0, multiplayerStatusAt = 0;
 const multiplayerAim = new THREE.Vector3();
 const remotePlayers = new Map();
 const networkAudioEvents = createNetworkAudioDeduper();
@@ -252,7 +257,7 @@ async function applyLocalEquipment(equipment, revision = localEquipmentRevision 
   if (localAvatar?.gun) localAvatar.gun.visible = localAvatar.obj.visible && !canonical.holstered && !player.dead;
   if (canonical.weaponId) { arsenal.cur = canonical.weaponId; for (const key in guns) guns[key].holstered = key !== canonical.weaponId; }
   for (const button of document.querySelectorAll('#weaponTray [data-weapon]')) button.classList.toggle('selected', button.dataset.weapon === canonical.weaponId && !canonical.holstered);
-  hud.callout(canonical.weaponId ? (canonical.holstered ? 'WEAPON HOLSTERED' : `${canonical.weaponId === 'rpg' ? 'RPG-7' : guns[canonical.weaponId]?.name || canonical.weaponId.toUpperCase()} EQUIPPED`) : 'UNARMED', 'MULTIPLAYER FIRING · DAMAGE DISABLED');
+  hud.callout(canonical.weaponId ? (canonical.holstered ? 'WEAPON HOLSTERED' : `${canonical.weaponId === 'rpg' ? 'RPG-7' : guns[canonical.weaponId]?.name || canonical.weaponId.toUpperCase()} EQUIPPED`) : 'UNARMED', 'SERVER-AUTHORITATIVE CITY PVP');
   return true;
 }
 async function requestMultiplayerEquipment(command) {
@@ -426,7 +431,7 @@ function configureEntryUi() {
   document.body.classList.toggle('multiplayer-dev', multiplayerDev);
   if (multiplayerDev) {
     $('tagline').textContent = 'Two-player shared-city development preview';
-    $('hint').innerHTML = '<b>MULTIPLAYER SHARED CITY · PROTOCOL 4</b> · synchronized movement, avatars, weapons, firing, and supported interiors<br>E / ENTER uses doors · R reloads · player damage, shared destruction, and The Underground remain disabled';
+    $('hint').innerHTML = '<b>MULTIPLAYER PUBLIC CITY · SERVER-AUTHORITATIVE PVP</b> · synchronized weapons, firing, damage, eliminations, and respawns<br>Residential interiors are protected safe zones · The Underground keeps its separate 6v6 rules';
     return;
   }
   $('tagline').textContent = developerCombat ? 'Developer combat test · 6 v 6' : 'The neighborhood is yours';
@@ -490,8 +495,8 @@ function startGame(mode = selectedMode, options = {}) {
   document.body.classList.toggle('free-roam', !combat); $('modebadge').textContent = combat ? 'Original Combat' : 'Free Roam · V Camera';
   if (practiceCombat) $('modebadge').textContent = 'AI Practice Match';
   $('combatExit').classList.toggle('on', practiceCombat);
-  $('state').textContent = combat ? 'TIED' : multiplayerActive ? '6-PLAYER CITY' : 'FREE ROAM'; $('timer').textContent = combat ? '10:00' : 'NO TIME LIMIT';
-  hud.score(0, 0); if (!combat) { $('state').textContent = multiplayerActive ? '6-PLAYER CITY' : 'FREE ROAM'; $('timer').textContent = 'NO TIME LIMIT'; }
+  $('state').textContent = combat ? 'TIED' : multiplayerActive ? '20-PLAYER CITY' : 'FREE ROAM'; $('timer').textContent = combat ? '10:00' : 'NO TIME LIMIT';
+  hud.score(0, 0); if (!combat) { $('state').textContent = multiplayerActive ? '20-PLAYER CITY' : 'FREE ROAM'; $('timer').textContent = 'NO TIME LIMIT'; }
   $('ov').classList.add('off'); $('lmsg').textContent = ''; $('lboard').classList.remove('on'); requestLock(); unlockAudio();
   console.log('game mode:', MATCH.mode, 'camera:', thirdCamera.enabled ? 'third-person' : 'first-person', 'bots:', bots.length);
   clearTimeout(modeCalloutTimer);
@@ -505,7 +510,7 @@ function startGame(mode = selectedMode, options = {}) {
 }
 
 function setMultiplayerStatus(text, on = true) { const el = $('mpStatus'); if (el.textContent !== text) el.textContent = text; el.classList.toggle('on', on); }
-function clearRemotePlayers() { for (const remote of remotePlayers.values()) remote.dispose(); remotePlayers.clear(); networkAudioEvents.clear(); }
+function clearRemotePlayers() { for (const remote of remotePlayers.values()) remote.dispose(); remotePlayers.clear(); multiplayerPlayerCount = 0; networkAudioEvents.clear(); }
 function applyLocalCombat(combat) {
   if (!combat) return;
   const prior = localCombat || {}, wasDead = !!player.dead;
@@ -520,21 +525,28 @@ function applyLocalCombat(combat) {
   if (Number.isSafeInteger(combat.kills)) player.kills = combat.kills;
   if (Number.isSafeInteger(combat.deaths)) player.deaths = combat.deaths;
   player.dead = combat.dead === true;
+  if (typeof combat.safeZone === 'boolean') setLocalSafeZone(combat.safeZone);
   const serverNow = Date.now() + multiplayerServerOffset;
   player.protectedUntil = time + Math.max(0, ((combat.protectionUntil || 0) - serverNow) / 1000);
   respawnAt = time + Math.max(0, ((combat.respawnAt || 0) - serverNow) / 1000);
   if (!wasDead && player.dead) { hud.hurt(1); sfx.death(); hud.callout('ELIMINATED', 'RESPAWNING…'); }
   else if (wasDead && !player.dead) { hud.hurt(0); hud.callout('BACK IN THE FIGHT', 'SPAWN SHIELD ACTIVE'); }
 }
+function setLocalSafeZone(active) {
+  if (localSafeZone === active) return;
+  localSafeZone = active;
+  if (multiplayerActive) hud.callout(active ? 'SAFE ZONE' : 'PVP ACTIVE', active ? 'PLAYER DAMAGE DISABLED' : 'PLAYER DAMAGE ENABLED');
+}
 function interiorForSpace(spaceId) {
   if (!city) return null;
   return spaceId === 'north-court' ? city.apartment : spaceId === 'east-73' ? city.house : spaceId === 'hood-cross-west' ? city.originalHouse : spaceId === 'hood-duplicate-west-5' ? city.duplicatedHouse : null;
 }
-function applyLocalContext(context, revision = localContextRevision + 1, state = null) {
+function applyLocalContext(context, revision = localContextRevision + 1, state = null, safeZone = null) {
   if (!context || revision < localContextRevision) return;
   const priorSpace = localContext?.space?.id || 'city';
   localContext = context; localContextRevision = revision;
   const spaceId = context.space?.id || 'city', target = interiorForSpace(spaceId);
+  setLocalSafeZone(typeof safeZone === 'boolean' ? safeZone : MULTIPLAYER_SPACES[spaceId]?.safeZone === true);
   for (const interior of [city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = interior === target; interior.interior.visible = interior === target; }
   setInteriorRenderLayer(!!target);
   if (state && ['x', 'y', 'z'].every((key) => Number.isFinite(state[key]))) {
@@ -551,18 +563,20 @@ function applyLocalContext(context, revision = localContextRevision + 1, state =
     $('modebadge').textContent = 'Multiplayer Underground'; $('state').textContent = 'LIVE COMBAT'; $('timer').textContent = 'NO TIME LIMIT'; $('combatExit').classList.add('on');
     hud.callout('THE UNDERGROUND', 'SERVER-AUTHORITATIVE MULTIPLAYER COMBAT');
   } else if (priorSpace === 'underground') {
-    city?.setMode('free-roam'); $('modebadge').textContent = 'Multiplayer City'; $('state').textContent = '6-PLAYER CITY'; $('timer').textContent = 'NO TIME LIMIT'; $('combatExit').classList.remove('on');
+    city?.setMode('free-roam'); $('modebadge').textContent = 'Multiplayer City'; $('state').textContent = '20-PLAYER CITY'; $('timer').textContent = 'NO TIME LIMIT'; $('combatExit').classList.remove('on');
     destructionStreamingStats = updateDestructionStreaming(player.pos, Q.lowMemory ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.mobile : DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.desktop);
     updateNeighborhoodLights(destructionStreamingStats.activeStreamingId); hud.callout('BACK IN NERDIE CITY', 'MULTIPLAYER FREE ROAM');
   }
 }
 function playNetworkShot(message) {
+  const localShot = message.playerId === multiplayer?.credentials?.playerId;
+  if (!localShot && (message.spaceId || 'city') !== (localContext.space?.id || 'city')) return;
   if (!networkAudioEvents.accept('shot', message)) return;
   const origin = new THREE.Vector3(message.origin.x, message.origin.y, message.origin.z), direction = new THREE.Vector3(message.direction.x, message.direction.y, message.direction.z).normalize();
   const remote = remotePlayers.get(message.playerId), muzzle = new THREE.Vector3();
+  if (localShot) localAvatar?.triggerFire(); else remote?.triggerFire();
   if (remote?.character?.gun) remote.character.gun.getWorldPosition(muzzle); else if (message.playerId === multiplayer?.credentials?.playerId && localAvatar?.gun) localAvatar.gun.getWorldPosition(muzzle); else muzzle.copy(origin);
   fx.flash(muzzle, message.weaponId === 'rpg' ? 0.65 : 0.38, message.playerId === multiplayer?.credentials?.playerId);
-  const localShot = message.playerId === multiplayer?.credentials?.playerId;
   const audibleHere = localShot || (message.spaceId || 'city') === (localContext.space?.id || 'city');
   if (message.weaponId === 'rpg') {
     launcher.launch(muzzle.clone().addScaledVector(direction, 0.55), direction, remote?.character || player, time, { cosmetic: true });
@@ -599,7 +613,7 @@ function configureMultiplayerClient() {
     setMultiplayerStatus(labels[detail.state] || detail.state);
     if (detail.state === 'connected' && !multiplayerActive) {
       const target = MULTIPLAYER_SPAWNS[(detail.spawnIndex || 0) % MULTIPLAYER_SPAWNS.length];
-      const spawn = multiplayerArenaQa ? new THREE.Vector3(MULTIPLAYER_SPACES.underground.entry.x, MULTIPLAYER_SPACES.underground.entry.y, MULTIPLAYER_SPACES.underground.entry.z) : freeCellNear(target.x, target.z, 4);
+      const spawn = freeCellNear(target.x, target.z, 4);
       startGame(GAME_MODES.FREE_ROAM, { multiplayer: true, spawn });
     }
     if (['connection-lost', 'session-expired', 'room-full', 'disconnected'].includes(detail.state)) clearRemotePlayers();
@@ -607,6 +621,7 @@ function configureMultiplayerClient() {
   multiplayer.addEventListener('message', ({ detail: message }) => {
     if (message.type === 'welcome') {
       multiplayerServerOffset = message.serverTime - Date.now();
+      if (Number.isInteger(message.playerCount)) multiplayerPlayerCount = message.playerCount;
       if (Number.isInteger(message.spawnIndex)) multiplayer.credentials.spawnIndex = message.spawnIndex;
       if (Number.isInteger(message.capacity)) multiplayer.credentials.capacity = message.capacity;
       if (message.appearance) applyLocalAppearance(message.appearance, { broadcast: false });
@@ -614,8 +629,8 @@ function configureMultiplayerClient() {
       if (message.combat) applyLocalCombat(message.combat);
       if (message.context) applyLocalContext(message.context, message.contextRevision, message.state);
       for (const peer of message.peers || []) { const remote = ensureRemote(peer); if (remote && peer.state) remote.push(peer.state); }
-    } else if (message.type === 'peer-joined') { ensureRemote(message.player); setMultiplayerStatus(`Connected · ${message.player.name} joined`); }
-    else if (message.type === 'peer-left') { remotePlayers.get(message.playerId)?.dispose(); remotePlayers.delete(message.playerId); setMultiplayerStatus('Connected · a player is reconnecting'); }
+    } else if (message.type === 'peer-joined') { ensureRemote(message.player); if (Number.isInteger(message.playerCount)) multiplayerPlayerCount = message.playerCount; setMultiplayerStatus(`Connected · ${message.player.name} joined`); }
+    else if (message.type === 'peer-left') { remotePlayers.get(message.playerId)?.dispose(); remotePlayers.delete(message.playerId); if (Number.isInteger(message.playerCount)) multiplayerPlayerCount = message.playerCount; setMultiplayerStatus('Connected · a player is reconnecting'); }
     else if (message.type === 'state') ensureRemote({ id: message.playerId, name: message.name })?.push(message);
     else if (message.type === 'appearance') {
       if (message.playerId === multiplayer.credentials?.playerId) applyLocalAppearance(message.appearance, { broadcast: false });
@@ -639,17 +654,18 @@ function configureMultiplayerClient() {
       if (localImpact && !localImpact.dead) { hurtK = 1; sfx.hurt(); }
       if (message.elimination) hud.killText(message.elimination.killerId === localId ? 'ELIMINATION' : message.elimination.victimId === localId ? 'YOU WERE ELIMINATED' : 'PLAYER ELIMINATED');
     }
+    else if (message.type === 'safe-zone') setLocalSafeZone(message.safeZone === true);
     else if (message.type === 'shot') playNetworkShot(message);
     else if (message.type === 'reload') playNetworkReload(message);
     else if (message.type === 'space') {
-      if (message.playerId === multiplayer.credentials?.playerId) { applyLocalContext(message.context, message.contextRevision, message.state); if (message.combat) applyLocalCombat(message.combat); }
+      if (message.playerId === multiplayer.credentials?.playerId) { applyLocalContext(message.context, message.contextRevision, message.state, message.safeZone); if (message.combat) applyLocalCombat(message.combat); }
       else { const remote = ensureRemote({ id: message.playerId, name: 'PLAYER', context: message.context, contextRevision: message.contextRevision, combat: message.combat }); remote?.setContext(message.context, message.contextRevision); remote?.setCombat(message.combat); if (remote && message.state) remote.teleport(message.state); }
     }
-    else if (message.type === 'reject') { if (message.context) applyLocalContext(message.context, message.contextRevision || localContextRevision, message.state); if (message.combat) applyLocalCombat(message.combat); }
+    else if (message.type === 'reject') { if (message.context) applyLocalContext(message.context, message.contextRevision || localContextRevision, message.state, message.safeZone); if (message.combat) applyLocalCombat(message.combat); }
     else if (message.type === 'correction' && message.state) player.pos.lerp(new THREE.Vector3(message.state.x, message.state.y, message.state.z), 0.35);
   });
   const connectWith = async (credentials, label) => {
-    multiplayer.credentials = credentials; $('mpCode').blur();
+    multiplayer.credentials = credentials; multiplayerPlayerCount = credentials.playerCount || 1; $('mpCode').blur();
     $('mpRoom').textContent = `${label} ${credentials.roomCode} · ${credentials.capacity || MULTIPLAYER_LIMITS.maxPlayers} player capacity`;
     await multiplayer.connect(credentials);
   };
@@ -875,7 +891,7 @@ const labelItems = [], dots = [];
 function loop(now) {
   const frameStarted = performanceProfile.start();
   requestAnimationFrame(loop);
-  const dt = Math.min(0.05, (now - last) / 1000); last = now; time += dt;
+  const dt = Math.min(0.1, (now - last) / 1000); last = now; time += dt;
   fpsAcc += dt; fpsN++; if (fpsAcc > 0.5) { hud.fps(Math.round(fpsN / fpsAcc)); fpsAcc = 0; fpsN = 0; }
   const look = poll();
   if (!MATCH.started || combatLobbyOpen || (!input.locked && !TOUCH && !MATCH.over && MATCH.started)) { look.dx = look.dy = 0; }
@@ -886,10 +902,7 @@ function loop(now) {
     if (!MATCH.over && isCombatMode(MATCH.mode)) { MATCH.left -= dt; hud.timer(MATCH.left); if (MATCH.left <= 0) endMatch(); }
     if (input.ab) { if (isCombatMode(MATCH.mode)) useAbility(input.ab); input.ab = 0; }
     player.update(dt, MATCH.over || combatLobbyOpen ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
-    if (multiplayerActive && localContext.space?.id === 'underground' && Number.isFinite(localCombat?.health)) {
-      // Health is authoritative in this space. Player.update retains its
-      // single-player regeneration for every other mode, so pin only the
-      // multiplayer arena representation to the last server snapshot.
+    if (multiplayerActive && Number.isFinite(localCombat?.health)) {
       player.hp = localCombat.health; player.dead = localCombat.dead === true;
     }
     performanceProfile.end('player', systemStarted); systemStarted = performanceProfile.start();
@@ -976,7 +989,7 @@ function loop(now) {
       for (const remote of remotePlayers.values()) remote.update(dt, serverNow, player.pos, localContext.space?.id || 'city');
       if (now >= multiplayerStatusAt) {
         const capacity = multiplayer.credentials?.capacity || MULTIPLAYER_LIMITS.maxPlayers;
-        setMultiplayerStatus(`Connected · ${remotePlayers.size + 1}/${capacity} · ${Math.round(multiplayer.metrics.rtt)} ms`);
+        setMultiplayerStatus(`Connected · ${multiplayerPlayerCount || remotePlayers.size + 1}/${capacity} · ${Math.round(multiplayer.metrics.rtt)} ms`);
         multiplayerStatusAt = now + 500;
       }
     }
@@ -997,7 +1010,7 @@ function loop(now) {
     if (multiplayerActive && !player.dead && multiplayer?.state === 'connected') {
       const weaponId = localEquipment.weaponId, rule = MULTIPLAYER_WEAPON_RULES[weaponId];
       const singleShot = weaponId === 'm700' || weaponId === 'rpg';
-      if (input.fire && !localEquipment.holstered && rule && now >= multiplayerNextShotAt && (!singleShot || !multiplayerTriggerHeld)) {
+      if (input.fire && !localSafeZone && !localEquipment.holstered && rule && now >= multiplayerNextShotAt && (!singleShot || !multiplayerTriggerHeld)) {
         camera.getWorldDirection(multiplayerAim); multiplayer.fireWeapon(weaponId, multiplayerAim);
         multiplayerNextShotAt = now + 60_000 / rule.rpm;
       }

@@ -1,6 +1,9 @@
 export const PROTOCOL_VERSION = 4;
+export const PUBLIC_CITY_MAX_PLAYERS = 20;
+export const UNDERGROUND_TEAM_SIZE = 6;
+export const UNDERGROUND_MAX_PLAYERS = UNDERGROUND_TEAM_SIZE * 2;
 export const MULTIPLAYER_LIMITS = Object.freeze({
-  maxPlayers: 6,
+  maxPlayers: PUBLIC_CITY_MAX_PLAYERS,
   updateHz: 15,
   interpolationMs: 120,
   interpolationMinMs: 100,
@@ -24,9 +27,16 @@ export const MULTIPLAYER_LIMITS = Object.freeze({
 // Server-assigned indices keep joins separated without moving anyone already in
 // the room. Clients resolve these targets through the normal free-cell search.
 export const MULTIPLAYER_SPAWNS = Object.freeze([
+  Object.freeze({ x: -16, z: 16 }), Object.freeze({ x: -8, z: 16 }),
+  Object.freeze({ x: 0, z: 16 }), Object.freeze({ x: 8, z: 16 }),
+  Object.freeze({ x: 16, z: 16 }), Object.freeze({ x: -16, z: 24 }),
   Object.freeze({ x: -8, z: 24 }), Object.freeze({ x: 0, z: 24 }),
-  Object.freeze({ x: 8, z: 24 }), Object.freeze({ x: -8, z: 32 }),
+  Object.freeze({ x: 8, z: 24 }), Object.freeze({ x: 16, z: 24 }),
+  Object.freeze({ x: -16, z: 32 }), Object.freeze({ x: -8, z: 32 }),
   Object.freeze({ x: 0, z: 32 }), Object.freeze({ x: 8, z: 32 }),
+  Object.freeze({ x: 16, z: 32 }), Object.freeze({ x: -16, z: 40 }),
+  Object.freeze({ x: -8, z: 40 }), Object.freeze({ x: 0, z: 40 }),
+  Object.freeze({ x: 8, z: 40 }), Object.freeze({ x: 16, z: 40 }),
 ]);
 
 export function validMovement(message) {

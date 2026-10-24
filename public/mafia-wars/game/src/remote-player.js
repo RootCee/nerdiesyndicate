@@ -59,9 +59,10 @@ export class RemotePlayer {
   setCombat(combat) {
     if (!combat) return false;
     this.combat = { ...this.combat, ...combat };
-    if (this.character) this.character.obj.visible = !this.combat.dead && this.character.obj.visible;
+    if (this.character) this.character.obj.visible = !this.combat.dead;
     return true;
   }
+  triggerFire() { this.character?.triggerFire(); }
   push(state) {
     if (!Number.isFinite(state?.serverTime) || !Number.isSafeInteger(state.seq) || state.seq <= this.lastSeq) { this.metrics.staleSnapshots++; return; }
     const arrivedAt = performance.now();
