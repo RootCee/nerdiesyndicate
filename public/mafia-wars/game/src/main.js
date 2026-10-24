@@ -671,6 +671,8 @@ function configureMultiplayerClient() {
   $('mpPublic').addEventListener('pointerdown', unlockAudio, { passive: true });
   $('mpPublic').addEventListener('click', enterPublic);
   $('mpHost').addEventListener('click', () => enter(true)); $('mpJoin').addEventListener('click', () => enter(false));
+  for (const id of ['mpPublic', 'mpHost', 'mpJoin']) { const button = $(id); button.disabled = false; button.removeAttribute('aria-disabled'); }
+  $('mpRoom').textContent = `Public matchmaking fills the active city automatically · ${MULTIPLAYER_LIMITS.maxPlayers}-player capacity`;
   const requestedRoom = qs.get('room'); if (requestedRoom) { $('mpCode').value = requestedRoom; setTimeout(() => enter(false), 0); }
 }
 function returnToCity() {

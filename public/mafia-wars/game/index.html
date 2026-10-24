@@ -156,6 +156,7 @@ body.multiplayer-dev #mpEntry { display: block; }
 #mpEntry .row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 #mpEntry button, #mpEntry input { min-height: 42px; border: 1px solid rgba(217,172,88,.6); border-radius: 6px; background: rgba(255,255,255,.07); color: #fff; font: 700 11px/1 'Barlow'; letter-spacing: .12em; text-transform: uppercase; padding: 10px 12px; }
 #mpEntry button { cursor: pointer; color: #17130c; background: var(--gold); }
+#mpEntry button:disabled { cursor: wait; opacity: .48; filter: saturate(.35); }
 #mpEntry #mpPublic { width: 100%; margin-bottom: 10px; min-height: 50px; font-size: 14px; background: linear-gradient(135deg, var(--gold-bright), var(--gold)); }
 #mpEntry input { width: 150px; text-align: center; user-select: text; -webkit-user-select: text; }
 #mpRoom { margin-top: 10px; color: #f5d58e; font: 700 11px/1.5 'Barlow'; letter-spacing: .12em; }
@@ -282,9 +283,9 @@ body.multiplayer-active #avatarToggle { display: block; }
     <div class="avatar-creator"><h3>Choose Your Character</h3><div class="avatar-presets" id="avatarPresets" role="radiogroup" aria-label="Character preset"></div><div class="avatar-status" id="avatarStatus" role="status">Four original character presets · appearance saves on this device</div></div>
     <button id="go">Enter City</button>
     <div id="mpEntry" aria-label="Six-player multiplayer development preview">
-      <button id="mpPublic" type="button">Enter Public City</button>
-      <div class="row"><button id="mpHost" type="button">Host Private Room</button><input id="mpCode" maxlength="12" placeholder="PRIVATE CODE" autocomplete="off" spellcheck="false"><button id="mpJoin" type="button">Join Private</button></div>
-      <div id="mpRoom">Public matchmaking fills the active city automatically · 6-player capacity</div>
+      <button id="mpPublic" type="button" disabled aria-disabled="true">Enter Public City</button>
+      <div class="row"><button id="mpHost" type="button" disabled aria-disabled="true">Host Private Room</button><input id="mpCode" maxlength="12" placeholder="PRIVATE CODE" autocomplete="off" spellcheck="false"><button id="mpJoin" type="button" disabled aria-disabled="true">Join Private</button></div>
+      <div id="mpRoom">Finishing city setup… multiplayer activates when ready.</div>
     </div>
     <div class="hint" id="ladder" role="status">LEADERBOARD · COMING SOON</div>
     <div class="hint" id="hint"><b>FREE ROAM</b> · expanded city · no timer · no forced fights<br>WASD move · mouse look · Shift sprint · Space jump · E enter buildings · V camera</div>

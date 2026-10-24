@@ -13,7 +13,7 @@ const [manifestText, main, expansion, markings, layout, endpoint] = await Promis
 ]);
 
 const manifest = JSON.parse(manifestText);
-assert.equal(manifest.sourceCommit, '9643362c7b0c8512d4a1c81b59a76cab37a1832b');
+assert.equal(manifest.sourceCommit, '8b01caf6e13a32dddf3d47bc2db5f949d4da06b2');
 assert.equal(manifest.sourceBranch, 'codex/nerdie-city-environment-road-paint');
 assert.match(main, /Q\.roadPaint = qs\.get\('roadPaint'\) !== '0'/);
 assert.match(expansion, /buildCityRoadMarkings\(infrastructure, plan\.roads\)/);
