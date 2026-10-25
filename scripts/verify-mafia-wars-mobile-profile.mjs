@@ -76,10 +76,10 @@ assert.equal((index.match(/id="tFire"/g) || []).length, 1);
 assert.doesNotMatch(index, /tFire2/);
 assert.match(index, /@media \(pointer: coarse\) and \(orientation: portrait\)/);
 assert.match(index, /id="mpDiagnosticsToggle"[^>]*hidden/);
-assert.match(index, /src="src\/main\.js\?build=m6\.7b2-dev1"/);
+assert.match(index, /src="src\/main\.js\?build=m6\.8a-dev1"/);
 assert.match(main, /multiplayer-endpoint\.js\?build=m6\.3-cross-device-diagnostics-rc1/);
-assert.match(main, /wallet-bridge\.js\?build=m6\.7b2-dev1/);
-assert.match(main, /const GAME_BUILD_ID = 'm6\.7b2-dev1'/);
+assert.match(main, /wallet-bridge\.js\?build=m6\.8a-dev1/);
+assert.match(main, /const GAME_BUILD_ID = 'm6\.8a-dev1'/);
 // M6.5 Underground 6v6: results panel and server match state handling.
 assert.match(index, /id="ugResults"[^>]*role="dialog"/);
 assert.match(index, /id="ugStay"/); assert.match(index, /id="ugLeave"/);
@@ -127,7 +127,7 @@ assert.match(walletPage, /src=\{GAME_URL\}/);
 assert.match(walletPage, /setWalletOpen\(true\)/);
 assert.match(walletPage, /formatTokenAmount\(tokenBalance\.data, 18\)/);
 assert.match(endpoint, /nerdie-city-multiplayer-v4\.buddieroots\.workers\.dev/);
-assert.match(endpoint, /AVATAR_PREVIEW_MULTIPLAYER_SERVICE = 'https:\/\/nerdie-city-m6-(?:3|7|7b|7b2)-preview\.buddieroots\.workers\.dev'/);
+assert.match(endpoint, /AVATAR_PREVIEW_MULTIPLAYER_SERVICE = 'https:\/\/nerdie-city-m6-(?:3|7|7b|7b2|8a)-preview\.buddieroots\.workers\.dev'/);
 assert.match(endpoint, /override && \(isLocal \|\| isPrivateLan\)/);
 
 const { CITY_BOUNDS, createCityPlan, chunkVisible } = await import(
@@ -163,5 +163,11 @@ assert.deepEqual(mobileTransition, [
 const southNearestBuildingEdge = Math.max(...mobile.districts[1].buildings.map((building) => building.z + building.depth / 2));
 assert.ok(-24 - southNearestBuildingEdge > 40, 'south geometry must stream in well before the player can reach it');
 assert.match(cityExpansion, /chunk\.group\.visible = visible/);
+
+// M6.8A: the structure registry ships (pure, browser-safe) and network tracers stop at the first wall.
+const structures = await readFile(path.join(root, 'city-structures.js'), 'utf8');
+assert.doesNotMatch(structures, /from ['"](?:three|\/mafia-wars\/game\/vendor)/);
+assert.match(structures, /export const CITY_STRUCTURES = buildCityStructures\(\)/);
+assert.match(main, /raycastWorld\(origin, networkTracerRay\.copy\(direction\)\.multiplyScalar\(65\), 1, true, networkTracerHit\)/);
 
 console.log('Mafia Wars mobile, city, M6.3 network diagnostics, and M6.4 wallet bridge verified');

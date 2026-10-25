@@ -17,7 +17,7 @@ import { PROTOCOL_VERSION } from './multiplayer-protocol.js';
 import { NPC_BEHAVIOR, NPC_BEHAVIOR_RULES, greetingFor, personalityOf, reactionTo, severityOf } from './npc-behavior.js';
 import { NPC_COMBAT_RULES, assessThreat, strikeProfile, weaponClass } from './npc-combat.js';
 import { isInsideSafeZone } from './multiplayer-spaces.js';
-import { publicCityShotOccluded, targetDistance } from './multiplayer-combat.js';
+import { cityShotOccluded, publicCityShotOccluded, targetDistance } from './multiplayer-combat.js';
 
 export const NPC_SIM_RULES = Object.freeze({
   tickMs: 200,
@@ -43,8 +43,10 @@ const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 export class CityNpcSimulation {
   // reactions: M6.7B1 awareness and reactions (off = exactly M6.7A behaviour).
   // combat: M6.7B2 self-defense (requires reactions).
-  constructor({ seed = 'room', maxActive = NPC_POPULATION.startActive, population = NPC_POPULATION.max, plan = createCityPlan(), rules = NPC_SIM_RULES, reactions = false, combat = false } = {}) {
+  // structureOcclusion: M6.8A, shots at residents use the same city structures as player shots.
+  constructor({ seed = 'room', maxActive = NPC_POPULATION.startActive, population = NPC_POPULATION.max, plan = createCityPlan(), rules = NPC_SIM_RULES, reactions = false, combat = false, structureOcclusion = false } = {}) {
     this.reactions = reactions === true; this.combat = this.reactions && combat === true; this.panicQueue = []; this.strikes = [];
+    this.structureOcclusion = structureOcclusion === true;
     this.rules = rules; this.plan = plan; this.random = seededRandom(`sim:${seed}`);
     this.maxActive = Math.max(0, Math.min(NPC_POPULATION.maxActive, maxActive | 0));
     this.identities = seedPopulation(seed, population);
@@ -227,7 +229,9 @@ export class CityNpcSimulation {
   }
 
   // Nearest resident a shot would hit before `limit` metres. Interior walls
-  // (publicCityShotOccluded) and city buildings, houses, and fences block it.
+  // (publicCityShotOccluded) and city buildings, houses, and fences block it;
+  // with structureOcclusion, the 3D city structures block it instead, exactly
+  // as they block shots at players.
   shotHit(origin, direction, limit) {
     if (!this.combat) return null;
     this.#ensureGraph();
@@ -235,7 +239,8 @@ export class CityNpcSimulation {
     for (const r of this.residents) {
       if (!r.active || r.behavior === NPC_BEHAVIOR.defeated || isInsideSafeZone({ x: r.x, y: 0, z: r.z })) continue;
       const d = targetDistance(origin, direction, { x: r.x, y: 0, z: r.z });
-      if (d === null || d > limit || publicCityShotOccluded(origin, direction, d) || !segmentClear(origin, r, this.shotBlockers, { pad: 0 })) continue;
+      if (d === null || d > limit) continue;
+      if (this.structureOcclusion ? cityShotOccluded(origin, direction, d) : publicCityShotOccluded(origin, direction, d) || !segmentClear(origin, r, this.shotBlockers, { pad: 0 })) continue;
       if (!best || d < best.distance) best = { index: r.index, distance: d };
     }
     return best;

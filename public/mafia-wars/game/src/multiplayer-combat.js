@@ -1,6 +1,7 @@
 import { isMultiplayerWeapon } from './multiplayer-equipment.js';
 import { MULTIPLAYER_SPAWNS } from './multiplayer-protocol.js';
 import { isInsideSafeZone, isProtectedSpace, MULTIPLAYER_SAFE_ZONES } from './multiplayer-spaces.js';
+import { cityStructureOccluded } from './city-structures.js';
 
 export const COMBAT_SCHEMA_VERSION = 1;
 export const MULTIPLAYER_WEAPON_RULES = Object.freeze({
@@ -195,6 +196,9 @@ export function publicCityShotOccluded(origin, direction, distance) {
     return hit !== null && hit > 0.03 && hit < distance - 0.05;
   });
 }
+
+// M6.8A: interior shells plus the city's outdoor structures (city-structures.js).
+export const cityShotOccluded = (origin, direction, distance) => publicCityShotOccluded(origin, direction, distance) || cityStructureOccluded(origin, direction, distance);
 
 function segmentOccluded(start, end, occluded) {
   const dx = end.x - start.x, dy = end.y - start.y, dz = end.z - start.z;

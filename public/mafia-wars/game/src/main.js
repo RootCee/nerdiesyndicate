@@ -50,9 +50,9 @@ import { NpcRenderer } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.7b2-dev1';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.8a-dev1';
 
-const GAME_BUILD_ID = 'm6.7b2-dev1';
+const GAME_BUILD_ID = 'm6.8a-dev1';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -774,6 +774,7 @@ function applyLocalContext(context, revision = localContextRevision + 1, state =
   }
   renderMultiplayerDiagnostics();
 }
+const networkTracerRay = new THREE.Vector3(), networkTracerHit = { n: new THREE.Vector3(), t: 1 };
 function playNetworkShot(message) {
   const localShot = message.playerId === multiplayer?.credentials?.playerId;
   if (!localShot && (message.spaceId || 'city') !== (localContext.space?.id || 'city')) return;
@@ -788,7 +789,11 @@ function playNetworkShot(message) {
     launcher.launch(muzzle.clone().addScaledVector(direction, 0.55), direction, remote?.character || player, time, { cosmetic: true });
     if (audibleHere) { if (localShot) sfx.weaponShot('rpg'); else sfx.weaponShotAt('rpg', origin); }
   } else {
-    fx.tracer(muzzle.clone().addScaledVector(direction, 0.5), muzzle.clone().addScaledVector(direction, 65), 0xffd9a0, 1);
+    // M6.8A: the tracer stops at the first wall, as the server's shot does.
+    raycastWorld(origin, networkTracerRay.copy(direction).multiplyScalar(65), 1, true, networkTracerHit);
+    const end = muzzle.clone().addScaledVector(direction, Math.max(0.6, 65 * networkTracerHit.t));
+    fx.tracer(muzzle.clone().addScaledVector(direction, 0.5), end, 0xffd9a0, 1);
+    if (networkTracerHit.t < 1) fx.impact(end, networkTracerHit.n);
     if (audibleHere) { if (localShot) sfx.weaponShot(message.weaponId); else sfx.weaponShotAt(message.weaponId, origin); }
   }
 }
