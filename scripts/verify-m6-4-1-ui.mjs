@@ -7,7 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { chromium, devices } from 'file:///Users/nerdieblaq/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs';
 
 const baseUrl = process.env.M6_4_1_URL || 'http://127.0.0.1:5173';
-const outputDirectory = fileURLToPath(new URL('../artifacts/m6-4-1/', import.meta.url));
+const outputDirectory = fileURLToPath(new URL('../artifacts/m6-4-2/', import.meta.url));
 const multiplayerRoot = process.env.M6_4_1_MULTIPLAYER_ROOT
   || fileURLToPath(new URL('../../source-m6-4-1/multiplayer/', import.meta.url));
 const multiplayerUrl = 'http://127.0.0.1:8787';
@@ -106,8 +106,7 @@ async function verifyViewport({ name, width, height, mobile, captureWallet = fal
       }, location.origin);
     }, { address: mockAddress, formatted: mockBalance });
     await gameFrame.waitForFunction(
-      (balance) => document.getElementById('walletBalance')?.textContent === `${balance} NERDIE`,
-      mockBalance,
+      () => document.getElementById('walletBalance')?.textContent === '$12,345.68',
     );
 
     const controlAudit = await gameFrame.evaluate(() => {
@@ -156,6 +155,7 @@ async function verifyViewport({ name, width, height, mobile, captureWallet = fal
       const walletButton = document.getElementById('cityBankButton');
       const walletHud = document.getElementById('walletHud');
       const walletBalance = document.getElementById('walletBalance');
+      const walletCashLabel = document.getElementById('walletCashLabel');
       const walletBalanceStyle = getComputedStyle(walletBalance);
       const walletBalanceRect = walletBalance.getBoundingClientRect();
       const walletHudRect = walletHud.getBoundingClientRect();
@@ -186,6 +186,7 @@ async function verifyViewport({ name, width, height, mobile, captureWallet = fal
             && walletBalanceRect.right <= innerWidth
             && walletBalance.scrollWidth <= walletBalance.clientWidth + 1,
         },
+        walletCashLabel: walletCashLabel?.textContent,
         characterButton: {
           visible: isVisible(characterButton),
           rect: rectObject(characterRect),
@@ -209,7 +210,8 @@ async function verifyViewport({ name, width, height, mobile, captureWallet = fal
     assert.match(controlAudit.walletButton.label || '', /My Wallet/i, `${name}: My Wallet has an accessible label`);
     assert.ok(controlAudit.walletButton.rect.height >= 44, `${name}: My Wallet meets the 44px touch target`);
     assert.ok(controlAudit.walletBalance.readable, `${name}: NERDIE balance is visible and readable`);
-    assert.equal(controlAudit.walletBalance.text, `${mockBalance} NERDIE`, `${name}: game HUD shows the formatted balance`);
+    assert.equal(controlAudit.walletCashLabel, 'NERDIE CASH', `${name}: compact HUD identifies the in-game currency`);
+    assert.equal(controlAudit.walletBalance.text, '$12,345.68', `${name}: game HUD safely rounds to two cash decimals`);
     assert.equal(controlAudit.networkInfoVisible, false, `${name}: Network Info is hidden in player mode`);
     assert.equal(controlAudit.scrollWidth, controlAudit.viewportWidth, `${name}: no horizontal overflow`);
     assert.deepEqual(controlAudit.overlaps, [], `${name}: interactive HUD controls do not overlap`);

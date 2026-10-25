@@ -3,6 +3,17 @@ export const WALLET_BRIDGE_VERSION = 1;
 
 const ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
 
+export function formatNerdieCash(value) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.replaceAll(',', '').trim();
+  if (!/^\d+(?:\.\d*)?$/.test(normalized)) return null;
+  const [whole, fraction = ''] = normalized.split('.');
+  let cents = BigInt(whole) * 100n + BigInt((fraction + '00').slice(0, 2));
+  if ((fraction[2] || '0') >= '5') cents += 1n;
+  const cashWhole = (cents / 100n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `$${cashWhole}.${String(cents % 100n).padStart(2, '0')}`;
+}
+
 export function isWalletStateMessage(value) {
   if (!value || typeof value !== 'object') return false;
   const message = value;

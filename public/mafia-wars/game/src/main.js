@@ -41,9 +41,9 @@ import { MULTIPLAYER_WEAPON_RULES } from './multiplayer-combat.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { setupCityWalletBridge } from './wallet-bridge.js?build=m6.4.1-wallet-mobile-preview-rc1';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.4.2-final-rc1';
 
-const GAME_BUILD_ID = 'm6.4.1-wallet-mobile-preview-rc1';
+const GAME_BUILD_ID = 'm6.4.2-final-rc1';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -97,11 +97,11 @@ const walletBridge = setupCityWalletBridge({
     if (!button || !walletHud || !balance) return;
     button.textContent = 'MY WALLET';
     walletHud.classList.toggle('connected', state.connected);
-    if (!state.connected) balance.textContent = 'GUEST · WALLET OFF';
-    else if (state.chainId !== 8453) balance.textContent = 'WRONG NETWORK';
-    else if (state.nerdieBalance?.status === 'ready') balance.textContent = `${state.nerdieBalance.formatted} NERDIE`;
-    else if (state.nerdieBalance?.status === 'loading') balance.textContent = 'NERDIE · LOADING';
-    else balance.textContent = 'NERDIE · UNAVAILABLE';
+    if (!state.connected) balance.textContent = '$—';
+    else if (state.chainId !== 8453) balance.textContent = '$—';
+    else if (state.nerdieBalance?.status === 'ready') balance.textContent = formatNerdieCash(state.nerdieBalance.formatted) || '$—';
+    else if (state.nerdieBalance?.status === 'loading') balance.textContent = '$…';
+    else balance.textContent = '$—';
     button.title = state.connected
       ? `Connected ${state.address.slice(0, 6)}…${state.address.slice(-4)} · chain ${state.chainId ?? 'unknown'}`
       : 'Open My Wallet';
