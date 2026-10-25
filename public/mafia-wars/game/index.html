@@ -185,6 +185,52 @@ body.weapon-selecting #interactPrompt, body.weapon-selecting #tInteract, body.we
   #weaponTray { right: calc(12px + var(--sar)); bottom: calc(152px + var(--sab)); grid-template-columns: repeat(2, auto); }
   #tInteract { right: calc(92px + var(--sar)); bottom: calc(154px + var(--sab)); width: 116px; height: 44px; border-radius: 22px; }
 }
+/* M6.6 full-screen city map, waypoint chip, and MAP button */
+#mapwrap { pointer-events: auto; cursor: pointer; }
+#waypointChip { position: fixed; z-index: 11; top: calc(106px + var(--sat)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; max-width: min(70vw, 360px); padding: 6px 12px; border: 1px solid rgba(217,172,88,.7); border-radius: 999px; background: rgba(10,12,16,.82); color: var(--gold-bright); font: 600 12px/1 'Barlow'; letter-spacing: .1em; text-transform: uppercase; pointer-events: none; }
+#waypointChip[hidden] { display: none; }
+#waypointChip .arrow { width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 13px solid var(--gold-bright); flex: none; transition: transform .12s linear; }
+#waypointChip .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #f4efe5; }
+#waypointChip .dist { flex: none; }
+#waypointChip.note .arrow { opacity: .35; }
+#cityMap { position: fixed; inset: 0; z-index: 14; background: #0b0d10; color: #f4efe5; touch-action: none; outline: none; }
+#cityMap[hidden] { display: none; }
+#cityMapCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+#cityMap .bar { position: absolute; left: calc(12px + var(--sal)); right: calc(12px + var(--sar)); top: calc(10px + var(--sat)); display: flex; align-items: center; gap: 10px; pointer-events: none; }
+#cityMap h2 { margin: 0; font: 700 18px/1 'Barlow'; letter-spacing: .22em; color: var(--gold-bright); text-shadow: 0 2px 4px #000; }
+#cityMapMode { font: 600 11px/1 'Barlow'; letter-spacing: .16em; color: #c9d4e0; text-shadow: 0 1px 3px #000; }
+#cityMap button { min-height: 44px; min-width: 44px; border: 1px solid rgba(217,172,88,.7); border-radius: 8px; background: rgba(10,12,16,.86); color: var(--gold-bright); font: 600 12px/1 'Barlow'; letter-spacing: .12em; pointer-events: auto; touch-action: manipulation; cursor: pointer; }
+#cityMapClose { margin-left: auto; padding: 0 14px; }
+#cityMap kbd { font: inherit; opacity: .7; margin-left: 6px; }
+#cityMap .zoom { position: absolute; right: calc(12px + var(--sar)); top: calc(66px + var(--sat)); display: grid; gap: 8px; }
+#cityMap .zoom button { font-size: 20px; }
+#cityMapPlaces { position: absolute; left: calc(12px + var(--sal)); right: calc(70px + var(--sar)); top: calc(62px + var(--sat)); display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+#cityMapPlaces[hidden] { display: none; }
+#cityMapPlaces button { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; font-size: 11px; color: #f4efe5; border-color: rgba(255,255,255,.22); }
+#cityMapPlaces button::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: var(--dot); }
+#cityMapCard { position: absolute; left: 50%; bottom: calc(14px + var(--sab)); transform: translateX(-50%); width: min(440px, calc(100vw - 24px - var(--sal) - var(--sar))); padding: 12px 14px; border: 1px solid rgba(217,172,88,.6); border-radius: 10px; background: rgba(10,12,16,.94); }
+#cityMapCard[hidden] { display: none; }
+#cityMapCard h3 { margin: 0; font: 700 17px/1.1 'Barlow'; letter-spacing: .06em; color: var(--gold-bright); }
+#cityMapCardMeta { margin: 4px 0 0; font: 600 10px/1.3 'Barlow'; letter-spacing: .14em; color: #c9d4e0; }
+#cityMapCardInfo { margin: 6px 0 0; font: 500 13px/1.35 'Barlow'; color: #dfe7f0; }
+#cityMapCard .actions { display: flex; gap: 8px; margin-top: 10px; }
+#cityMapCard .actions button { flex: 1; }
+#cityMapCard .actions button:disabled { opacity: .45; cursor: not-allowed; }
+#cityMapCard .actions button.secondary { color: #dfe7f0; border-color: rgba(255,255,255,.3); background: transparent; }
+#cityMapCard .actions button[hidden] { display: none; }
+#cityMapNotice { position: absolute; left: 50%; bottom: calc(150px + var(--sab)); transform: translateX(-50%); max-width: min(460px, calc(100vw - 24px)); padding: 8px 12px; border-radius: 8px; background: rgba(10,12,16,.9); border: 1px solid rgba(255,255,255,.18); font: 600 12px/1.35 'Barlow'; letter-spacing: .04em; text-align: center; pointer-events: none; }
+#cityMapNotice[hidden] { display: none; }
+#cityMap .legend { position: absolute; left: calc(12px + var(--sal)); bottom: calc(14px + var(--sab)); display: grid; gap: 4px; padding: 8px 10px; border-radius: 8px; background: rgba(10,12,16,.78); font: 600 10px/1.2 'Barlow'; letter-spacing: .1em; pointer-events: none; }
+#cityMap .legend span::before { content: ''; display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 50%; background: var(--dot); vertical-align: -1px; }
+@media (max-width: 900px) { #cityMap .legend { display: none; } }
+body.map-open #touch, body.map-open #hud { visibility: hidden; }
+#tMap { left: calc(176px + var(--sal)); top: calc(26px + var(--sat)); width: 48px; height: 48px; font-size: 10px; border-color: rgba(217,172,88,.7); }
+@media (pointer: coarse) and (orientation: landscape) {
+  #tMap { left: calc(134px + var(--sal)); top: calc(24px + var(--sat)); }
+  #cityMapCard { left: auto; right: calc(70px + var(--sar)); transform: none; width: min(380px, 52vw); }
+  #cityMapNotice { bottom: calc(14px + var(--sab)); left: calc(12px + var(--sal)); transform: none; max-width: 40vw; }
+}
+@media (pointer: coarse) and (orientation: portrait) { #tMap { left: calc(110px + var(--sal)); top: calc(60px + var(--sat)); } }
 /* The Underground lobby reuses the running game instead of creating another scene or render loop. */
 #combatLobby { position: fixed; inset: 0; z-index: 7; display: none; place-items: center; padding: 20px; background: rgba(3,4,5,.82); backdrop-filter: blur(8px); }
 #combatLobby.on { display: grid; }
@@ -278,6 +324,7 @@ body.multiplayer-active #avatarToggle { display: block; }
   <div id="modebadge">Original Combat</div>
   <button id="cityBankButton" type="button" aria-label="Open My Wallet without leaving the game">MY WALLET</button>
   <div id="walletHud" role="status" aria-live="polite"><span id="walletCashLabel">NERDIE CASH</span><span id="walletBalance">$—</span></div>
+  <div id="waypointChip" hidden><i class="arrow" aria-hidden="true"></i><span class="name"></span><b class="dist"></b></div>
   <div id="mapwrap"><canvas id="map" width="300" height="300"></canvas></div>
   <div id="labels"></div>
   <div id="score">
@@ -314,6 +361,15 @@ body.multiplayer-active #avatarToggle { display: block; }
     <div class="actions"><button id="ugStay" type="button">Play Next Match</button><button id="ugLeave" class="secondary" type="button">Return to City</button></div>
   </div>
 </section>
+<section id="cityMap" role="dialog" aria-modal="true" aria-labelledby="cityMapTitle" tabindex="-1" hidden>
+  <canvas id="cityMapCanvas" aria-label="City map. Drag to pan, pinch or scroll to zoom, tap a place to select it."></canvas>
+  <div class="bar"><h2 id="cityMapTitle">NERDIE CITY</h2><span id="cityMapMode">NORTH UP</span><button id="cityMapClose" type="button">CLOSE<kbd>M</kbd></button></div>
+  <nav id="cityMapPlaces" aria-label="Places"></nav>
+  <div class="zoom"><button id="cityMapZoomIn" type="button" aria-label="Zoom in">+</button><button id="cityMapZoomOut" type="button" aria-label="Zoom out">&minus;</button><button id="cityMapCenter" type="button" aria-label="Centre on me">&#9678;</button></div>
+  <div class="legend" aria-hidden="true"><span style="--dot:#f2d28b">BANK</span><span style="--dot:#ff6b5a">THE UNDERGROUND</span><span style="--dot:#d6a35a">APARTMENTS</span><span style="--dot:#e8e1d2">HOUSES</span><span style="--dot:#9aa6b2">BUSINESSES &middot; COMING SOON</span><span style="--dot:#4aa8ff">TEAMMATES</span></div>
+  <div id="cityMapNotice" role="status" hidden></div>
+  <section id="cityMapCard" hidden aria-live="polite"><h3 id="cityMapCardName"></h3><p id="cityMapCardMeta"></p><p id="cityMapCardInfo"></p><div class="actions"><button id="cityMapRoute" type="button">SET WAYPOINT</button><button id="cityMapClear" class="secondary" type="button" hidden>CLEAR WAYPOINT</button></div></section>
+</section>
 <button id="mpDiagnosticsToggle" type="button" aria-expanded="false" aria-controls="mpDiagnostics" hidden>NETWORK INFO</button>
 <section id="mpDiagnostics" hidden role="region" aria-labelledby="mpDiagnosticsTitle">
   <button id="mpDiagnosticsClose" type="button" aria-label="Close network diagnostics">×</button>
@@ -341,6 +397,7 @@ body.multiplayer-active #avatarToggle { display: block; }
   <button class="tb" id="tReload" type="button">RELOAD</button>
   <button class="tb" id="tSwap" type="button">SWAP</button>
   <button class="tb" id="tCam" type="button" aria-label="Switch first or third person camera">CAM</button>
+  <button class="tb" id="tMap" type="button" aria-label="Open city map">MAP</button>
   <div id="weaponTray" role="group" aria-label="Select weapon">
     <button type="button" data-weapon="ak">AK-47</button><button type="button" data-weapon="mac10">MAC-10</button><button type="button" data-weapon="mp5">MP5</button><button type="button" data-weapon="m700">M700</button><button type="button" data-weapon="rpg">RPG-7</button><button type="button" data-weapon="holster">HOLSTER</button><button type="button" data-weapon="unarmed">UNARMED</button>
   </div>
@@ -377,11 +434,11 @@ body.multiplayer-active #avatarToggle { display: block; }
       <div id="mpRoom">Finishing city setup… multiplayer activates when ready.</div>
     </div>
     <div class="hint" id="ladder" role="status">LEADERBOARD · COMING SOON</div>
-    <div class="hint" id="hint"><b>FREE ROAM</b> · expanded city · no timer · no forced fights<br>WASD move · mouse look · Shift sprint · Space jump · E enter buildings · V camera</div>
+    <div class="hint" id="hint"><b>FREE ROAM</b> · expanded city · no timer · no forced fights<br>WASD move · mouse look · Shift sprint · Space jump · E enter buildings · V camera · M map · Shift+M mute</div>
   </div>
 </div>
 
 <script src="src/startup-fallback.js"></script>
-<script type="module" src="src/main.js?build=m6.5-dev2"></script>
+<script type="module" src="src/main.js?build=m6.6-dev1"></script>
 </body>
 </html>

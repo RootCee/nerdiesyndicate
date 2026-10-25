@@ -1,7 +1,7 @@
 // Keyboard + mouse (pointer lock) on desktop, twin-stick touch on phones.
 export const TOUCH = matchMedia('(pointer: coarse)').matches && 'ontouchstart' in window;
 export const keys = {};
-export const input = { yaw: 0, pitch: 0, mx: 0, my: 0, fire: false, ads: false, jump: false, reload: false, interact: false, sprint: false, crouch: false, ab: 0, locked: false, moveX: 0, moveY: 0, swap: '', camera: false };
+export const input = { yaw: 0, pitch: 0, mx: 0, my: 0, fire: false, ads: false, jump: false, reload: false, interact: false, sprint: false, crouch: false, ab: 0, locked: false, moveX: 0, moveY: 0, swap: '', camera: false, map: false };
 let canvas, onFirst = null;
 function tryPointerLock() {
   try {
@@ -33,7 +33,7 @@ export function poll() {
 }
 function initTouch() {
   document.getElementById('touch').classList.add('on');
-  const hint = document.getElementById('hint'); if (hint) hint.innerHTML = '<b>FREE ROAM</b> · left thumb moves · right thumb looks<br>Tap ENTER at marked doors · JUMP and AIM are on the right · CAM switches view';
+  const hint = document.getElementById('hint'); if (hint) hint.innerHTML = '<b>FREE ROAM</b> · left thumb moves · right thumb looks<br>Tap ENTER at marked doors · JUMP and AIM are on the right · CAM switches view · MAP or the minimap opens the city map';
   const stick = { id: null, x0: 0, y0: 0 }, look = { id: null, x: 0, y: 0 };
   const sEl = document.getElementById('stick'), knob = document.getElementById('knob');
   canvas.addEventListener('touchstart', (e) => {
@@ -72,6 +72,7 @@ function initTouch() {
   btn('tSwap', () => { const tray = document.getElementById('weaponTray'); const open = tray?.classList.toggle('on'); document.body.classList.toggle('weapon-selecting', !!open); });
   btn('tInteract', () => { input.interact = true; });
   btn('tCam', () => { input.camera = true; });
+  btn('tMap', () => { input.map = true; });
   for (const el of document.querySelectorAll('#weaponTray [data-weapon]')) {
     el.addEventListener('touchstart', (e) => {
       onFirst?.(); input.swap = el.dataset.weapon; document.getElementById('weaponTray')?.classList.remove('on'); document.body.classList.remove('weapon-selecting'); e.preventDefault();

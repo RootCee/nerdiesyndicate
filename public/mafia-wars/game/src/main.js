@@ -7,7 +7,7 @@ import { UnrealBloomPass } from '/mafia-wars/game/vendor/three/jsm/postprocessin
 import { ShaderPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/OutputPass.js';
 import { manager, loadHDR, loadGLB, setAniso, setLowMemoryAssets } from './assets.js';
-import { buildWorld, colliders, collisionBroadphaseStats, lamps, windowsLit, resolve, MAP, groundAt, lineClear, raycastWorld } from './world.js';
+import { buildWorld, colliders, collisionBroadphaseStats, lamps, windowsLit, resolve, MAP, groundAt, lineClear, raycastWorld, mapRects } from './world.js';
 import { createNaturalSkyTexture } from './natural-sky.js';
 import { Player } from './player.js';
 import { FX, Weapon, GUN_SPECS } from './weapon.js';
@@ -39,12 +39,18 @@ import { AVATAR_PRESETS, normalizeAvatarAppearance, sameAvatarAppearance } from 
 import { DEFAULT_EQUIPMENT, normalizeEquipment } from './multiplayer-equipment.js';
 import { MULTIPLAYER_SHOT_EYE_HEIGHT, MULTIPLAYER_WEAPON_RULES } from './multiplayer-combat.js';
 import { crosshairShotDirection, rayCapsuleDistance } from './aim.js';
+import { createCityMap } from './city-map.js';
+import { relativeBearing } from './city-map-view.js';
+import { buildNavGraph, findRoute, routeProgress } from './city-navigation.js';
+import { cityPois } from './city-pois.js';
+import { UNDERGROUND_HOUSES } from './underground-match.js';
+import { UNDERGROUND_SPAWNS } from './multiplayer-combat.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.5-dev2';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.6-dev1';
 
-const GAME_BUILD_ID = 'm6.5-dev2';
+const GAME_BUILD_ID = 'm6.6-dev1';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -182,6 +188,15 @@ const player = new Player(camera);
 const thirdCamera = new ThirdPersonCamera(camera, player);
 const CAMERA_STORAGE_KEY = 'nerdie-city-mafia-wars.camera.v1';
 let preferThirdPerson = (() => { try { return localStorage.getItem(CAMERA_STORAGE_KEY) !== 'first'; } catch { return true; } })();
+// M6.6 city map and waypoints. Client-only: nothing here is sent to the
+// multiplayer service, and markers come from the same list as the minimap.
+let cityMap = null, cityNav = null, cityPoiList = [], waypoint = null, waypointRoute = null, waypointNote = '', waypointCheckAt = 0;
+let cityInteriorName = '', cityInteriorId = '', mapDots = [], mapSnitch = false;
+const waypointBeacon = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.45, 0.45, 26, 16, 1, true),
+  new THREE.MeshBasicMaterial({ color: 0xf2d28b, transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }),
+);
+waypointBeacon.name = 'waypoint-beacon'; waypointBeacon.visible = false; waypointBeacon.renderOrder = 5; scene.add(waypointBeacon);
 const fx = new FX(scene);
 const weapon = new Weapon(scene, camera, player, fx);
 // the arsenal: AK (also the bots' third-person gun), MAC-10, MP5, M700 sniper, plus the RPG-7 launcher
@@ -503,7 +518,7 @@ function configureEntryUi() {
   $('go').textContent = developerCombat ? 'Launch Developer Combat' : 'Enter City';
   $('hint').innerHTML = developerCombat
     ? '<b>DEVELOPER MODE</b> · original 6v6 · 10 minutes · first to 100'
-    : '<b>FREE ROAM</b> · expanded city · no timer · no forced fights<br>WASD move · mouse look · Shift sprint · Space jump · E enter buildings · V camera';
+    : '<b>FREE ROAM</b> · expanded city · no timer · no forced fights<br>WASD move · mouse look · Shift sprint · Space jump · E enter buildings · V camera · M map · Shift+M mute';
 }
 function setCameraMode(third, announce = false) {
   thirdCamera.setEnabled(third, true);
@@ -516,6 +531,57 @@ function toggleCamera() {
   preferThirdPerson = !thirdCamera.enabled;
   try { localStorage.setItem(CAMERA_STORAGE_KEY, preferThirdPerson ? 'third' : 'first'); } catch {}
   setCameraMode(preferThirdPerson, true);
+}
+// M6.6: the arena map (Underground or practice) shows layout and teammates
+// only; the city map shows places, routes, and waypoints.
+const ARENA_MAP = Object.freeze({ bounds: MULTIPLAYER_SPACES.underground.bounds, houses: UNDERGROUND_HOUSES, spawns: UNDERGROUND_SPAWNS, exit: MULTIPLAYER_SPACES.underground.exit });
+// Built on first use (~70 ms on a Mac) rather than during loading.
+const navGraph = () => (cityNav ||= buildNavGraph(city.plan));
+const mapMode = () => (inLocalUnderground() || practiceCombat || isCombatMode(MATCH.mode) ? 'arena' : 'city');
+function mapState() {
+  const mode = mapMode();
+  return { mode, player: { x: player.pos.x, z: player.pos.z, yaw: player.yaw }, dots: mapDots, snitch: mapSnitch, route: mode === 'city' ? waypointRoute : null, waypoint: mode === 'city' ? waypoint : null, indoors: !!cityInteriorName };
+}
+function setCityMap(open) {
+  if (!cityMap || open === cityMap.isOpen) return;
+  if (open) {
+    if (!MATCH.started || combatLobbyOpen) return;
+    input.fire = false; input.ads = false; input.moveX = 0; input.moveY = 0;
+    try { document.exitPointerLock?.(); } catch {}
+    document.body.classList.add('map-open'); cityMap.open(mapState());
+  } else {
+    cityMap.close(); document.body.classList.remove('map-open');
+    if (!TOUCH && MATCH.started && !MATCH.over) requestLock();
+  }
+}
+function setWaypoint(target, route) {
+  waypoint = target; waypointRoute = route; waypointNote = ''; waypointCheckAt = 0;
+  hud.callout('WAYPOINT SET', target.name.toUpperCase());
+}
+function clearWaypoint(arrived = false) {
+  if (arrived && waypoint) hud.callout('ARRIVED', waypoint.name.toUpperCase());
+  waypoint = null; waypointRoute = null; waypointNote = ''; hud.waypoint(null); cityMap?.refresh();
+}
+// Follows the route: arrival, re-routing after straying, and the HUD chip.
+// Hidden in arena modes; paused (not cleared) indoors.
+function updateWaypoint(now) {
+  waypointBeacon.visible = false;
+  if (!waypoint) return hud.waypoint(null);
+  const here = inLocalUnderground() ? 'underground' : cityInteriorId;
+  if (waypoint.spaceId && here === waypoint.spaceId) return clearWaypoint(true);
+  if (mapMode() !== 'city') return hud.waypoint(null);
+  if (cityInteriorName) return hud.waypoint({ name: waypoint.name, note: 'INSIDE · ROUTE PAUSED' });
+  const progress = routeProgress(waypointRoute.points, player.pos);
+  if (progress.remaining < 3.5) return clearWaypoint(true);
+  if (now >= waypointCheckAt) {
+    waypointCheckAt = now + 500;
+    if (progress.offRoute > 8) {
+      const next = findRoute(navGraph(), player.pos, waypoint.entry, waypoint);
+      if (next.ok) { waypointRoute = next; waypointNote = ''; } else waypointNote = next.reason === 'off-street' || next.reason === 'start-blocked' ? 'HEAD TO A STREET' : 'NO ROUTE';
+    } else waypointNote = '';
+  }
+  waypointBeacon.position.set(waypoint.entry.x, 13, waypoint.entry.z); waypointBeacon.visible = true;
+  hud.waypoint({ name: waypoint.name, distance: progress.remaining, bearing: relativeBearing(player.pos, player.yaw, progress.next), note: waypointNote });
 }
 function setCombatLobby(open) {
   combatLobbyOpen = !!open;
@@ -1016,6 +1082,15 @@ async function boot() {
     sfx.rubbleAt(p);
   };
   buildNav(); initHud();
+  if (city) {
+    cityPoiList = cityPois(city.plan);
+    cityMap = createCityMap({
+      root: $('cityMap'), rects: mapRects, bounds: { ...MAP }, plan: city.plan, pois: cityPoiList, getGraph: navGraph, arena: ARENA_MAP, lowMemory: !!Q.lowMemory,
+      planRoute: (target) => findRoute(navGraph(), player.pos, target.entry, target),
+      onSetWaypoint: setWaypoint, onClearWaypoint: () => clearWaypoint(), onClose: () => setCityMap(false),
+    });
+    $('mapwrap')?.addEventListener('click', () => setCityMap(true));
+  }
   if (qs.get('collisionDebug') === '1') {
     collisionDebug = createCollisionDebug(scene, colliders, player);
     console.log('collision debug: enabled', { colliders: colliders.length, vehicles: colliders.filter((c) => c.vehicle).length });
@@ -1085,7 +1160,9 @@ addEventListener('keydown', (e) => {
   if (e.code === 'Escape' && $('avatarPanel')?.classList.contains('on')) { $('avatarPanel').classList.remove('on'); $('avatarToggle').setAttribute('aria-expanded', 'false'); if (MATCH.started && !MATCH.over) requestLock(); return; }
   if (e.code === 'Escape' && combatLobbyOpen) { setCombatLobby(false); return; }
   if (e.code === 'KeyX' && practiceCombat && MATCH.started) { returnToCity(); return; }
-  if (e.code === 'KeyM') { setMuted(!isMuted()); hud.callout(isMuted() ? 'SOUND OFF' : 'SOUND ON', 'PRESS [M]'); }
+  if (e.code === 'Escape' && cityMap?.isOpen) { setCityMap(false); return; }
+  if (e.code === 'KeyM' && e.shiftKey) { setMuted(!isMuted()); hud.callout(isMuted() ? 'SOUND OFF' : 'SOUND ON', 'PRESS [SHIFT+M]'); }
+  else if (e.code === 'KeyM' && !e.repeat) setCityMap(!cityMap?.isOpen);
 });
 const labelItems = [], dots = [];
 function loop(now) {
@@ -1095,7 +1172,7 @@ function loop(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now; time += dt;
   fpsAcc += dt; fpsN++; if (fpsAcc > 0.5) { hud.fps(Math.round(fpsN / fpsAcc)); fpsAcc = 0; fpsN = 0; }
   const look = poll();
-  if (!MATCH.started || combatLobbyOpen || (!input.locked && !TOUCH && !MATCH.over && MATCH.started)) { look.dx = look.dy = 0; }
+  if (!MATCH.started || combatLobbyOpen || cityMap?.isOpen || (!input.locked && !TOUCH && !MATCH.over && MATCH.started)) { look.dx = look.dy = 0; }
   if (!MATCH.started) { // idle camera drift on the title
     player.yaw += dt * 0.03; player.update(dt, { moveX: 0, moveY: 0 }, { dx: 0, dy: 0 }, time); input.camera = false;
   } else {
@@ -1108,11 +1185,14 @@ function loop(now) {
     }
     if (input.ab) { if (isCombatMode(MATCH.mode)) useAbility(input.ab); input.ab = 0; }
     if (input.camera) { input.camera = false; if (!combatLobbyOpen) toggleCamera(); }
-    player.update(dt, MATCH.over || combatLobbyOpen ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
+    if (input.map) { input.map = false; setCityMap(!cityMap?.isOpen); }
+    if (cityMap?.isOpen) { input.fire = false; input.ads = false; input.jump = false; input.interact = false; input.reload = false; }
+    player.update(dt, MATCH.over || combatLobbyOpen || cityMap?.isOpen ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
     if (multiplayerActive && Number.isFinite(localCombat?.health)) {
       player.hp = localCombat.health; player.dead = localCombat.dead === true;
     }
     performanceProfile.end('player', systemStarted); systemStarted = performanceProfile.start();
+    cityInteriorName = ''; cityInteriorId = '';
     const multiplayerUnderground = multiplayerActive && localContext.space?.id === 'underground';
     if (multiplayerUnderground) {
       const exit = MULTIPLAYER_SPACES.underground.exit;
@@ -1135,6 +1215,8 @@ function loop(now) {
         ? { active: false, transitioned: false, prompt: '' }
         : city.house.update(player, input, time);
       const interiorActive = apartmentState.active || originalHouseState.active || duplicatedHouseState.active || houseState.active;
+      const interiorSite = apartmentState.active ? city.apartment.site : originalHouseState.active ? city.originalHouse.site : duplicatedHouseState.active ? city.duplicatedHouse.site : houseState.active ? city.house.site : null;
+      cityInteriorName = interiorSite?.name || ''; cityInteriorId = interiorSite?.id || '';
       const venueState = interiorActive || apartmentState.transitioned || originalHouseState.transitioned || duplicatedHouseState.transitioned || houseState.transitioned
         ? { prompt: '', requestedLobby: false }
         : city.combatVenue.update(player, !!input.interact, time, combatLobbyOpen);
@@ -1142,9 +1224,14 @@ function loop(now) {
         if (multiplayerActive) multiplayer?.updateSpace('underground', 'enter');
         else setCombatLobby(true);
       }
-      const prompt = apartmentState.prompt || originalHouseState.prompt || duplicatedHouseState.prompt || houseState.prompt || venueState.prompt;
+      // M6.6 bank: opens the existing wallet only (no deposits, loans, or balances).
+      const bankState = interiorActive || venueState.prompt || apartmentState.transitioned || originalHouseState.transitioned || duplicatedHouseState.transitioned || houseState.transitioned || !city.bank
+        ? { prompt: '', opened: false, mobileLabel: '' }
+        : city.bank.update(player, !!input.interact, time);
+      if (bankState.opened) { walletBridge.openBank(); hud.callout('NERDIE CITY BANK', 'WALLET ONLY · BANKING SERVICES COMING SOON'); }
+      const prompt = apartmentState.prompt || originalHouseState.prompt || duplicatedHouseState.prompt || houseState.prompt || venueState.prompt || bankState.prompt;
       const activeHouseState = [originalHouseState, duplicatedHouseState, houseState].find((state) => state.prompt) || houseState;
-      const mobileLabel = venueState.prompt ? 'ENTER COMBAT' : activeHouseState.prompt && !activeHouseState.blocked ? (activeHouseState.active ? 'EXIT HOUSE' : 'ENTER HOUSE') : '';
+      const mobileLabel = venueState.prompt ? 'ENTER COMBAT' : bankState.prompt ? bankState.mobileLabel : activeHouseState.prompt && !activeHouseState.blocked ? (activeHouseState.active ? 'EXIT HOUSE' : 'ENTER HOUSE') : '';
       hud.prompt(prompt, interiorActive, mobileLabel);
       input.interact = false;
       const transition = apartmentState.transitioned ? { type: 'apartment', spaceId: 'north-court', state: apartmentState } : originalHouseState.transitioned ? { type: 'house', spaceId: 'hood-cross-west', state: originalHouseState } : duplicatedHouseState.transitioned ? { type: 'house', spaceId: 'hood-duplicate-west-5', state: duplicatedHouseState } : houseState.transitioned ? { type: 'house', spaceId: 'east-73', state: houseState } : null;
@@ -1270,7 +1357,10 @@ function loop(now) {
       dots.push({ pos: remote.position, team: ally ? 'blue' : 'red', spotted: d < 14 });
       if (ally) labelItems.push({ pos: new THREE.Vector3(remote.position.x, remote.position.y + 2.05, remote.position.z), name: remote.name, team: 'blue', dist: d });
     }
-    hud.labels(camera, labelItems); hud.minimap(player, dots, snitch);
+    mapDots = dots; mapSnitch = snitch;
+    const cityOverlay = mapMode() === 'city' ? { pois: cityPoiList, route: cityInteriorName ? null : waypointRoute, waypoint } : null;
+    hud.labels(camera, labelItems); hud.minimap(player, dots, snitch, cityOverlay);
+    updateWaypoint(now); if (cityMap?.isOpen) cityMap.frame(mapState(), now);
   }
   performanceProfile.end('hud', systemStarted); systemStarted = performanceProfile.start();
   if (composer) composer.render(); else renderer.render(scene, camera);

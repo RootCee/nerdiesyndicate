@@ -5,6 +5,8 @@ import { HybridApartmentSystem } from './apartment-system.js';
 import { HybridHouseSystem } from './house-system.js';
 import { CombatVenueSystem } from './combat-venue.js';
 import { buildCityRoadMarkings } from './city-road-markings.js';
+import { BankSystem } from './city-bank.js';
+import { BANK_BUILDING_ID, bankSite } from './city-pois.js';
 
 const material = (color, roughness = 0.88, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
 const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
@@ -79,7 +81,7 @@ function addBuilding(group, spec, profile, mats) {
     if (frontDirection > 0) window.rotation.y = Math.PI;
   }
   addCollider(x - width / 2, z - depth / 2, x + width / 2, z + depth / 2, 0, height + 0.5, { cityChunk: spec.id });
-  mapRects.push({ x: x - width / 2, z: z - depth / 2, w: width, h: depth, type: kind === 'house' ? 'house' : 'apartment' });
+  mapRects.push({ x: x - width / 2, z: z - depth / 2, w: width, h: depth, type: spec.id === BANK_BUILDING_ID ? 'bank' : kind === 'house' ? 'house' : 'apartment' });
 }
 
 function addParkedVehicle(group, spec, mats) {
@@ -136,7 +138,7 @@ export function buildCityExpansion(scene, Q = {}) {
   const roadPaint = Q.roadPaint === false ? null : buildCityRoadMarkings(infrastructure, plan.roads);
 
   const chunks = [], cityLightSites = [];
-  let apartment = null, house = null, originalHouse = null, duplicatedHouse = null, combatVenue = null;
+  let apartment = null, house = null, originalHouse = null, duplicatedHouse = null, combatVenue = null, bank = null;
   for (const district of plan.districts) {
     const group = new THREE.Group(); group.name = `city-chunk-${district.id}`; scene.add(group);
     for (const spec of district.buildings) addBuilding(group, spec, plan.profile, mats);
@@ -163,6 +165,7 @@ export function buildCityExpansion(scene, Q = {}) {
       duplicatedHouse = new HybridHouseSystem(scene, plan.duplicatedEnterableHouse, { addCollider, mobile: plan.profile.key === 'mobile' });
       group.add(duplicatedHouse.exterior);
     }
+    if (district.buildings.some((b) => b.id === BANK_BUILDING_ID)) bank = new BankSystem(group, bankSite(plan), { mobile: plan.profile.key === 'mobile' });
     if (district.id === 'west-industrial-south') {
       addBox(group, mats.sidewalk, 42, 0.08, 34, -112, 0.02, -72, 'underground-parking-lot');
       combatVenue = new CombatVenueSystem(scene, plan.combatVenue, { addCollider, mobile: plan.profile.key === 'mobile' });
@@ -200,7 +203,7 @@ export function buildCityExpansion(scene, Q = {}) {
   addCollider(MAP.minX - 2, MAP.maxZ, MAP.maxX + 2, MAP.maxZ + 2, 0, 12, { boundary: true });
 
   const city = {
-    plan, chunks, apartment, house, originalHouse, duplicatedHouse, combatVenue, infrastructure, mode: 'free-roam',
+    plan, chunks, apartment, house, originalHouse, duplicatedHouse, combatVenue, bank, infrastructure, mode: 'free-roam',
     beginPrewarm() {
       const state = chunks.map((chunk) => chunk.group.visible);
       const culling = [];
@@ -248,6 +251,7 @@ export function buildCityExpansion(scene, Q = {}) {
         roadPaintQuads: roadPaint?.quads || 0,
         roadPaintTriangles: roadPaint?.triangles || 0,
         combatVenue: combatVenue?.site.id || null,
+        bank: bank?.site.id || null,
         bounds: { ...MAP },
       };
     },

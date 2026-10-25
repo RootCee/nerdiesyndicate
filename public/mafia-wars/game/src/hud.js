@@ -1,5 +1,6 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { mapRects, MAP } from './world.js';
+import { drawMapRects, formatDistance, mapDotVisible } from './city-map-view.js';
 const $ = (s) => document.querySelector(s);
 const el = {};
 export function initHud() {
@@ -7,14 +8,7 @@ export function initHud() {
   el.map2d = el.map.getContext('2d');
   // bake the block map once: 4 px per metre on a 100x100 m canvas
   const W = MAP.maxX - MAP.minX, H = MAP.maxZ - MAP.minZ, S = Math.min(4, 512 / Math.max(W, H)); const off = document.createElement('canvas'); off.width = Math.ceil(W * S); off.height = Math.ceil(H * S); const g = off.getContext('2d');
-  g.fillStyle = '#39482c'; g.fillRect(0, 0, off.width, off.height);
-  const col = { road: '#2a2f38', alley: '#35383d', walk: '#737a80', house: '#d8d2c5', apartment: '#b88a4a', venue: '#d9ac58', garage: '#b3ada2', fence: '#8a9a88', tree: '#2c5a2e', pole: '#9a9a9a' };
-  const order = ['road', 'alley', 'walk', 'fence', 'tree', 'garage', 'house', 'apartment', 'venue', 'pole'];
-  for (const t of order) for (const r of mapRects) if (r.type === t) {
-    g.fillStyle = col[t];
-    if (t === 'tree') { g.beginPath(); g.arc((r.x + r.w / 2 - MAP.minX) * S, (r.z + r.h / 2 - MAP.minZ) * S, r.w / 2 * S, 0, 6.3); g.fill(); }
-    else { g.fillRect((r.x - MAP.minX) * S, (r.z - MAP.minZ) * S, Math.max(1, r.w * S), Math.max(1, r.h * S)); if (t === 'house' || t === 'apartment' || t === 'venue') { g.strokeStyle = t === 'venue' ? '#ffe29a' : '#8c8578'; g.lineWidth = t === 'venue' ? 2 : 1; g.strokeRect((r.x - MAP.minX) * S, (r.z - MAP.minZ) * S, r.w * S, r.h * S); } }
-  }
+  drawMapRects(g, mapRects, MAP, S);
   el.off = off; el.S = S; el.W = W; el.H = H;
   el.hud.classList.add('on');
 }
@@ -63,20 +57,52 @@ export const hud = {
     }
     for (; i < kids.length; i++) kids[i].style.display = 'none';
   },
-  minimap(player, dots, snitch) {
+  // overlay (M6.6, city only): { pois, route, waypoint } drawn under the
+  // player markers; markers use the shared mapDotVisible rule.
+  minimap(player, dots, snitch, overlay = null) {
     const g = el.map2d, R = 150, S = el.S; g.clearRect(0, 0, 300, 300);
     g.save(); g.beginPath(); g.arc(R, R, R, 0, 6.3); g.clip();
     g.translate(R, R); g.rotate(player.yaw);
     const scale = 2.1; // zoom (canvas px per map px)
     g.scale(scale, scale); g.translate(-(player.pos.x - MAP.minX) * S, -(player.pos.z - MAP.minZ) * S);
     g.drawImage(el.off, 0, 0);
+    const mx = (x) => (x - MAP.minX) * S, mz = (z) => (z - MAP.minZ) * S;
+    if (overlay?.route?.points?.length > 1) {
+      g.lineJoin = 'round'; g.lineCap = 'round';
+      for (const [width, color] of [[4.5, 'rgba(0,0,0,.6)'], [2.6, '#f2d28b']]) {
+        g.beginPath(); overlay.route.points.forEach((p, i) => (i ? g.lineTo(mx(p.x), mz(p.z)) : g.moveTo(mx(p.x), mz(p.z))));
+        g.lineWidth = width / scale; g.strokeStyle = color; g.stroke();
+      }
+    }
+    for (const poi of overlay?.pois || []) {
+      g.fillStyle = poi.kind === 'bank' ? '#f2d28b' : poi.kind === 'arena' ? '#ff6b5a' : poi.kind === 'business' ? '#9aa6b2' : '#e8e1d2';
+      g.beginPath(); g.arc(mx(poi.x), mz(poi.z), 3.4 / scale, 0, 6.3); g.fill(); g.lineWidth = 1 / scale; g.strokeStyle = '#000'; g.stroke();
+    }
     for (const d of dots) {
-      if (d.team === 'red' && !snitch && !d.spotted) continue;
-      g.fillStyle = d.team === 'red' ? '#ff3b4a' : '#4aa8ff'; g.beginPath(); g.arc((d.pos.x - MAP.minX) * S, (d.pos.z - MAP.minZ) * S, 2.6, 0, 6.3); g.fill();
+      if (!mapDotVisible(d, snitch)) continue;
+      g.fillStyle = d.team === 'red' ? '#ff3b4a' : '#4aa8ff'; g.beginPath(); g.arc(mx(d.pos.x), mz(d.pos.z), 2.6, 0, 6.3); g.fill();
     }
     g.restore();
+    // Waypoint: a pin inside the minimap, or an arrow on its rim pointing to it.
+    if (overlay?.waypoint) {
+      const dx = (overlay.waypoint.entry.x - player.pos.x) * S * scale, dz = (overlay.waypoint.entry.z - player.pos.z) * S * scale;
+      const c = Math.cos(player.yaw), s = Math.sin(player.yaw), sx = dx * c - dz * s, sy = dx * s + dz * c, d = Math.hypot(sx, sy) || 1;
+      g.save(); g.translate(R, R);
+      if (d < R - 16) { g.fillStyle = '#f2d28b'; g.strokeStyle = '#000'; g.lineWidth = 2; g.beginPath(); g.arc(sx, sy, 7, 0, 6.3); g.fill(); g.stroke(); }
+      else { g.translate((sx / d) * (R - 14), (sy / d) * (R - 14)); g.rotate(Math.atan2(sy, sx) + Math.PI / 2); g.fillStyle = '#f2d28b'; g.strokeStyle = '#000'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, -11); g.lineTo(9, 7); g.lineTo(-9, 7); g.closePath(); g.fill(); g.stroke(); }
+      g.restore();
+    }
     // player arrow (always pointing up)
     g.save(); g.translate(R, R); g.fillStyle = '#fff'; g.beginPath(); g.moveTo(0, -8); g.lineTo(6, 6); g.lineTo(0, 3); g.lineTo(-6, 6); g.closePath(); g.fill(); g.restore();
     g.strokeStyle = 'rgba(255,255,255,.25)'; g.lineWidth = 2; g.beginPath(); g.arc(R, R, R - 1, 0, 6.3); g.stroke();
+  },
+  // Distance / direction chip: info = { name, distance, bearing, note } or null.
+  waypoint(info) {
+    const chip = el.waypointChip ||= document.getElementById('waypointChip'); if (!chip) return;
+    chip.hidden = !info; if (!info) return;
+    chip.querySelector('.name').textContent = info.name;
+    chip.querySelector('.dist').textContent = info.note || formatDistance(info.distance);
+    chip.querySelector('.arrow').style.transform = `rotate(${info.bearing ?? 0}rad)`;
+    chip.classList.toggle('note', !!info.note);
   },
 };
