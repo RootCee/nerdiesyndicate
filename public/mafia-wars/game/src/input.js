@@ -1,7 +1,7 @@
 // Keyboard + mouse (pointer lock) on desktop, twin-stick touch on phones.
 export const TOUCH = matchMedia('(pointer: coarse)').matches && 'ontouchstart' in window;
 export const keys = {};
-export const input = { yaw: 0, pitch: 0, mx: 0, my: 0, fire: false, ads: false, jump: false, reload: false, interact: false, sprint: false, crouch: false, ab: 0, locked: false, moveX: 0, moveY: 0, swap: '' };
+export const input = { yaw: 0, pitch: 0, mx: 0, my: 0, fire: false, ads: false, jump: false, reload: false, interact: false, sprint: false, crouch: false, ab: 0, locked: false, moveX: 0, moveY: 0, swap: '', camera: false };
 let canvas, onFirst = null;
 function tryPointerLock() {
   try {
@@ -11,7 +11,7 @@ function tryPointerLock() {
 }
 export function initInput(c, firstGesture) {
   canvas = c; onFirst = firstGesture;
-  addEventListener('keydown', (e) => { if (e.target && e.target.tagName === 'INPUT') return; keys[e.code] = true; if (e.code === 'KeyR') input.reload = true; if (e.code === 'KeyE' && !e.repeat) input.interact = true; if (e.code === 'Space') { input.jump = true; e.preventDefault(); } if (/^Digit[456]$/.test(e.code)) input.ab = +e.code.slice(5); if (e.code === 'Digit1') input.swap = 'ak'; if (e.code === 'Digit2') input.swap = 'rpg'; if (e.code === 'Digit3') input.swap = 'mac10'; if (e.code === 'Digit7') input.swap = 'mp5'; if (e.code === 'Digit8') input.swap = 'm700'; if (e.code === 'KeyQ') input.swap = 'next'; if (e.code === 'KeyH' && !e.repeat) input.swap = 'holster'; if (e.code === 'KeyU' && !e.repeat) input.swap = 'unarmed'; if (e.code === 'KeyC') input.crouch = !input.crouch; });
+  addEventListener('keydown', (e) => { if (e.target && e.target.tagName === 'INPUT') return; keys[e.code] = true; if (e.code === 'KeyR') input.reload = true; if (e.code === 'KeyE' && !e.repeat) input.interact = true; if (e.code === 'Space') { input.jump = true; e.preventDefault(); } if (/^Digit[456]$/.test(e.code)) input.ab = +e.code.slice(5); if (e.code === 'Digit1') input.swap = 'ak'; if (e.code === 'Digit2') input.swap = 'rpg'; if (e.code === 'Digit3') input.swap = 'mac10'; if (e.code === 'Digit7') input.swap = 'mp5'; if (e.code === 'Digit8') input.swap = 'm700'; if (e.code === 'KeyQ') input.swap = 'next'; if (e.code === 'KeyH' && !e.repeat) input.swap = 'holster'; if (e.code === 'KeyU' && !e.repeat) input.swap = 'unarmed'; if (e.code === 'KeyC') input.crouch = !input.crouch; if (e.code === 'KeyV' && !e.repeat) input.camera = true; });
   addEventListener('keyup', (e) => { keys[e.code] = false; });
   let wheelT = 0; addEventListener('wheel', (e) => { const now = performance.now(); if (now - wheelT < 160 || !input.locked) return; wheelT = now; input.swap = e.deltaY > 0 ? 'next' : 'prev'; }, { passive: true });
   canvas.addEventListener('mousedown', (e) => { onFirst?.(); if (!TOUCH && !input.locked) { tryPointerLock(); return; } if (e.button === 0) input.fire = true; if (e.button === 2) input.ads = true; });
@@ -33,7 +33,7 @@ export function poll() {
 }
 function initTouch() {
   document.getElementById('touch').classList.add('on');
-  const hint = document.getElementById('hint'); if (hint) hint.innerHTML = '<b>FREE ROAM</b> · left thumb moves · right thumb looks<br>Tap ENTER at marked doors · JUMP and AIM are on the right';
+  const hint = document.getElementById('hint'); if (hint) hint.innerHTML = '<b>FREE ROAM</b> · left thumb moves · right thumb looks<br>Tap ENTER at marked doors · JUMP and AIM are on the right · CAM switches view';
   const stick = { id: null, x0: 0, y0: 0 }, look = { id: null, x: 0, y: 0 };
   const sEl = document.getElementById('stick'), knob = document.getElementById('knob');
   canvas.addEventListener('touchstart', (e) => {
@@ -54,7 +54,11 @@ function initTouch() {
   canvas.addEventListener('touchmove', (e) => {
     for (const t of e.changedTouches) {
       if (t.identifier === stick.id) { let dx = t.clientX - stick.x0, dy = t.clientY - stick.y0; const d = Math.hypot(dx, dy); if (d > 48) { dx *= 48 / d; dy *= 48 / d; } input.moveX = dx / 48; input.moveY = -dy / 48; input.sprint = d > 44; knob.style.transform = `translate(${dx}px,${dy}px)`; }
-      else if (t.identifier === look.id) { input.mx += (t.clientX - look.x) * 2.2; input.my += (t.clientY - look.y) * 2.2; look.x = t.clientX; look.y = t.clientY; }
+      else if (t.identifier === look.id) {
+        // Small thumb movements turn more finely for aiming; fast swipes keep full speed.
+        const dx = t.clientX - look.x, dy = t.clientY - look.y, gain = 2.2 * Math.min(1.15, 0.65 + Math.hypot(dx, dy) / 20);
+        input.mx += dx * gain; input.my += dy * gain; look.x = t.clientX; look.y = t.clientY;
+      }
     }
     e.preventDefault();
   }, { passive: false });
@@ -67,6 +71,7 @@ function initTouch() {
   btn('tReload', () => { input.reload = true; });
   btn('tSwap', () => { const tray = document.getElementById('weaponTray'); const open = tray?.classList.toggle('on'); document.body.classList.toggle('weapon-selecting', !!open); });
   btn('tInteract', () => { input.interact = true; });
+  btn('tCam', () => { input.camera = true; });
   for (const el of document.querySelectorAll('#weaponTray [data-weapon]')) {
     el.addEventListener('touchstart', (e) => {
       onFirst?.(); input.swap = el.dataset.weapon; document.getElementById('weaponTray')?.classList.remove('on'); document.body.classList.remove('weapon-selecting'); e.preventDefault();

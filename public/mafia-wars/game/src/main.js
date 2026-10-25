@@ -7,7 +7,7 @@ import { UnrealBloomPass } from '/mafia-wars/game/vendor/three/jsm/postprocessin
 import { ShaderPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/OutputPass.js';
 import { manager, loadHDR, loadGLB, setAniso, setLowMemoryAssets } from './assets.js';
-import { buildWorld, colliders, collisionBroadphaseStats, lamps, windowsLit, resolve, MAP, groundAt, lineClear } from './world.js';
+import { buildWorld, colliders, collisionBroadphaseStats, lamps, windowsLit, resolve, MAP, groundAt, lineClear, raycastWorld } from './world.js';
 import { createNaturalSkyTexture } from './natural-sky.js';
 import { Player } from './player.js';
 import { FX, Weapon, GUN_SPECS } from './weapon.js';
@@ -37,13 +37,14 @@ import { RemotePlayer } from './remote-player.js';
 import { MULTIPLAYER_LIMITS, MULTIPLAYER_SPAWNS, PROTOCOL_VERSION } from './multiplayer-protocol.js';
 import { AVATAR_PRESETS, normalizeAvatarAppearance, sameAvatarAppearance } from './avatar-schema.js';
 import { DEFAULT_EQUIPMENT, normalizeEquipment } from './multiplayer-equipment.js';
-import { MULTIPLAYER_WEAPON_RULES } from './multiplayer-combat.js';
+import { MULTIPLAYER_SHOT_EYE_HEIGHT, MULTIPLAYER_WEAPON_RULES } from './multiplayer-combat.js';
+import { crosshairShotDirection, rayCapsuleDistance } from './aim.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.5-dev1';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.5-dev2';
 
-const GAME_BUILD_ID = 'm6.5-dev1';
+const GAME_BUILD_ID = 'm6.5-dev2';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -179,6 +180,8 @@ setTimeout(resize, 0);
 // ---------- game state ----------
 const player = new Player(camera);
 const thirdCamera = new ThirdPersonCamera(camera, player);
+const CAMERA_STORAGE_KEY = 'nerdie-city-mafia-wars.camera.v1';
+let preferThirdPerson = (() => { try { return localStorage.getItem(CAMERA_STORAGE_KEY) !== 'first'; } catch { return true; } })();
 const fx = new FX(scene);
 const weapon = new Weapon(scene, camera, player, fx);
 // the arsenal: AK (also the bots' third-person gun), MAC-10, MP5, M700 sniper, plus the RPG-7 launcher
@@ -220,7 +223,21 @@ let localEquipmentRequest = 0, localEquipment = normalizeEquipment(DEFAULT_EQUIP
 let undergroundMatch = null, undergroundShownMatch = '', undergroundResultsDismissed = '';
 let localCombat = null, localContext = { space: { id: 'city', instanceId: null } }, localContextRevision = 0, localSafeZone = false, multiplayerNextShotAt = 0, multiplayerTriggerHeld = false;
 let multiplayer = null, multiplayerActive = false, multiplayerPlayerCount = 0, multiplayerServerOffset = 0, multiplayerSendAt = 0, multiplayerPingAt = 0, multiplayerStatusAt = 0;
-const multiplayerAim = new THREE.Vector3();
+const multiplayerAim = new THREE.Vector3(), aimForward = new THREE.Vector3(), aimSegment = new THREE.Vector3(), aimOrigin = new THREE.Vector3();
+// Direction from the server's shot origin to whatever is under the crosshair
+// (world geometry or a remote player), so shots match the crosshair in both views.
+function crosshairAim(range) {
+  camera.getWorldDirection(aimForward);
+  const worldT = raycastWorld(camera.position, aimSegment.copy(aimForward).multiplyScalar(range), 1, true);
+  let hit = worldT < 1 ? worldT * range : Infinity;
+  const spaceId = localContext.space?.id || 'city';
+  for (const remote of remotePlayers.values()) {
+    if (remote.combat?.dead || (remote.context?.space?.id || 'city') !== spaceId) continue;
+    hit = Math.min(hit, rayCapsuleDistance(camera.position, aimForward, remote.position));
+  }
+  aimOrigin.set(player.pos.x, player.pos.y + MULTIPLAYER_SHOT_EYE_HEIGHT, player.pos.z);
+  return crosshairShotDirection({ camera: camera.position, forward: aimForward, origin: aimOrigin, hitDistance: hit, range }, multiplayerAim);
+}
 const remotePlayers = new Map();
 const networkAudioEvents = createNetworkAudioDeduper();
 const avatarContactOffset = new THREE.Vector3();
@@ -491,7 +508,14 @@ function configureEntryUi() {
 function setCameraMode(third, announce = false) {
   thirdCamera.setEnabled(third, true);
   document.body.classList.toggle('third-person', thirdCamera.enabled);
-  if (announce && MATCH.started) hud.callout(thirdCamera.enabled ? 'THIRD-PERSON CAMERA' : 'FIRST-PERSON CAMERA', 'PRESS [V] TO SWITCH');
+  if (announce && MATCH.started) hud.callout(thirdCamera.enabled ? 'THIRD-PERSON CAMERA' : 'FIRST-PERSON CAMERA', TOUCH ? 'TAP CAM TO SWITCH' : 'PRESS [V] TO SWITCH');
+}
+// Player choice from V / CAM: switches in place (no reload, respawn, or
+// network message) and is remembered on this device.
+function toggleCamera() {
+  preferThirdPerson = !thirdCamera.enabled;
+  try { localStorage.setItem(CAMERA_STORAGE_KEY, preferThirdPerson ? 'third' : 'first'); } catch {}
+  setCameraMode(preferThirdPerson, true);
 }
 function setCombatLobby(open) {
   combatLobbyOpen = !!open;
@@ -539,7 +563,7 @@ function startGame(mode = selectedMode, options = {}) {
   for (const k in guns) guns[k].holstered = k !== 'ak'; arsenal.cur = 'ak'; pendingWeapon = ''; player.kills = 0; player.deaths = 0;
   if (!multiplayerActive) { localEquipment = normalizeEquipment(DEFAULT_EQUIPMENT); localEquipmentRevision = 0; localAvatar?.setWeapon('ak', false); }
   if (freshCombatSession) console.log('new combat ammunition lifecycle:', MATCH.id);
-  setCameraMode(!combat);
+  setCameraMode(!combat && preferThirdPerson);
   document.body.classList.toggle('free-roam', !combat); $('modebadge').textContent = combat ? 'Original Combat' : 'Free Roam · V Camera';
   if (practiceCombat) $('modebadge').textContent = 'AI Practice Match';
   $('combatExit').classList.toggle('on', practiceCombat);
@@ -663,7 +687,7 @@ function applyLocalContext(context, revision = localContextRevision + 1, state =
     else player.pos.set(state.x, state.y, state.z);
   }
   if (spaceId === 'underground') {
-    city?.setMode('combat'); setCameraMode(true); document.body.classList.add('free-roam');
+    city?.setMode('combat'); setCameraMode(preferThirdPerson); document.body.classList.add('free-roam');
     destructionStreamingStats = updateDestructionStreaming(player.pos, Q.lowMemory ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.mobile : DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.desktop, ORIGINAL_NEIGHBORHOOD_LAYOUT.id);
     updateNeighborhoodLights(destructionStreamingStats.activeStreamingId);
     $('modebadge').textContent = 'Underground 6v6'; $('state').textContent = 'LIVE COMBAT'; $('timer').textContent = '--:--'; $('combatExit').classList.add('on');
@@ -1062,7 +1086,6 @@ addEventListener('keydown', (e) => {
   if (e.code === 'Escape' && combatLobbyOpen) { setCombatLobby(false); return; }
   if (e.code === 'KeyX' && practiceCombat && MATCH.started) { returnToCity(); return; }
   if (e.code === 'KeyM') { setMuted(!isMuted()); hud.callout(isMuted() ? 'SOUND OFF' : 'SOUND ON', 'PRESS [M]'); }
-  if (e.code === 'KeyV' && MATCH.started && MATCH.mode === GAME_MODES.FREE_ROAM) setCameraMode(!thirdCamera.enabled, true);
 });
 const labelItems = [], dots = [];
 function loop(now) {
@@ -1074,7 +1097,7 @@ function loop(now) {
   const look = poll();
   if (!MATCH.started || combatLobbyOpen || (!input.locked && !TOUCH && !MATCH.over && MATCH.started)) { look.dx = look.dy = 0; }
   if (!MATCH.started) { // idle camera drift on the title
-    player.yaw += dt * 0.03; player.update(dt, { moveX: 0, moveY: 0 }, { dx: 0, dy: 0 }, time);
+    player.yaw += dt * 0.03; player.update(dt, { moveX: 0, moveY: 0 }, { dx: 0, dy: 0 }, time); input.camera = false;
   } else {
     let systemStarted = performanceProfile.start();
     if (!MATCH.over && isCombatMode(MATCH.mode)) { MATCH.left -= dt; hud.timer(MATCH.left); if (MATCH.left <= 0) endMatch(); }
@@ -1084,6 +1107,7 @@ function loop(now) {
       else if (undergroundMatch.phase === 'ended') { $('timer').textContent = 'RESULTS'; $('ugNext').textContent = `NEXT MATCH IN ${Math.max(0, Math.ceil((undergroundMatch.nextMatchAt - serverNow) / 1000))} S`; }
     }
     if (input.ab) { if (isCombatMode(MATCH.mode)) useAbility(input.ab); input.ab = 0; }
+    if (input.camera) { input.camera = false; if (!combatLobbyOpen) toggleCamera(); }
     player.update(dt, MATCH.over || combatLobbyOpen ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
     if (multiplayerActive && Number.isFinite(localCombat?.health)) {
       player.hp = localCombat.health; player.dead = localCombat.dead === true;
@@ -1126,7 +1150,7 @@ function loop(now) {
       const transition = apartmentState.transitioned ? { type: 'apartment', spaceId: 'north-court', state: apartmentState } : originalHouseState.transitioned ? { type: 'house', spaceId: 'hood-cross-west', state: originalHouseState } : duplicatedHouseState.transitioned ? { type: 'house', spaceId: 'hood-duplicate-west-5', state: duplicatedHouseState } : houseState.transitioned ? { type: 'house', spaceId: 'east-73', state: houseState } : null;
       if (transition) {
         setInteriorRenderLayer(transition.state.active);
-        setCameraMode(true);
+        setCameraMode(thirdCamera.enabled); // re-snap after the teleport, keeping the player's view
         console.log(`${transition.type} transition:`, transition.state.active ? 'inside' : 'outside');
         hud.callout(transition.state.active ? transition.state.name.toUpperCase() : 'BACK ON THE BLOCK', transition.state.active ? (transition.type === 'house' ? 'PRIVATE HOUSE INTERIOR' : 'APARTMENT INTERIOR PROTOTYPE') : 'EXPLORE THE CITY');
         if (multiplayerActive) multiplayer?.updateSpace(transition.spaceId, transition.state.active ? 'enter' : 'exit');
@@ -1149,13 +1173,13 @@ function loop(now) {
       input.interact = false;
     } else { hud.prompt(''); input.interact = false; }
     performanceProfile.end('city-interactions-streaming', systemStarted); systemStarted = performanceProfile.start();
-    thirdCamera.update(dt);
+    thirdCamera.update(dt, false, { combat: multiplayerUnderground || isCombatMode(MATCH.mode), aim: !!input.ads && !player.dead });
     city?.apartment?.updateCameraVisibility(camera, player, dt);
     city?.originalHouse?.updateCameraVisibility(camera, player, dt);
     city?.duplicatedHouse?.updateCameraVisibility(camera, player, dt);
     city?.house?.updateCameraVisibility(camera, player, dt);
     if (localAvatar) {
-      const show = thirdCamera.enabled && !player.dead;
+      const show = thirdCamera.enabled && !player.dead && !thirdCamera.obstructed;
       if (show) localAvatar.play(player.sprinting ? 'Run' : player.planar > 0.25 ? 'Walk' : 'Idle_Gun', 0.12);
       // The physics root now remains outside solids; add a small visual-only
       // contact clearance so the run clip's leaning torso/stride does not draw
@@ -1194,7 +1218,7 @@ function loop(now) {
       const weaponId = localEquipment.weaponId, rule = MULTIPLAYER_WEAPON_RULES[weaponId];
       const singleShot = weaponId === 'm700' || weaponId === 'rpg';
       if (input.fire && !localSafeZone && !localEquipment.holstered && rule && now >= multiplayerNextShotAt && (!singleShot || !multiplayerTriggerHeld)) {
-        camera.getWorldDirection(multiplayerAim); multiplayer.fireWeapon(weaponId, multiplayerAim);
+        multiplayer.fireWeapon(weaponId, crosshairAim(rule.range));
         multiplayerNextShotAt = now + 60_000 / rule.rpm;
       }
       if (input.reload && weaponId && !localEquipment.holstered) { multiplayer.reloadWeapon(weaponId); input.reload = false; }

@@ -12,6 +12,8 @@ export const MULTIPLAYER_WEAPON_RULES = Object.freeze({
 });
 
 export const MULTIPLAYER_COMBAT_RULES = Object.freeze({ maxHealth: 100, respawnMs: 4000, spawnProtectionMs: 3000 });
+// Server shot origin above the player's feet; clients aim from here (src/aim.js).
+export const MULTIPLAYER_SHOT_EYE_HEIGHT = 1.35;
 export const UNDERGROUND_SPAWNS = Object.freeze({
   blue: Object.freeze([{ x: -2.8, y: 0, z: 36 }, { x: 0, y: 0, z: 36 }, { x: 2.8, y: 0, z: 36 }, { x: -2.8, y: 0, z: 42 }, { x: 0, y: 0, z: 42 }, { x: 2.8, y: 0, z: 42 }]),
   red: Object.freeze([{ x: -2.8, y: 0, z: -36 }, { x: 0, y: 0, z: -36 }, { x: 2.8, y: 0, z: -36 }, { x: -2.8, y: 0, z: -42 }, { x: 0, y: 0, z: -42 }, { x: 2.8, y: 0, z: -42 }]),
@@ -132,7 +134,7 @@ export function applyFireIntent(player, message, now, protocolVersion) {
   ammo.magazine--; player.combat.lastShotAt = now;
   const length = Math.hypot(message.direction.x, message.direction.y, message.direction.z) || 1;
   const direction = { x: message.direction.x / length, y: message.direction.y / length, z: message.direction.z / length };
-  const origin = { x: player.state?.x || 0, y: (player.state?.y || 0) + 1.35, z: player.state?.z || 0 };
+  const origin = { x: player.state?.x || 0, y: (player.state?.y || 0) + MULTIPLAYER_SHOT_EYE_HEIGHT, z: player.state?.z || 0 };
   return { ok: true, shot: { playerId: player.id, weaponId: message.weaponId, origin, direction, sequence: message.seq, spaceId: player.context?.space?.id || 'city', serverTime: now }, combat: combatView(player.combat, now) };
 }
 

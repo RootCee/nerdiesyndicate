@@ -69,7 +69,23 @@ const nearestReachableNode = (p) => {
   return best;
 };
 
+// Moves a point out of any padded house footprint along the shortest axis.
+// Movement and the planner share CLEARANCE, so a bot nudged against a wall (by
+// separation or strafing) is resolved instead of being left where no route can
+// start, and goals taken from enemy positions near walls stay reachable.
+export function escapeHouses(p, pad = CLEARANCE) {
+  let { x, z } = p;
+  for (const box of UNDERGROUND_HOUSES) {
+    if (x <= box.minX - pad || x >= box.maxX + pad || z <= box.minZ - pad || z >= box.maxZ + pad) continue;
+    const exits = [[box.minX - pad - 0.01 - x, 0], [box.maxX + pad + 0.01 - x, 0], [0, box.minZ - pad - 0.01 - z], [0, box.maxZ + pad + 0.01 - z]];
+    const [dx, dz] = exits.reduce((a, b) => (Math.hypot(...a) <= Math.hypot(...b) ? a : b));
+    x += dx; z += dz;
+  }
+  return { x, z };
+}
+
 export function findPath(from, to) {
+  from = escapeHouses(from); to = escapeHouses(to);
   if (!pathBlocked(from, to)) return [{ x: to.x, z: to.z }];
   const start = nearestReachableNode(from), goal = nearestReachableNode(to);
   if (!start || !goal) return [];
@@ -86,6 +102,9 @@ export function findPath(from, to) {
   if (!cost.has(goal.id)) return [];
   const route = []; for (let id = goal.id; id !== undefined; id = prev.get(id)) route.unshift({ x: UNDERGROUND_NAV_NODES[id].x, z: UNDERGROUND_NAV_NODES[id].z });
   route.push({ x: to.x, z: to.z });
+  // Skip waypoints already passed: periodic replans start from the nearest
+  // node, which may lie behind the bot and made it pace back and forth.
+  while (route.length > 1 && !pathBlocked(from, route[1])) route.shift();
   return route;
 }
 
@@ -103,6 +122,7 @@ function freshMatch(phase = 'idle') {
 export class UndergroundMatch {
   constructor({ random = Math.random, rules = UNDERGROUND_MATCH_RULES, makeId } = {}) {
     this.random = random; this.rules = rules; this.state = freshMatch();
+    this.metrics = { botFires: 0, botHits: 0, botFireRejected: {} };
     this.makeId = makeId || (() => `b_${Math.floor(random() * 36 ** 8).toString(36).padStart(8, '0')}`);
   }
   toJSON() { return this.state; }
@@ -140,7 +160,7 @@ export class UndergroundMatch {
     const combat = createCombatState();
     Object.assign(combat, { team, protectionUntil: now + MULTIPLAYER_COMBAT_RULES.spawnProtectionMs });
     const bot = {
-      id, name, bot: { targetId: null, reactAt: 0, nextFireAt: 0, burstLeft: 0, path: [], repathAt: 0, coverUntil: 0, goal: null, strafe: this.random() < 0.5 ? -1 : 1, strafeAt: 0 },
+      id, name, bot: { targetId: null, reactAt: 0, nextFireAt: 0, burstLeft: 0, path: [], repathAt: 0, coverUntil: 0, retreated: false, goal: null, goalUntil: 0, strafe: this.random() < 0.5 ? -1 : 1, strafeAt: 0, mode: 'idle', stuckFor: 0 },
       ticket: '', spawnIndex: -1, appearance: { schemaVersion: 1, preset: presets[Math.floor(this.random() * presets.length)] }, appearanceRevision: 1,
       equipment: { schemaVersion: 1, weaponId: this.rules.botWeaponId, holstered: false }, equipmentRevision: 1,
       context: { ...DEFAULT_PLAYER_CONTEXT, team: { ...DEFAULT_PLAYER_CONTEXT.team }, space: { id: 'underground', instanceId: 'underground' } }, contextRevision: 1,
@@ -197,8 +217,26 @@ export class UndergroundMatch {
     Object.assign(p.combat, { ammo: fresh.ammo, reloadUntil: 0, reloadWeaponId: null, health: MULTIPLAYER_COMBAT_RULES.maxHealth, dead: false, respawnAt: 0, protectionUntil: now + MULTIPLAYER_COMBAT_RULES.spawnProtectionMs });
     const spawn = this.#spawnFor(p.combat.team, players), seq = Number.isSafeInteger(p.lastSeq) ? ++p.lastSeq : 1;
     p.state = { ...(p.state || {}), v: PROTOCOL_VERSION, type: 'state', playerId: p.id, name: p.name, seq, x: spawn.x, y: 0, z: spawn.z, serverTime: now, safeZone: false };
-    if (isBot(p)) Object.assign(p.bot, { targetId: null, path: [], goal: null, coverUntil: 0 });
+    if (isBot(p)) this.resetBrain(p);
     return p;
+  }
+
+  // Fresh life: forget targets, routes, and the once-per-life retreat.
+  resetBrain(bot) { Object.assign(bot.bot, { targetId: null, path: [], goal: null, goalUntil: 0, coverUntil: 0, retreated: false, stuckFor: 0 }); }
+
+  noteBotFire(result) {
+    if (!result.ok) { const reason = result.reason || result.error || 'unknown'; this.metrics.botFireRejected[reason] = (this.metrics.botFireRejected[reason] || 0) + 1; return; }
+    this.metrics.botFires++; this.metrics.botHits += result.impacts?.length || 0;
+  }
+
+  // Snapshot for tests and diagnostics: what each living bot is doing.
+  botDiagnostics(players) {
+    const living = this.bots(players).filter((b) => b.connected && !b.combat.dead);
+    const count = (mode) => living.filter((b) => b.bot.mode === mode).length;
+    return {
+      bots: living.length, engaging: count('engage'), retreating: count('retreat'), patrolling: count('patrol'),
+      stuck: living.filter((b) => b.bot.stuckFor >= 3).length, ...this.metrics, botFireRejected: { ...this.metrics.botFireRejected },
+    };
   }
 
   stat(id) { return (this.state.stats[id] ||= { kills: 0, deaths: 0 }); }
@@ -261,14 +299,15 @@ export class UndergroundMatch {
 
   #patrolGoal(bot, players) {
     const enemies = this.#enemiesOf(bot, players);
-    if (enemies.length && this.random() < 0.7) { const e = enemies[Math.floor(this.random() * enemies.length)]; return { x: e.state.x, z: e.state.z }; }
+    if (enemies.length && this.random() < 0.7) { const e = enemies[Math.floor(this.random() * enemies.length)]; return escapeHouses(e.state); }
     const node = UNDERGROUND_NAV_NODES[Math.floor(this.random() * UNDERGROUND_NAV_NODES.length)];
     return { x: node.x, z: node.z };
   }
 
   #moveToward(bot, goal, dt, players) {
     if (!bot.bot.path.length || bot.bot.repathAt <= 0) { bot.bot.path = findPath(bot.state, goal); bot.bot.repathAt = 1.2; }
-    const next = bot.bot.path[0]; if (!next) return 0;
+    const next = bot.bot.path[0];
+    if (!next) { bot.bot.goal = null; return 0; } // unreachable: let the caller choose a new goal
     const dx = next.x - bot.state.x, dz = next.z - bot.state.z, distance = Math.hypot(dx, dz);
     if (distance < 0.6) { bot.bot.path.shift(); return 0; }
     const step = Math.min(distance, this.rules.botSpeed * dt);
@@ -279,8 +318,7 @@ export class UndergroundMatch {
       const ox = nx - other.state.x, oz = nz - other.state.z, d = Math.hypot(ox, oz);
       if (d > 0.01 && d < 0.9) { nx += (ox / d) * (0.9 - d) * 0.5; nz += (oz / d) * (0.9 - d) * 0.5; }
     }
-    const clamped = clampToArena({ x: nx, z: nz });
-    if (insideHouse(clamped, CLEARANCE * 0.5)) { bot.bot.path = []; return 0; }
+    const clamped = escapeHouses(clampToArena({ x: nx, z: nz }));
     const moved = Math.hypot(clamped.x - bot.state.x, clamped.z - bot.state.z);
     bot.state.x = clamped.x; bot.state.z = clamped.z;
     return moved / dt;
@@ -290,9 +328,11 @@ export class UndergroundMatch {
   // (server-owned positions); fire/reload are returned so the room can run
   // them through its normal authoritative validation.
   thinkBot(bot, players, now, dt) {
-    if (bot.combat.dead || this.state.phase !== 'live') { bot.state.speed = 0; bot.state.state = 'idle'; return { moved: false, intents: [] }; }
+    if (bot.combat.dead || this.state.phase !== 'live') { bot.state.speed = 0; bot.state.state = 'idle'; bot.bot.mode = 'idle'; bot.bot.stuckFor = 0; return { moved: false, intents: [] }; }
     const brain = bot.bot, intents = [];
     brain.repathAt -= dt;
+    // Positions saved before M6.5.1 (or nudged by separation) may sit inside a wall's clearance.
+    if (insideHouse(bot.state)) Object.assign(bot.state, escapeHouses(bot.state));
     const before = { x: bot.state.x, z: bot.state.z, yaw: bot.state.yaw };
     const target = this.#pickTarget(bot, players, now);
     if (target?.id !== brain.targetId) { brain.targetId = target?.id || null; brain.reactAt = now + 380 + this.random() * 320; brain.burstLeft = 0; }
@@ -300,8 +340,12 @@ export class UndergroundMatch {
     if (target) {
       const dx = target.state.x - bot.state.x, dz = target.state.z - bot.state.z, distance = Math.hypot(dx, dz);
       bot.state.yaw = yawToward(dx, dz);
-      if (bot.combat.health < 45 && brain.coverUntil < now) { const cover = this.#coverPoint(bot, target); if (cover) { brain.goal = cover; brain.path = []; brain.coverUntil = now + 3200; } }
-      if (brain.coverUntil > now && brain.goal) speed = this.#moveToward(bot, brain.goal, dt, players);
+      // Health never regenerates, so retreat is a single bounded move per life;
+      // repeating it left wounded bots hiding (and losing sight of targets) for
+      // the rest of the match.
+      if (bot.combat.health < 45 && !brain.retreated) { const cover = this.#coverPoint(bot, target); brain.retreated = true; if (cover) { brain.goal = cover; brain.path = []; brain.coverUntil = now + 3200; } }
+      brain.mode = brain.coverUntil > now && brain.goal ? 'retreat' : 'engage';
+      if (brain.mode === 'retreat') speed = this.#moveToward(bot, brain.goal, dt, players);
       else if (distance > 28) { brain.goal = { x: target.state.x, z: target.state.z }; if (brain.repathAt <= 0) brain.path = []; speed = this.#moveToward(bot, brain.goal, dt, players); }
       else {
         if (now >= brain.strafeAt) { brain.strafe = this.random() < 0.5 ? -1 : 1; brain.strafeAt = now + 900 + this.random() * 900; }
@@ -325,12 +369,17 @@ export class UndergroundMatch {
         brain.nextFireAt = brain.burstLeft > 0 ? now + 60_000 / rule.rpm + 5 : now + 450 + this.random() * 450;
       }
     } else {
-      brain.coverUntil = 0;
-      if (!brain.goal || Math.hypot(brain.goal.x - bot.state.x, brain.goal.z - bot.state.z) < 1.5 || brain.repathAt < -6) { brain.goal = this.#patrolGoal(bot, players); brain.path = []; }
+      brain.coverUntil = 0; brain.mode = 'patrol';
+      if (!brain.goal || Math.hypot(brain.goal.x - bot.state.x, brain.goal.z - bot.state.z) < 1.5 || now >= brain.goalUntil || brain.stuckFor >= 3) {
+        brain.goal = this.#patrolGoal(bot, players); brain.goalUntil = now + 15_000; brain.path = []; brain.stuckFor = 0;
+      }
       speed = this.#moveToward(bot, brain.goal, dt, players);
       const next = brain.path[0];
       if (next && speed > 0) bot.state.yaw = yawToward(next.x - bot.state.x, next.z - bot.state.z);
     }
+    // A bot that wants to travel but has not moved is stuck; patrol replans after 3 s.
+    const travelled = Math.hypot(bot.state.x - before.x, bot.state.z - before.z);
+    brain.stuckFor = brain.mode !== 'engage' && travelled < 0.01 ? brain.stuckFor + dt : 0;
     const moved = before.x !== bot.state.x || before.z !== bot.state.z || before.yaw !== bot.state.yaw;
     bot.state.speed = Math.min(this.rules.botSpeed, speed); bot.state.state = speed > 3 ? 'run' : speed > 0.2 ? 'walk' : 'idle';
     if (moved) { bot.state.seq = ++bot.lastSeq; bot.state.serverTime = now; }
