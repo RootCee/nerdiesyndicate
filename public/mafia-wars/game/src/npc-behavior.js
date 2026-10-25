@@ -17,7 +17,8 @@ export function personalityOf(identity) {
 
 // Behaviour codes travel as the optional 7th value of each npc-states entry
 // (M6.7A clients read only the first six).
-export const NPC_BEHAVIOR = Object.freeze({ calm: 0, alert: 1, startled: 2, flee: 3, greet: 4, wary: 5 });
+// M6.7B2 adds 6-11 (self-defense); older clients treat unknown codes as calm.
+export const NPC_BEHAVIOR = Object.freeze({ calm: 0, alert: 1, startled: 2, flee: 3, greet: 4, wary: 5, fight: 6, strike: 7, hurt: 8, knockdown: 9, defeated: 10, warn: 11 });
 
 export const NPC_BEHAVIOR_RULES = Object.freeze({
   hearing: Object.freeze({ gunshot: 45, violence: 25, death: 30, panic: 12 }), // metres

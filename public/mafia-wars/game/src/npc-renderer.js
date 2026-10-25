@@ -5,7 +5,7 @@
 // behaviour. Decoding and selection are pure so Node tests cover them.
 import { interpolateSnapshots } from './multiplayer-protocol.js';
 import { isNpcId, npcIdentityValid } from './npc-schema.js';
-import { NPC_BEHAVIOR } from './npc-behavior.js';
+import { NPC_BEHAVIOR, personalityOf } from './npc-behavior.js';
 
 export const NPC_RENDER_RULES = Object.freeze({
   drawRadius: 70, maxDrawnMobile: 10, maxDrawnDesktop: 16,
@@ -16,16 +16,21 @@ export const NPC_RENDER_RULES = Object.freeze({
   buildsPerFrame: 2,             // spread first-appearance cost (one build is ~2-5 ms)
 });
 
-// [index, x*10, z*10, yaw/2π*255, anim, speed*10, behavior?] -> plain state.
-// The 7th value (M6.7B1 behaviour) is optional; servers without reactions omit it.
+// [index, x*10, z*10, yaw/2π*255, anim, speed*10, behavior?, health?] -> plain state.
+// The 7th (M6.7B1 behaviour) and 8th (M6.7B2 health) values are optional.
 export function decodeNpcState(raw, at) {
   if (!Array.isArray(raw) || raw.length < 6 || !raw.every(Number.isFinite)) return null;
-  const [index, x, z, yaw, anim, speed, behavior = NPC_BEHAVIOR.calm] = raw;
-  return { index, at, x: x / 10, y: 0, z: z / 10, yaw: (yaw / 255) * Math.PI * 2, state: anim, speed: speed / 10, behavior };
+  const [index, x, z, yaw, anim, speed, behavior = NPC_BEHAVIOR.calm, health = 100] = raw;
+  return { index, at, x: x / 10, y: 0, z: z / 10, yaw: (yaw / 255) * Math.PI * 2, state: anim, speed: speed / 10, behavior, health };
 }
 
 // Which clip a resident plays for its behaviour (pure, for tests).
-export function npcClipFor(behavior, walking, speed, identity) {
+export function npcClipFor(behavior, walking, speed, identity, { side = 0 } = {}) {
+  if (behavior === NPC_BEHAVIOR.defeated || behavior === NPC_BEHAVIOR.knockdown) return { name: 'Death', once: true };
+  if (behavior === NPC_BEHAVIOR.strike) return { name: side && personalityOf(identity) === 'aggressive' ? 'Kick_Right' : side ? 'Punch_Right' : 'Punch_Left', once: true };
+  if (behavior === NPC_BEHAVIOR.hurt) return { name: 'HitRecieve_2', once: true };
+  if (behavior === NPC_BEHAVIOR.warn) return { name: 'Interact' };
+  if (behavior === NPC_BEHAVIOR.fight) return speed > 0.5 ? { name: 'Run', timeScale: Math.min(1.3, Math.max(0.7, speed / NPC_RENDER_RULES.fleeClipSpeed)) } : { name: 'Idle_Neutral' };
   if (behavior === NPC_BEHAVIOR.flee && speed > 0.5) return { name: 'Run', timeScale: Math.min(1.4, Math.max(0.7, speed / NPC_RENDER_RULES.fleeClipSpeed)) };
   if (behavior === NPC_BEHAVIOR.startled) return { name: 'HitRecieve', once: true };
   if (behavior === NPC_BEHAVIOR.greet) return { name: 'Wave' };
@@ -46,7 +51,7 @@ export class NpcRenderer {
     this.scene = scene; this.library = library; this.groundAt = groundAt; this.castShadow = castShadow;
     this.maxDrawn = mobile ? NPC_RENDER_RULES.maxDrawnMobile : NPC_RENDER_RULES.maxDrawnDesktop;
     this.entries = new Map(); this.frame = 0;
-    this.stats = { known: 0, drawn: 0, visuals: 0, mixerUpdates: 0, updateMs: 0, bytes: 0, bytesPerSec: 0, rejected: 0, alert: 0, fleeing: 0 };
+    this.stats = { known: 0, drawn: 0, visuals: 0, mixerUpdates: 0, updateMs: 0, bytes: 0, bytesPerSec: 0, rejected: 0, alert: 0, fleeing: 0, fighting: 0, down: 0 };
     this.bytesWindow = { start: 0, bytes: 0 };
   }
   countBytes(n, now) {
@@ -78,10 +83,10 @@ export class NpcRenderer {
     const renderAt = serverNow - NPC_RENDER_RULES.interpolationMs;
     for (const e of this.entries.values()) if (e.snapshots.length) {
       e.render = interpolateSnapshots(e.snapshots, renderAt, e.render || {}, 0);
-      const [a, b] = e.snapshots; e.render.behavior = (b && b.at <= renderAt ? b : a).behavior; // discrete: no blending
+      const [a, b] = e.snapshots, latest = b && b.at <= renderAt ? b : a; e.render.behavior = latest.behavior; e.render.health = latest.health; // discrete: no blending
     }
     const drawn = new Set(selectDrawn([...this.entries.values()], viewer, this.maxDrawn));
-    let visuals = 0, mixerUpdates = 0, builds = 0, alert = 0, fleeing = 0;
+    let visuals = 0, mixerUpdates = 0, builds = 0, alert = 0, fleeing = 0, fighting = 0, down = 0;
     for (const e of this.entries.values()) {
       if (!drawn.has(e)) {
         if (e.visual) { e.visual.root.visible = false; e.hiddenAt ||= now; if (now - e.hiddenAt > NPC_RENDER_RULES.hiddenDisposeMs) { e.visual.dispose(); e.visual = null; } }
@@ -99,17 +104,23 @@ export class NpcRenderer {
       const v = e.visual, r = e.render;
       v.root.visible = true;
       v.root.position.set(r.x, this.groundAt(r.x, r.z), r.z); v.root.rotation.y = r.yaw;
-      const clip = npcClipFor(r.behavior, r.state === 1 && r.speed > 0.2, r.speed, e.identity);
-      v.play(clip.name, clip.once ? 0.1 : 0.25, clip.once);
+      if (r.behavior === NPC_BEHAVIOR.strike && e.lastBehavior !== NPC_BEHAVIOR.strike) e.strikeSide = (e.strikeSide || 0) ^ 1; // alternate hands
+      const clip = npcClipFor(r.behavior, r.state === 1 && r.speed > 0.2, r.speed, e.identity, { side: e.strikeSide || 0 });
+      const gettingUp = (e.lastBehavior === NPC_BEHAVIOR.knockdown || e.lastBehavior === NPC_BEHAVIOR.defeated) && clip.name !== 'Death';
+      v.play(clip.name, gettingUp ? 0.7 : clip.once ? 0.1 : 0.25, clip.once); // slow blend from the fall pose = getting up
+      e.lastBehavior = r.behavior;
       if (clip.timeScale && v.current) v.current.timeScale = clip.timeScale;
-      if (r.behavior === NPC_BEHAVIOR.flee) fleeing++; else if (r.behavior !== NPC_BEHAVIOR.calm) alert++;
+      if (r.behavior === NPC_BEHAVIOR.flee) fleeing++;
+      else if (r.behavior === NPC_BEHAVIOR.fight || r.behavior === NPC_BEHAVIOR.strike) fighting++;
+      else if (r.behavior === NPC_BEHAVIOR.knockdown || r.behavior === NPC_BEHAVIOR.defeated) down++;
+      else if (r.behavior !== NPC_BEHAVIOR.calm) alert++;
       // Distance-based animation rate.
       const every = e.distance < NPC_RENDER_RULES.fullRateRadius ? 1 : e.distance < NPC_RENDER_RULES.halfRateRadius ? 2 : 4;
       e.animAccum = (e.animAccum || 0) + dt;
       if (this.frame % every === 0) { v.mixer.update(e.animAccum); e.animAccum = 0; mixerUpdates++; }
     }
     const ms = performance.now() - started;
-    Object.assign(this.stats, { known: this.entries.size, drawn: drawn.size, visuals, mixerUpdates, alert, fleeing, updateMs: this.stats.updateMs * 0.9 + ms * 0.1 });
+    Object.assign(this.stats, { known: this.entries.size, drawn: drawn.size, visuals, mixerUpdates, alert, fleeing, fighting, down, updateMs: this.stats.updateMs * 0.9 + ms * 0.1 });
   }
 
   // Keeps the local player out of drawn residents (soft push, client side).

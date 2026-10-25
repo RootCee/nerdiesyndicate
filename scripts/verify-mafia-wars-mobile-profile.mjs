@@ -76,10 +76,10 @@ assert.equal((index.match(/id="tFire"/g) || []).length, 1);
 assert.doesNotMatch(index, /tFire2/);
 assert.match(index, /@media \(pointer: coarse\) and \(orientation: portrait\)/);
 assert.match(index, /id="mpDiagnosticsToggle"[^>]*hidden/);
-assert.match(index, /src="src\/main\.js\?build=m6\.7b1-dev1"/);
+assert.match(index, /src="src\/main\.js\?build=m6\.7b2-dev1"/);
 assert.match(main, /multiplayer-endpoint\.js\?build=m6\.3-cross-device-diagnostics-rc1/);
-assert.match(main, /wallet-bridge\.js\?build=m6\.7b1-dev1/);
-assert.match(main, /const GAME_BUILD_ID = 'm6\.7b1-dev1'/);
+assert.match(main, /wallet-bridge\.js\?build=m6\.7b2-dev1/);
+assert.match(main, /const GAME_BUILD_ID = 'm6\.7b2-dev1'/);
 // M6.5 Underground 6v6: results panel and server match state handling.
 assert.match(index, /id="ugResults"[^>]*role="dialog"/);
 assert.match(index, /id="ugStay"/); assert.match(index, /id="ugLeave"/);
@@ -109,9 +109,15 @@ for (const file of ['npc_women.glb', 'npc_men.glb', 'npc_clips_women.glb', 'npc_
 assert.match(await readFile(path.join(root, '..', 'assets', 'npc', 'LICENSES.md'), 'utf8'), /CC0 1\.0 Universal/);
 // M6.7B1 reactions: optional behaviour value, clip mapping, no attacks.
 const [npcRenderer, npcBehavior] = await Promise.all(['npc-renderer.js', 'npc-behavior.js'].map((file) => readFile(path.join(root, file), 'utf8')));
-assert.match(npcRenderer, /const \[index, x, z, yaw, anim, speed, behavior = NPC_BEHAVIOR\.calm\] = raw;/, 'behaviour value is optional');
-assert.match(npcBehavior, /NPC_BEHAVIOR = Object\.freeze\(\{ calm: 0, alert: 1, startled: 2, flee: 3, greet: 4, wary: 5 \}\)/);
+assert.match(npcRenderer, /const \[index, x, z, yaw, anim, speed, behavior = NPC_BEHAVIOR\.calm, health = 100\] = raw;/, 'behaviour and health values are optional');
+assert.match(npcBehavior, /NPC_BEHAVIOR = Object\.freeze\(\{ calm: 0, alert: 1, startled: 2, flee: 3, greet: 4, wary: 5, fight: 6, strike: 7, hurt: 8, knockdown: 9, defeated: 10, warn: 11 \}\)/, 'M6.7B1 codes unchanged; M6.7B2 codes appended');
 assert.doesNotMatch(npcBehavior.replace(/\/\/.*$/gm, ''), /attack|damage/i, 'reactions code contains no attacks or damage');
+// M6.7B2 self-defense: client events are feedback only; strikes and damage are server-side.
+const npcCombat = await readFile(path.join(root, 'npc-combat.js'), 'utf8');
+assert.match(npcCombat, /if \(distance > NPC_COMBAT_RULES\.engageRadius\) return flee;/, 'nobody charges from afar');
+assert.match(npcCombat, /case 'peaceful': return flee;/, 'peaceful residents never fight');
+assert.match(main, /message\.type === 'npc-hit'\) \{ if \(message\.shooterId === multiplayer\.credentials\?\.playerId\)/);
+assert.doesNotMatch(main, /send\(\{[^}]*type: 'npc-/, 'the client never sends NPC events');
 assert.match(main, /function renderMultiplayerDiagnostics\(\)/);
 assert.match(walletBridge, /event\.origin !== targetOrigin \|\| event\.source !== windowObject\.parent/);
 assert.match(walletBridge, /'connected', 'address', 'chainId', 'nerdieBalance'/);
@@ -121,7 +127,7 @@ assert.match(walletPage, /src=\{GAME_URL\}/);
 assert.match(walletPage, /setWalletOpen\(true\)/);
 assert.match(walletPage, /formatTokenAmount\(tokenBalance\.data, 18\)/);
 assert.match(endpoint, /nerdie-city-multiplayer-v4\.buddieroots\.workers\.dev/);
-assert.match(endpoint, /AVATAR_PREVIEW_MULTIPLAYER_SERVICE = 'https:\/\/nerdie-city-m6-(?:3|7|7b)-preview\.buddieroots\.workers\.dev'/);
+assert.match(endpoint, /AVATAR_PREVIEW_MULTIPLAYER_SERVICE = 'https:\/\/nerdie-city-m6-(?:3|7|7b|7b2)-preview\.buddieroots\.workers\.dev'/);
 assert.match(endpoint, /override && \(isLocal \|\| isPrivateLan\)/);
 
 const { CITY_BOUNDS, createCityPlan, chunkVisible } = await import(

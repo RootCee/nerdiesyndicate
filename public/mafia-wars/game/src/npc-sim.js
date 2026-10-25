@@ -15,6 +15,9 @@ import { buildNavGraph, findRoute, insideObstacle, segmentClear } from './city-n
 import { NPC_POPULATION, seedPopulation, seededRandom } from './npc-population.js';
 import { PROTOCOL_VERSION } from './multiplayer-protocol.js';
 import { NPC_BEHAVIOR, NPC_BEHAVIOR_RULES, greetingFor, personalityOf, reactionTo, severityOf } from './npc-behavior.js';
+import { NPC_COMBAT_RULES, assessThreat, strikeProfile, weaponClass } from './npc-combat.js';
+import { isInsideSafeZone } from './multiplayer-spaces.js';
+import { publicCityShotOccluded, targetDistance } from './multiplayer-combat.js';
 
 export const NPC_SIM_RULES = Object.freeze({
   tickMs: 200,
@@ -39,21 +42,28 @@ const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 
 export class CityNpcSimulation {
   // reactions: M6.7B1 awareness and reactions (off = exactly M6.7A behaviour).
-  constructor({ seed = 'room', maxActive = NPC_POPULATION.startActive, population = NPC_POPULATION.max, plan = createCityPlan(), rules = NPC_SIM_RULES, reactions = false } = {}) {
-    this.reactions = reactions === true; this.panicQueue = [];
+  // combat: M6.7B2 self-defense (requires reactions).
+  constructor({ seed = 'room', maxActive = NPC_POPULATION.startActive, population = NPC_POPULATION.max, plan = createCityPlan(), rules = NPC_SIM_RULES, reactions = false, combat = false } = {}) {
+    this.reactions = reactions === true; this.combat = this.reactions && combat === true; this.panicQueue = []; this.strikes = [];
     this.rules = rules; this.plan = plan; this.random = seededRandom(`sim:${seed}`);
     this.maxActive = Math.max(0, Math.min(NPC_POPULATION.maxActive, maxActive | 0));
     this.identities = seedPopulation(seed, population);
     this.graph = null; this.hard = null; this.pois = cityPois(plan).filter((p) => !p.spaceId || p.kind === 'apartment');
     this.residents = this.identities.map((identity, index) => ({ index, identity, x: 0, z: 0, yaw: 0, speed: 0, anim: NPC_ANIM.idle, route: null, step: 0, waitUntil: 0, stuckFor: 0, active: false, lastDormantAt: 0, placed: false, memory: [], aware: null,
-      personality: personalityOf(identity), behavior: NPC_BEHAVIOR.calm, behaviorUntil: 0, threat: null, reaction: null, pending: null, threats: [], greeted: new Map(), greetTarget: null, fleeing: false }));
+      personality: personalityOf(identity), behavior: NPC_BEHAVIOR.calm, behaviorUntil: 0, threat: null, reaction: null, pending: null, threats: [], greeted: new Map(), greetTarget: null, fleeing: false,
+      health: NPC_COMBAT_RULES.maxHealth, lastDamageAt: 0, downUntil: 0, defeatedAt: 0, protectionUntil: 0, fight: null, lastAttack: null, allyAttack: null, strikeUntil: 0 }));
     this.viewers = new Map(); // playerId -> Map(index -> { at, sig })
     this.metrics = { ticks: 0, active: 0, relocations: 0, routes: 0, routeFailures: 0, failureReasons: {}, walkBacks: 0, replans: 0, bytes: 0, messages: 0,
-      reactions: { startled: 0, alert: 0, flee: 0, fleeRouteFailures: 0, panicked: 0, remembered: 0, greet: 0, wary: 0 } };
+      reactions: { startled: 0, alert: 0, flee: 0, fleeRouteFailures: 0, panicked: 0, remembered: 0, greet: 0, wary: 0 },
+      combat: { hits: 0, strikes: 0, knockdowns: 0, defeats: 0, respawns: 0, disengaged: 0, retreats: 0, fight: 0, flee: 0, warn: 0, cower: 0 } };
   }
 
   #ensureGraph() {
-    if (!this.graph) { this.graph = buildNavGraph(this.plan); this.hard = hard(this.graph.obstacles); }
+    if (!this.graph) {
+      this.graph = buildNavGraph(this.plan); this.hard = hard(this.graph.obstacles);
+      // Shots at residents stop at buildings, houses, and fences (not at thin lamp posts).
+      this.shotBlockers = this.hard.filter((o) => (o.maxX - o.minX) * (o.maxZ - o.minZ) > 0.25);
+    }
     return this.graph;
   }
   // A random point on a walk-graph edge (a sidewalk, lane, crossing, or alley).
@@ -74,7 +84,7 @@ export class CityNpcSimulation {
     }
     return false;
   }
-  #reset(r, p) { Object.assign(r, { x: p.x, z: p.z, route: null, step: 0, speed: 0, anim: NPC_ANIM.idle, waitUntil: 0, stuckFor: 0, placed: true, behavior: NPC_BEHAVIOR.calm, threat: null, pending: null, fleeing: false }); }
+  #reset(r, p) { Object.assign(r, { x: p.x, z: p.z, route: null, step: 0, speed: 0, anim: NPC_ANIM.idle, waitUntil: 0, stuckFor: 0, placed: true, behavior: NPC_BEHAVIOR.calm, threat: null, pending: null, fleeing: false, health: NPC_COMBAT_RULES.maxHealth, downUntil: 0, defeatedAt: 0, fight: null, lastAttack: null, allyAttack: null }); }
 
   // Next destination: a business, bank, or apartment door for 'visit'
   // residents sometimes, otherwise a sidewalk point 30-120 m away.
@@ -173,12 +183,7 @@ export class CityNpcSimulation {
   // A sidewalk destination away from the threat, reached by a walk-graph route
   // (so fleeing never cuts through buildings, cars, fences, or lots).
   #startFlee(r, now) {
-    const g = this.#ensureGraph(), R = NPC_BEHAVIOR_RULES, t = r.threat;
-    const ax = r.x - t.x, az = r.z - t.z, alen = Math.hypot(ax, az) || 1, here = dist(r, t);
-    const candidates = g.nodes.filter((n) => {
-      const d = dist(n, r); if (d < R.fleeMin || d > R.fleeMax) return false;
-      return ((n.x - r.x) * ax + (n.z - r.z) * az) / (d * alen) > 0.35 && dist(n, t) > here + 20;
-    });
+    const g = this.#ensureGraph(), candidates = this.#fleeCandidates(r, r.threat);
     for (let tries = 0; tries < 6 && candidates.length; tries++) {
       const goal = candidates.splice(Math.floor(this.random() * candidates.length), 1)[0];
       const route = findRoute(g, r, goal); this.metrics.routes++;
@@ -191,10 +196,150 @@ export class CityNpcSimulation {
     return false;
   }
 
+  #fleeCandidates(r, t) {
+    const g = this.#ensureGraph(), R = NPC_BEHAVIOR_RULES;
+    const ax = r.x - t.x, az = r.z - t.z, alen = Math.hypot(ax, az) || 1, here = dist(r, t);
+    return g.nodes.filter((n) => {
+      const d = dist(n, r); if (d < R.fleeMin || d > R.fleeMax) return false;
+      return ((n.x - r.x) * ax + (n.z - r.z) * az) / (d * alen) > 0.35 && dist(n, t) > here + 20;
+    });
+  }
+
+  // ---- M6.7B2 self-defense ------------------------------------------------
+  // A server-validated hit on a resident (RoomCore resolves player shots).
+  damageResident(index, { damage, sourceId, weaponId, from, at }) {
+    const B = NPC_BEHAVIOR, C = NPC_COMBAT_RULES, r = this.residents[index];
+    if (!this.combat || !r?.placed || r.behavior === B.defeated || at < r.protectionUntil || !(damage > 0)) return null;
+    r.health = Math.max(0, r.health - damage); r.lastDamageAt = at; this.metrics.combat.hits++;
+    r.lastAttack = { sourceId, weapon: weaponClass(weaponId), x: from?.x ?? r.x, z: from?.z ?? r.z, at };
+    if (sourceId) { r.threats = r.threats.filter((t) => t.sourceId !== sourceId); r.threats.push({ sourceId, at }); }
+    Object.assign(r, { route: null, fleeing: false, fight: null, speed: 0, pending: null });
+    let knockdown = false;
+    if (r.health === 0) { Object.assign(r, { behavior: B.defeated, defeatedAt: at, threat: null }); this.metrics.combat.defeats++; }
+    else if (damage >= C.knockdownDamage) { Object.assign(r, { behavior: B.knockdown, downUntil: at + C.knockdownMs }); knockdown = true; this.metrics.combat.knockdowns++; }
+    else Object.assign(r, { behavior: B.hurt, behaviorUntil: at + C.hurtMs });
+    // Aggressive residents right beside the victim may step in; everyone else
+    // nearby hears it as violence (M6.7B1 reactions).
+    for (const other of this.residents) if (other !== r && other.active && other.personality === 'aggressive' && dist(other, r) <= C.allyRadius) other.allyAttack = { ...r.lastAttack };
+    this.stimulus({ type: 'violence', x: r.x, z: r.z, sourceId, at });
+    r.pending = null;
+    return { health: Math.round(r.health), knockdown, defeated: r.behavior === B.defeated };
+  }
+
+  // Nearest resident a shot would hit before `limit` metres. Interior walls
+  // (publicCityShotOccluded) and city buildings, houses, and fences block it.
+  shotHit(origin, direction, limit) {
+    if (!this.combat) return null;
+    this.#ensureGraph();
+    let best = null;
+    for (const r of this.residents) {
+      if (!r.active || r.behavior === NPC_BEHAVIOR.defeated || isInsideSafeZone({ x: r.x, y: 0, z: r.z })) continue;
+      const d = targetDistance(origin, direction, { x: r.x, y: 0, z: r.z });
+      if (d === null || d > limit || publicCityShotOccluded(origin, direction, d) || !segmentClear(origin, r, this.shotBlockers, { pad: 0 })) continue;
+      if (!best || d < best.distance) best = { index: r.index, distance: d };
+    }
+    return best;
+  }
+
+  drainStrikes() { const strikes = this.strikes; this.strikes = []; return strikes; }
+
+  #targetable(p) { return p && !p.dead && !p.safe && !p.protected; }
+  // Reach, line of sight through the city (buildings, walls, fences), and target state.
+  canStrike(r, p) {
+    const d = dist(r, p);
+    if (!this.#targetable(p) || d > NPC_COMBAT_RULES.strikeReach) return false;
+    if (!segmentClear(r, p, this.hard, { pad: 0 })) return false;
+    const origin = { x: r.x, y: 1.35, z: r.z }, dir = { x: (p.x - r.x) / (d || 1), y: 0, z: (p.z - r.z) / (d || 1) };
+    return d < 0.05 || !publicCityShotOccluded(origin, dir, d);
+  }
+
+  #assess(r, players, now, attack, ally = false) {
+    const B = NPC_BEHAVIOR, C = NPC_COMBAT_RULES;
+    if (!attack) { Object.assign(r, { behavior: B.alert, behaviorUntil: now + NPC_BEHAVIOR_RULES.alertMs }); return; }
+    const attacker = players.find((p) => p.id === attack.sourceId);
+    const at = attacker || attack, distance = attacker ? dist(attacker, r) : Infinity;
+    const attackers = new Set(r.threats.filter((t) => now - t.at < 10_000 && players.some((p) => p.id === t.sourceId && dist(p, r) < C.engageRadius)).map((t) => t.sourceId)).size || 1;
+    const escape = this.#fleeCandidates(r, at).length > 0;
+    const decision = assessThreat({ personality: r.personality, health: r.health, distance, weapon: attack.weapon, attackers, escape, attacked: !ally, allyAttacked: ally });
+    this.metrics.combat[decision]++;
+    r.threat = { x: at.x, z: at.z, sourceId: attack.sourceId };
+    const profile = decision === 'fight' && this.#targetable(attacker) ? strikeProfile(r.personality, !escape) : null;
+    if (profile) { Object.assign(r, { behavior: B.fight, fight: { targetId: attacker.id, profile, since: now, nextStrikeAt: now + 400, repathAt: 0 }, route: null, fleeing: false }); return; }
+    if (decision === 'warn') { Object.assign(r, { behavior: B.warn, behaviorUntil: now + C.warnMs }); return; }
+    if (decision === 'flee' && this.#startFlee(r, now)) return;
+    Object.assign(r, { behavior: B.alert, behaviorUntil: now + NPC_BEHAVIOR_RULES.alertMs }); // cower in place
+  }
+
+  #fightStep(r, players, active, dt, now) {
+    const B = NPC_BEHAVIOR, C = NPC_COMBAT_RULES, f = r.fight;
+    const target = players.find((p) => p.id === f.targetId);
+    const remembered = r.threats.some((t) => t.sourceId === f.targetId);
+    if (!this.#targetable(target) || !remembered || dist(target, r) > C.engageRadius || now - f.since > C.fightTimeoutMs) {
+      Object.assign(r, { fight: null, route: null, behavior: B.alert, behaviorUntil: now + 4000 }); this.metrics.combat.disengaged++; return;
+    }
+    if (r.health < f.profile.retreatAt) {
+      Object.assign(r, { fight: null, route: null, threat: { x: target.x, z: target.z, sourceId: target.id } }); this.metrics.combat.retreats++;
+      if (!this.#startFlee(r, now)) Object.assign(r, { behavior: B.alert, behaviorUntil: now + NPC_BEHAVIOR_RULES.alertMs });
+      return;
+    }
+    const d = dist(target, r); this.#face(r, target);
+    if (d > C.strikeRange) {
+      r.behavior = B.fight;
+      if (!r.route || now >= f.repathAt) {
+        if (segmentClear(r, target, this.hard, { pad: 0.2 })) r.route = [{ x: r.x, z: r.z }, { x: target.x, z: target.z }];
+        else { const route = findRoute(this.#ensureGraph(), r, target); this.metrics.routes++; r.route = route.ok ? route.points : null; }
+        r.step = 1; f.repathAt = now + 600;
+      }
+      const speed = r.route ? this.#steer(r, active, players.filter((p) => p.id !== target.id), dt, now, C.approachSpeed) : 0;
+      r.speed = speed; r.anim = speed > 0.2 ? NPC_ANIM.walk : NPC_ANIM.notice;
+      if (!r.route) r.route = null;
+      return;
+    }
+    Object.assign(r, { route: null, speed: 0, anim: NPC_ANIM.notice });
+    if (now >= f.nextStrikeAt) {
+      if (this.canStrike(r, target)) { this.strikes.push({ npcIndex: r.index, targetId: target.id, damage: f.profile.damage, at: now }); Object.assign(r, { behavior: B.strike, strikeUntil: now + 500 }); this.metrics.combat.strikes++; }
+      f.nextStrikeAt = now + f.profile.cooldownMs;
+    } else if (r.behavior === B.strike && now >= r.strikeUntil) r.behavior = B.fight;
+  }
+
+  // Combat states for one resident; true when combat controls it this tick.
+  #combatStep(r, players, active, dt, now) {
+    const B = NPC_BEHAVIOR, C = NPC_COMBAT_RULES;
+    if (r.behavior !== B.defeated && r.health < C.maxHealth && now - r.lastDamageAt > C.regenDelayMs) r.health = Math.min(C.maxHealth, r.health + C.regenPerSecond * (this.rules.tickMs / 1000));
+    switch (r.behavior) {
+      case B.defeated:
+        Object.assign(r, { speed: 0, anim: NPC_ANIM.idle });
+        if (now - r.defeatedAt >= C.defeatedMinMs && (this.#outOfSight(r, players) || now - r.defeatedAt >= C.defeatedMaxMs) && this.#placeNear(r, players)) { r.protectionUntil = now + C.respawnProtectionMs; this.metrics.combat.respawns++; }
+        return true;
+      case B.knockdown:
+        Object.assign(r, { speed: 0, anim: NPC_ANIM.idle });
+        if (now >= r.downUntil) this.#assess(r, players, now, r.lastAttack);
+        return true;
+      case B.hurt:
+        Object.assign(r, { speed: 0, anim: NPC_ANIM.notice });
+        if (now >= r.behaviorUntil) this.#assess(r, players, now, r.lastAttack);
+        return true;
+      case B.warn: {
+        Object.assign(r, { speed: 0, anim: NPC_ANIM.notice }); this.#face(r, r.threat);
+        if (now >= r.behaviorUntil && !this.#startFlee(r, now)) Object.assign(r, { behavior: B.alert, behaviorUntil: now + NPC_BEHAVIOR_RULES.alertMs });
+        return true;
+      }
+      case B.fight: case B.strike:
+        this.#fightStep(r, players, active, dt, now);
+        return true;
+    }
+    if (r.allyAttack) {
+      const a = r.allyAttack; r.allyAttack = null;
+      if (now - a.at < 3000 && r.behavior !== B.flee) { this.#assess(r, players, now, a, true); return r.behavior !== B.calm; }
+    }
+    return false;
+  }
+
   // One resident's awareness and reactions for this tick. Returns true when a
   // reaction (not the walking routine) controls the resident.
   #behave(r, players, active, dt, now) {
     const B = NPC_BEHAVIOR, R = NPC_BEHAVIOR_RULES;
+    if (this.combat && this.#combatStep(r, players, active, dt, now)) return true;
     const react = (behavior, ms, reaction, threat) => {
       Object.assign(r, { behavior, behaviorUntil: now + ms, reaction, threat, fleeing: false, speed: 0 });
       if (behavior !== B.greet && behavior !== B.wary) r.route = null; // stop and reassess; greetings keep the walk
@@ -272,7 +417,13 @@ export class CityNpcSimulation {
   tick(now, players) {
     const rules = this.rules, out = [];
     for (const id of this.viewers.keys()) if (!players.some((p) => p.id === id && p.receives)) this.viewers.delete(id);
-    if (!players.length) { for (const r of this.residents) { r.active = false; r.aware = null; } this.metrics.active = 0; return out; }
+    if (!players.length) {
+      for (const r of this.residents) {
+        Object.assign(r, { active: false, aware: null, fight: null, allyAttack: null });
+        if ([NPC_BEHAVIOR.fight, NPC_BEHAVIOR.strike, NPC_BEHAVIOR.warn, NPC_BEHAVIOR.hurt].includes(r.behavior)) r.behavior = NPC_BEHAVIOR.alert; // nobody left to fight
+      }
+      this.metrics.active = 0; return out;
+    }
     this.#ensureGraph(); this.metrics.ticks++;
     const dt = rules.tickMs / 1000;
     // Place on first use, then relocate residents nobody is near (out of sight).
@@ -293,7 +444,10 @@ export class CityNpcSimulation {
       r.memory = r.memory.filter((m) => now - m.at < rules.memoryMs);
       if (r.threats.length) r.threats = r.threats.filter((t) => now - t.at < NPC_BEHAVIOR_RULES.threatMemoryMs); // forget on time, active or not
       if (!r.active) {
-        Object.assign(r, { speed: 0, anim: NPC_ANIM.idle, aware: null, pending: null, behavior: NPC_BEHAVIOR.calm, fleeing: false, threat: null });
+        // A defeated resident stays down until it can respawn out of sight.
+        if (r.behavior === NPC_BEHAVIOR.defeated && !this.#outOfSight(r, players)) { r.speed = 0; continue; }
+        if (r.behavior === NPC_BEHAVIOR.defeated) Object.assign(r, { health: NPC_COMBAT_RULES.maxHealth, defeatedAt: 0, protectionUntil: now + NPC_COMBAT_RULES.respawnProtectionMs });
+        Object.assign(r, { speed: 0, anim: NPC_ANIM.idle, aware: null, pending: null, behavior: NPC_BEHAVIOR.calm, fleeing: false, threat: null, fight: null, allyAttack: null });
         if (r.route && r.fleeing === false && r.reaction === 'flee') r.route = null;
         this.#dormantStep(r, now); continue;
       }
@@ -329,6 +483,7 @@ export class CityNpcSimulation {
       for (const r of relevant) {
         const state = [r.index, Math.round(r.x * 10), Math.round(r.z * 10), Math.round(((r.yaw % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) / (2 * Math.PI) * 255), r.anim, Math.round(r.speed * 10)];
         if (this.reactions) state.push(r.behavior); // optional 7th value; M6.7A clients ignore it
+        if (this.combat) state.push(Math.round(r.health)); // optional 8th value (M6.7B2)
         const sig = state.slice(1).join(','), entry = known.get(r.index);
         if (!entry) { roster.push(r.identity); known.set(r.index, { at: now, sig }); states.push(state); continue; }
         if (entry.sig !== sig || now - entry.at >= rules.keyframeMs) { entry.at = now; entry.sig = sig; states.push(state); }
@@ -341,5 +496,5 @@ export class CityNpcSimulation {
   }
 
   // Test and diagnostics view (never sent to clients).
-  snapshot() { return this.residents.map((r) => ({ id: r.identity.id, x: r.x, z: r.z, active: r.active, anim: r.anim, speed: r.speed, memory: r.memory.length, aware: r.aware?.playerId || null, personality: r.personality, behavior: r.behavior, threats: r.threats.length })); }
+  snapshot() { return this.residents.map((r) => ({ id: r.identity.id, x: r.x, z: r.z, active: r.active, anim: r.anim, speed: r.speed, memory: r.memory.length, aware: r.aware?.playerId || null, personality: r.personality, behavior: r.behavior, threats: r.threats.length, health: r.health, fightTarget: r.fight?.targetId || null })); }
 }

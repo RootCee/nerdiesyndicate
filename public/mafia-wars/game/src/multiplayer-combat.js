@@ -155,7 +155,8 @@ export function leaveUndergroundCombat(player) {
   Object.assign(player.combat, { health: MULTIPLAYER_COMBAT_RULES.maxHealth, dead: false, team: null, respawnAt: 0, protectionUntil: 0 });
 }
 
-const targetDistance = (origin, direction, target) => {
+// Distance along a shot to a body standing at `target` (chest line, 0.72 m radius), or null on a miss.
+export const targetDistance = (origin, direction, target) => {
   const center = { x: target.x, y: target.y + 1.05, z: target.z };
   const vx = center.x - origin.x, vy = center.y - origin.y, vz = center.z - origin.z;
   const along = vx * direction.x + vy * direction.y + vz * direction.z;

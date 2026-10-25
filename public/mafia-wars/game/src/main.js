@@ -50,9 +50,9 @@ import { NpcRenderer } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.7b1-dev1';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.7b2-dev1';
 
-const GAME_BUILD_ID = 'm6.7b1-dev1';
+const GAME_BUILD_ID = 'm6.7b2-dev1';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -664,7 +664,7 @@ function renderMultiplayerDiagnostics() {
   $('mpDiagStatus').textContent = multiplayer?.state || 'Not connected';
   $('mpDiagMode').textContent = space === 'underground' ? 'Underground' : multiplayerDev ? 'Public City' : 'Solo';
   const npc = npcRenderer.stats;
-  $('mpDiagNpc').textContent = `${npc.drawn} drawn / ${npc.known} near · ${npc.alert} alert · ${npc.fleeing} fleeing · ${npc.updateMs.toFixed(2)} ms · ${(npc.bytesPerSec / 1024).toFixed(1)} KB/s`;
+  $('mpDiagNpc').textContent = `${npc.drawn} drawn / ${npc.known} near · ${npc.alert} alert · ${npc.fleeing} fleeing · ${npc.fighting} fighting · ${npc.down} down · ${npc.updateMs.toFixed(2)} ms · ${(npc.bytesPerSec / 1024).toFixed(1)} KB/s`;
 }
 function setMultiplayerStatus(text, on = true) {
   const el = $('mpStatus');
@@ -858,6 +858,8 @@ function configureMultiplayerClient() {
     else if (message.type === 'peer-left') { remotePlayers.get(message.playerId)?.dispose(); remotePlayers.delete(message.playerId); if (Number.isInteger(message.playerCount)) multiplayerPlayerCount = message.playerCount; if (!message.bot) setMultiplayerStatus('Connected · a player is reconnecting'); }
     else if (message.type === 'underground-roster') { if (inLocalUnderground()) for (const bot of message.players || []) { const remote = ensureRemote(bot); if (remote && bot.state) remote.push(bot.state); } }
     else if (message.type === 'npc-roster') { npcRenderer.countBytes(JSON.stringify(message).length, performance.now()); npcRenderer.applyRoster(message.npcs); }
+    else if (message.type === 'npc-hit') { if (message.shooterId === multiplayer.credentials?.playerId) { hud.hit(!!message.defeated); sfx.hit(); } }
+    else if (message.type === 'npc-strike') { if (message.targetId === multiplayer.credentials?.playerId && !message.dead) { hurtK = 1; sfx.hurt(); } }
     else if (message.type === 'npc-states') { if ((localContext.space?.id || 'city') === 'city') { npcRenderer.countBytes(JSON.stringify(message).length, performance.now()); npcRenderer.applyStates(message); } }
     else if (message.type === 'bot-states') { if (inLocalUnderground()) for (const state of message.states || []) ensureRemote({ id: state.playerId, name: state.name, bot: true, context: UNDERGROUND_REMOTE_CONTEXT })?.push(state); }
     else if (message.type === 'underground-match') applyUndergroundMatch(message);

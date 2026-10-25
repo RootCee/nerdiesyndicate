@@ -11,9 +11,9 @@ if (!sourceRoot) {
   throw new Error('Usage: node scripts/sync-mafia-wars-preview.mjs /absolute/path/to/game/source');
 }
 
-const expectedCommit = '5bba014920055d4a01af40e94450a4171866a58d';
-// M6.7B previews use their own server (resident reactions enabled); production is unaffected.
-const previewMultiplayerService = 'https://nerdie-city-m6-7b-preview.buddieroots.workers.dev';
+const expectedCommit = '464a640c65c4a6e919cbb077fb7b29c7b2213459';
+// M6.7B2 previews use their own server (reactions + self-defense enabled); production is unaffected.
+const previewMultiplayerService = 'https://nerdie-city-m6-7b2-preview.buddieroots.workers.dev';
 const runtimeFiles = ['index.html', 'version.txt'];
 const characterFiles = ['blue_zip.glb', 'navy.glb', 'red_hoodie.glb', 'red_jersey.glb'];
 const npcFiles = ['npc_women.glb', 'npc_men.glb', 'npc_clips_women.glb', 'npc_clips_men.glb', 'LICENSES.md'];
