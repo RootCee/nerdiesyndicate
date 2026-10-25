@@ -76,10 +76,10 @@ assert.equal((index.match(/id="tFire"/g) || []).length, 1);
 assert.doesNotMatch(index, /tFire2/);
 assert.match(index, /@media \(pointer: coarse\) and \(orientation: portrait\)/);
 assert.match(index, /id="mpDiagnosticsToggle"[^>]*hidden/);
-assert.match(index, /src="src\/main\.js\?build=m6\.7-dev1"/);
+assert.match(index, /src="src\/main\.js\?build=m6\.7b1-dev1"/);
 assert.match(main, /multiplayer-endpoint\.js\?build=m6\.3-cross-device-diagnostics-rc1/);
-assert.match(main, /wallet-bridge\.js\?build=m6\.7-dev1/);
-assert.match(main, /const GAME_BUILD_ID = 'm6\.7-dev1'/);
+assert.match(main, /wallet-bridge\.js\?build=m6\.7b1-dev1/);
+assert.match(main, /const GAME_BUILD_ID = 'm6\.7b1-dev1'/);
 // M6.5 Underground 6v6: results panel and server match state handling.
 assert.match(index, /id="ugResults"[^>]*role="dialog"/);
 assert.match(index, /id="ugStay"/); assert.match(index, /id="ugLeave"/);
@@ -107,6 +107,11 @@ assert.match(index, /id="mpDiagNpc"/);
 assert.match(npcSchema, /NPC_IDENTITY_KEYS = Object\.freeze\(\['id', 'schemaVersion', 'role', 'label', 'appearance', 'traits', 'routine'\]\)/, 'NPC identities carry no player fields');
 for (const file of ['npc_women.glb', 'npc_men.glb', 'npc_clips_women.glb', 'npc_clips_men.glb']) assert.ok((await readFile(path.join(root, '..', 'assets', 'npc', file))).length > 100_000, file);
 assert.match(await readFile(path.join(root, '..', 'assets', 'npc', 'LICENSES.md'), 'utf8'), /CC0 1\.0 Universal/);
+// M6.7B1 reactions: optional behaviour value, clip mapping, no attacks.
+const [npcRenderer, npcBehavior] = await Promise.all(['npc-renderer.js', 'npc-behavior.js'].map((file) => readFile(path.join(root, file), 'utf8')));
+assert.match(npcRenderer, /const \[index, x, z, yaw, anim, speed, behavior = NPC_BEHAVIOR\.calm\] = raw;/, 'behaviour value is optional');
+assert.match(npcBehavior, /NPC_BEHAVIOR = Object\.freeze\(\{ calm: 0, alert: 1, startled: 2, flee: 3, greet: 4, wary: 5 \}\)/);
+assert.doesNotMatch(npcBehavior.replace(/\/\/.*$/gm, ''), /attack|damage/i, 'reactions code contains no attacks or damage');
 assert.match(main, /function renderMultiplayerDiagnostics\(\)/);
 assert.match(walletBridge, /event\.origin !== targetOrigin \|\| event\.source !== windowObject\.parent/);
 assert.match(walletBridge, /'connected', 'address', 'chainId', 'nerdieBalance'/);
@@ -116,7 +121,7 @@ assert.match(walletPage, /src=\{GAME_URL\}/);
 assert.match(walletPage, /setWalletOpen\(true\)/);
 assert.match(walletPage, /formatTokenAmount\(tokenBalance\.data, 18\)/);
 assert.match(endpoint, /nerdie-city-multiplayer-v4\.buddieroots\.workers\.dev/);
-assert.match(endpoint, /AVATAR_PREVIEW_MULTIPLAYER_SERVICE = 'https:\/\/nerdie-city-m6-[37]-preview\.buddieroots\.workers\.dev'/);
+assert.match(endpoint, /AVATAR_PREVIEW_MULTIPLAYER_SERVICE = 'https:\/\/nerdie-city-m6-(?:3|7|7b)-preview\.buddieroots\.workers\.dev'/);
 assert.match(endpoint, /override && \(isLocal \|\| isPrivateLan\)/);
 
 const { CITY_BOUNDS, createCityPlan, chunkVisible } = await import(

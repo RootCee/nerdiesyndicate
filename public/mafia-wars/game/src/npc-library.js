@@ -131,9 +131,11 @@ export function buildNpcVisual(identity, { castShadow = false } = {}) {
   for (const [name, clip] of Object.entries(pack.clips)) actions[name] = mixer.clipAction(clip);
   return {
     root, mesh, mixer, actions, current: null,
-    play(name, fade = 0.25) {
+    // once: play a single time and hold the last frame (a flinch, for example).
+    play(name, fade = 0.25, once = false) {
       const next = actions[name]; if (!next || this.current === next) return;
-      next.reset().fadeIn(fade).play(); if (this.current) this.current.fadeOut(fade); this.current = next;
+      next.reset(); next.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, Infinity); next.clampWhenFinished = once;
+      next.fadeIn(fade).play(); if (this.current) this.current.fadeOut(fade); this.current = next;
     },
     dispose() { root.removeFromParent(); mixer.stopAllAction(); mixer.uncacheRoot(root); skeleton.dispose(); material.dispose(); },
   };

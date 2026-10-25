@@ -50,9 +50,9 @@ import { NpcRenderer } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.7-dev1';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.7b1-dev1';
 
-const GAME_BUILD_ID = 'm6.7-dev1';
+const GAME_BUILD_ID = 'm6.7b1-dev1';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -664,7 +664,7 @@ function renderMultiplayerDiagnostics() {
   $('mpDiagStatus').textContent = multiplayer?.state || 'Not connected';
   $('mpDiagMode').textContent = space === 'underground' ? 'Underground' : multiplayerDev ? 'Public City' : 'Solo';
   const npc = npcRenderer.stats;
-  $('mpDiagNpc').textContent = `${npc.drawn} drawn / ${npc.known} near · ${npc.updateMs.toFixed(2)} ms · ${(npc.bytesPerSec / 1024).toFixed(1)} KB/s`;
+  $('mpDiagNpc').textContent = `${npc.drawn} drawn / ${npc.known} near · ${npc.alert} alert · ${npc.fleeing} fleeing · ${npc.updateMs.toFixed(2)} ms · ${(npc.bytesPerSec / 1024).toFixed(1)} KB/s`;
 }
 function setMultiplayerStatus(text, on = true) {
   const el = $('mpStatus');

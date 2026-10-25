@@ -5,20 +5,33 @@
 // behaviour. Decoding and selection are pure so Node tests cover them.
 import { interpolateSnapshots } from './multiplayer-protocol.js';
 import { isNpcId, npcIdentityValid } from './npc-schema.js';
+import { NPC_BEHAVIOR } from './npc-behavior.js';
 
 export const NPC_RENDER_RULES = Object.freeze({
   drawRadius: 70, maxDrawnMobile: 10, maxDrawnDesktop: 16,
   interpolationMs: 350,          // 200 ms ticks + jitter
   fullRateRadius: 25, halfRateRadius: 50, // animation updates: every frame / every 2nd / every 4th
   hiddenDisposeMs: 8000, walkClipSpeed: 1.3, playerRadius: 0.75,
+  fleeClipSpeed: 3.4,
   buildsPerFrame: 2,             // spread first-appearance cost (one build is ~2-5 ms)
 });
 
-// [index, x*10, z*10, yaw/2π*255, anim, speed*10] -> plain state.
+// [index, x*10, z*10, yaw/2π*255, anim, speed*10, behavior?] -> plain state.
+// The 7th value (M6.7B1 behaviour) is optional; servers without reactions omit it.
 export function decodeNpcState(raw, at) {
   if (!Array.isArray(raw) || raw.length < 6 || !raw.every(Number.isFinite)) return null;
-  const [index, x, z, yaw, anim, speed] = raw;
-  return { index, at, x: x / 10, y: 0, z: z / 10, yaw: (yaw / 255) * Math.PI * 2, state: anim, speed: speed / 10 };
+  const [index, x, z, yaw, anim, speed, behavior = NPC_BEHAVIOR.calm] = raw;
+  return { index, at, x: x / 10, y: 0, z: z / 10, yaw: (yaw / 255) * Math.PI * 2, state: anim, speed: speed / 10, behavior };
+}
+
+// Which clip a resident plays for its behaviour (pure, for tests).
+export function npcClipFor(behavior, walking, speed, identity) {
+  if (behavior === NPC_BEHAVIOR.flee && speed > 0.5) return { name: 'Run', timeScale: Math.min(1.4, Math.max(0.7, speed / NPC_RENDER_RULES.fleeClipSpeed)) };
+  if (behavior === NPC_BEHAVIOR.startled) return { name: 'HitRecieve', once: true };
+  if (behavior === NPC_BEHAVIOR.greet) return { name: 'Wave' };
+  if (behavior === NPC_BEHAVIOR.alert || behavior === NPC_BEHAVIOR.wary) return { name: 'Idle_Neutral' };
+  if (walking) return { name: 'Walk', timeScale: Math.min(1.5, Math.max(0.6, speed / NPC_RENDER_RULES.walkClipSpeed)) };
+  return { name: identity.traits.sociability > 0.5 ? 'Idle' : 'Idle_Neutral' };
 }
 export const npcIndexOf = (id) => (isNpcId(id) ? parseInt(id.slice(2), 36) : -1);
 
@@ -33,7 +46,7 @@ export class NpcRenderer {
     this.scene = scene; this.library = library; this.groundAt = groundAt; this.castShadow = castShadow;
     this.maxDrawn = mobile ? NPC_RENDER_RULES.maxDrawnMobile : NPC_RENDER_RULES.maxDrawnDesktop;
     this.entries = new Map(); this.frame = 0;
-    this.stats = { known: 0, drawn: 0, visuals: 0, mixerUpdates: 0, updateMs: 0, bytes: 0, bytesPerSec: 0, rejected: 0 };
+    this.stats = { known: 0, drawn: 0, visuals: 0, mixerUpdates: 0, updateMs: 0, bytes: 0, bytesPerSec: 0, rejected: 0, alert: 0, fleeing: 0 };
     this.bytesWindow = { start: 0, bytes: 0 };
   }
   countBytes(n, now) {
@@ -63,9 +76,12 @@ export class NpcRenderer {
   update(dt, serverNow, viewer, now = performance.now()) {
     const started = performance.now(); this.frame++;
     const renderAt = serverNow - NPC_RENDER_RULES.interpolationMs;
-    for (const e of this.entries.values()) if (e.snapshots.length) e.render = interpolateSnapshots(e.snapshots, renderAt, e.render || {}, 0);
+    for (const e of this.entries.values()) if (e.snapshots.length) {
+      e.render = interpolateSnapshots(e.snapshots, renderAt, e.render || {}, 0);
+      const [a, b] = e.snapshots; e.render.behavior = (b && b.at <= renderAt ? b : a).behavior; // discrete: no blending
+    }
     const drawn = new Set(selectDrawn([...this.entries.values()], viewer, this.maxDrawn));
-    let visuals = 0, mixerUpdates = 0, builds = 0;
+    let visuals = 0, mixerUpdates = 0, builds = 0, alert = 0, fleeing = 0;
     for (const e of this.entries.values()) {
       if (!drawn.has(e)) {
         if (e.visual) { e.visual.root.visible = false; e.hiddenAt ||= now; if (now - e.hiddenAt > NPC_RENDER_RULES.hiddenDisposeMs) { e.visual.dispose(); e.visual = null; } }
@@ -83,16 +99,17 @@ export class NpcRenderer {
       const v = e.visual, r = e.render;
       v.root.visible = true;
       v.root.position.set(r.x, this.groundAt(r.x, r.z), r.z); v.root.rotation.y = r.yaw;
-      const walking = r.state === 1 && r.speed > 0.2;
-      v.play(walking ? 'Walk' : e.identity.traits.sociability > 0.5 ? 'Idle' : 'Idle_Neutral');
-      if (walking && v.current) v.current.timeScale = Math.min(1.5, Math.max(0.6, r.speed / NPC_RENDER_RULES.walkClipSpeed));
+      const clip = npcClipFor(r.behavior, r.state === 1 && r.speed > 0.2, r.speed, e.identity);
+      v.play(clip.name, clip.once ? 0.1 : 0.25, clip.once);
+      if (clip.timeScale && v.current) v.current.timeScale = clip.timeScale;
+      if (r.behavior === NPC_BEHAVIOR.flee) fleeing++; else if (r.behavior !== NPC_BEHAVIOR.calm) alert++;
       // Distance-based animation rate.
       const every = e.distance < NPC_RENDER_RULES.fullRateRadius ? 1 : e.distance < NPC_RENDER_RULES.halfRateRadius ? 2 : 4;
       e.animAccum = (e.animAccum || 0) + dt;
       if (this.frame % every === 0) { v.mixer.update(e.animAccum); e.animAccum = 0; mixerUpdates++; }
     }
     const ms = performance.now() - started;
-    Object.assign(this.stats, { known: this.entries.size, drawn: drawn.size, visuals, mixerUpdates, updateMs: this.stats.updateMs * 0.9 + ms * 0.1 });
+    Object.assign(this.stats, { known: this.entries.size, drawn: drawn.size, visuals, mixerUpdates, alert, fleeing, updateMs: this.stats.updateMs * 0.9 + ms * 0.1 });
   }
 
   // Keeps the local player out of drawn residents (soft push, client side).
