@@ -67,9 +67,14 @@ canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block
 #spawnProtection.on { opacity: 1; transform: translateX(-50%); }
 #mpStatus { position: absolute; left: calc(14px + var(--sal)); top: calc(14px + var(--sat)); display: none; max-width: min(360px, 72vw); padding: 8px 11px; border: 1px solid rgba(217,172,88,.55); border-radius: 16px; background: rgba(7,9,12,.78); color: #f5d58e; font: 700 10px/1.2 'Barlow'; letter-spacing: .1em; text-transform: uppercase; pointer-events: none; }
 #mpStatus.on { display: block; }
-#cityBankButton { position: fixed; z-index: 12; top: calc(10px + var(--sat)); left: 50%; transform: translateX(-50%); pointer-events: auto; min-height: 40px; padding: 9px 13px; border: 1px solid rgba(217,172,88,.72); border-radius: 999px; background: rgba(8,8,7,.9); color: var(--gold-bright); font: 700 10px/1 'Barlow'; letter-spacing: .14em; text-transform: uppercase; white-space: nowrap; touch-action: manipulation; }
+#cityBankButton { position: fixed; z-index: 12; top: calc(10px + var(--sat)); left: 50%; transform: translateX(-50%); pointer-events: auto; min-height: 44px; padding: 9px 13px; border: 1px solid rgba(217,172,88,.72); border-radius: 999px; background: rgba(8,8,7,.9); color: var(--gold-bright); font: 700 10px/1 'Barlow'; letter-spacing: .14em; text-transform: uppercase; white-space: nowrap; touch-action: manipulation; }
 #cityBankButton:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
-#mpDiagnosticsToggle { position: fixed; z-index: 12; top: calc(10px + var(--sat)); right: calc(10px + var(--sar)); pointer-events: auto; padding: 8px 10px; border: 1px solid rgba(217,172,88,.7); border-radius: 6px; background: rgba(8,8,7,.88); color: var(--gold-bright); font: 700 10px/1 'Barlow'; letter-spacing: .12em; }
+#walletHud { position: fixed; z-index: 11; top: calc(56px + var(--sat)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 6px; max-width: min(320px, 70vw); padding: 5px 9px; border-radius: 999px; background: rgba(7,9,12,.78); color: #dfe7f0; font: 700 10px/1 'Barlow'; letter-spacing: .08em; white-space: nowrap; pointer-events: none; }
+#walletDot { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: #78818a; box-shadow: 0 0 7px rgba(120,129,138,.6); }
+#walletHud.connected #walletDot { background: #56dc88; box-shadow: 0 0 8px rgba(86,220,136,.85); }
+#walletBalance { overflow: hidden; text-overflow: ellipsis; }
+#mpDiagnosticsToggle { display: none; position: fixed; z-index: 12; top: calc(10px + var(--sat)); right: calc(10px + var(--sar)); pointer-events: auto; padding: 8px 10px; border: 1px solid rgba(217,172,88,.7); border-radius: 6px; background: rgba(8,8,7,.88); color: var(--gold-bright); font: 700 10px/1 'Barlow'; letter-spacing: .12em; }
+#mpDiagnosticsToggle.debug-visible { display: block; }
 #mpDiagnostics { position: fixed; z-index: 13; top: calc(48px + var(--sat)); right: calc(10px + var(--sar)); width: min(350px, calc(100vw - 20px)); max-height: min(60vh, 440px); overflow: auto; padding: 14px; border: 1px solid rgba(217,172,88,.72); border-radius: 8px; background: rgba(8,8,7,.96); color: var(--ink); font: 500 13px/1.4 'Barlow'; pointer-events: auto; }
 #mpDiagnostics[hidden] { display: none; }
 #mpDiagnostics h2 { margin: 0 0 10px; color: var(--gold-bright); font: 700 14px/1.2 'Barlow'; letter-spacing: .12em; }
@@ -113,7 +118,6 @@ canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block
 #tAds { right: calc(124px + var(--sar)); bottom: calc(80px + var(--sab)); width: 58px; height: 58px; }
 #tJump { right: calc(30px + var(--sar)); bottom: calc(196px + var(--sab)); width: 56px; height: 56px; }
 #tReload { right: calc(118px + var(--sar)); bottom: calc(166px + var(--sab)); width: 50px; height: 50px; }
-#tFire2 { left: calc(26px + var(--sal)); bottom: calc(250px + var(--sab)); width: 60px; height: 60px; border-color: rgba(255,80,90,.6); }
 #tSwap { left: calc(96px + var(--sal)); bottom: calc(262px + var(--sab)); width: 50px; height: 50px; }
 #weaponTray { position: absolute; right: calc(18px + var(--sar)); bottom: calc(158px + var(--sab)); display: none; grid-template-columns: repeat(3, auto); gap: 7px; padding: 8px; border: 1px solid rgba(217,172,88,.55); border-radius: 10px; background: rgba(7,9,12,.9); backdrop-filter: blur(6px); pointer-events: auto; }
 #weaponTray.on { display: grid; }
@@ -136,7 +140,31 @@ body.weapon-selecting #interactPrompt, body.weapon-selecting #tInteract { opacit
   #tSwap { left: auto; right: calc(176px + var(--sar)); bottom: calc(22px + var(--sab)); width: 56px; height: 56px; }
   #weaponTray { right: calc(250px + var(--sar)); bottom: calc(18px + var(--sab)); grid-template-columns: repeat(3, auto); }
   #tInteract { right: calc(104px + var(--sar)); bottom: calc(156px + var(--sab)); width: 118px; height: 46px; border-radius: 23px; }
-  #tFire2 { display: none; }
+  #walletHud { top: calc(52px + var(--sat)); }
+  #modebadge { top: calc(8px + var(--sat)); right: calc(10px + var(--sar)); }
+  body.multiplayer-active #avatarToggle { top: calc(48px + var(--sat)); right: calc(10px + var(--sar)); }
+  #mpStatus { top: calc(124px + var(--sat)); max-width: 170px; padding: 5px 8px; }
+}
+@media (pointer: coarse) and (orientation: portrait) {
+  #mapwrap { top: calc(58px + var(--sat)); width: 88px; height: 88px; }
+  #modebadge { top: calc(10px + var(--sat)); right: calc(8px + var(--sar)); max-width: 96px; overflow: hidden; text-overflow: ellipsis; padding: 7px 8px; font-size: 9px; }
+  #cityBankButton { min-height: 44px; padding: 8px 10px; font-size: 9px; }
+  #walletHud { top: calc(152px + var(--sat)); max-width: calc(100vw - 20px - var(--sal) - var(--sar)); font-size: 9px; }
+  body.multiplayer-active #avatarToggle { top: calc(52px + var(--sat)); right: calc(8px + var(--sar)); padding: 8px 9px; }
+  #avatarPanel { top: calc(92px + var(--sat)); }
+  #mpStatus { top: calc(152px + var(--sat)); max-width: 132px; padding: 5px 7px; font-size: 9px; }
+  #score { left: calc(12px + var(--sal)); top: calc(196px + var(--sat)); bottom: auto; transform: scale(.78); transform-origin: top left; }
+  .free-roam #score { padding: 7px 9px; }
+  #ammo { right: calc(12px + var(--sar)); top: calc(104px + var(--sat)); bottom: auto; transform: scale(.72); transform-origin: top right; }
+  #abil { left: calc(12px + var(--sal)); right: auto; top: 58%; transform: translateY(-50%) scale(.82); transform-origin: left center; }
+  #interactPrompt { bottom: calc(174px + var(--sab)); }
+  #tFire { right: calc(16px + var(--sar)); bottom: calc(78px + var(--sab)); width: 76px; height: 76px; }
+  #tAds { right: calc(105px + var(--sar)); bottom: calc(84px + var(--sab)); width: 54px; height: 54px; }
+  #tJump { right: calc(20px + var(--sar)); bottom: calc(174px + var(--sab)); width: 54px; height: 54px; }
+  #tReload { right: calc(96px + var(--sar)); bottom: calc(18px + var(--sab)); width: 50px; height: 50px; }
+  #tSwap { left: auto; right: calc(158px + var(--sar)); bottom: calc(18px + var(--sab)); width: 54px; height: 54px; }
+  #weaponTray { right: calc(12px + var(--sar)); bottom: calc(152px + var(--sab)); grid-template-columns: repeat(2, auto); }
+  #tInteract { right: calc(92px + var(--sar)); bottom: calc(154px + var(--sab)); width: 116px; height: 44px; border-radius: 22px; }
 }
 /* The Underground lobby reuses the running game instead of creating another scene or render loop. */
 #combatLobby { position: fixed; inset: 0; z-index: 7; display: none; place-items: center; padding: 20px; background: rgba(3,4,5,.82); backdrop-filter: blur(8px); }
@@ -184,7 +212,7 @@ body.multiplayer-dev #go { display: none !important; }
 .avatar-preset::before { content: ''; display: block; width: 24px; height: 24px; margin: 0 auto 6px; border-radius: 50% 50% 42% 42%; background: var(--avatar-accent, #334); box-shadow: inset 0 0 0 2px rgba(255,255,255,.14), 0 2px 8px rgba(0,0,0,.5); }
 .avatar-preset[aria-checked="true"] { color: #17130c; border-color: #ffe6ad; background: linear-gradient(135deg, var(--gold-bright), var(--gold)); box-shadow: 0 0 0 2px rgba(217,172,88,.16); }
 .avatar-status { min-height: 12px; margin-top: 8px; color: #8fa0b6; font: 600 10px/1.3 'Barlow'; letter-spacing: .1em; text-transform: uppercase; }
-#avatarToggle { display: none; position: fixed; z-index: 8; top: calc(58px + var(--sat)); right: calc(14px + var(--sar)); padding: 10px 12px; border: 1px solid rgba(217,172,88,.6); border-radius: 6px; color: #17130c; background: var(--gold); font: 700 10px/1 'Barlow'; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
+#avatarToggle { display: none; position: fixed; z-index: 8; top: calc(58px + var(--sat)); right: calc(14px + var(--sar)); min-height: 44px; padding: 10px 12px; border: 1px solid rgba(217,172,88,.6); border-radius: 6px; color: #17130c; background: var(--gold); font: 700 10px/1 'Barlow'; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
 body.multiplayer-active #avatarToggle { display: block; }
 #avatarPanel { display: none; position: fixed; z-index: 9; top: calc(104px + var(--sat)); right: calc(14px + var(--sar)); width: min(410px, calc(100vw - 28px - var(--sal) - var(--sar))); padding: 14px; border: 1px solid rgba(217,172,88,.55); border-radius: 9px; background: rgba(10,11,13,.96); box-shadow: 0 18px 60px rgba(0,0,0,.65); }
 #avatarPanel.on { display: block; }
@@ -229,7 +257,8 @@ body.multiplayer-active #avatarToggle { display: block; }
 <div id="hud">
   <div class="fps" id="fps">FPS --</div>
   <div id="modebadge">Original Combat</div>
-  <button id="cityBankButton" type="button" aria-label="Open read-only Nerdie City bank and wallet inventory">BANK · WALLET</button>
+  <button id="cityBankButton" type="button" aria-label="Open My Wallet without leaving the game">MY WALLET</button>
+  <div id="walletHud" role="status" aria-live="polite"><span id="walletDot"></span><span id="walletBalance">GUEST · WALLET OFF</span></div>
   <div id="mapwrap"><canvas id="map" width="300" height="300"></canvas></div>
   <div id="labels"></div>
   <div id="score">
@@ -257,7 +286,7 @@ body.multiplayer-active #avatarToggle { display: block; }
 </div>
 
 <button id="combatExit" type="button">Return to City · X</button>
-<button id="mpDiagnosticsToggle" type="button" aria-expanded="false" aria-controls="mpDiagnostics">NETWORK INFO</button>
+<button id="mpDiagnosticsToggle" type="button" aria-expanded="false" aria-controls="mpDiagnostics" hidden>NETWORK INFO</button>
 <section id="mpDiagnostics" hidden role="region" aria-labelledby="mpDiagnosticsTitle">
   <button id="mpDiagnosticsClose" type="button" aria-label="Close network diagnostics">×</button>
   <h2 id="mpDiagnosticsTitle">MULTIPLAYER DIAGNOSTICS</h2>
@@ -278,12 +307,11 @@ body.multiplayer-active #avatarToggle { display: block; }
 
 <div id="touch">
   <div id="stick"><div id="knob"></div></div>
-  <div class="tb" id="tFire">FIRE</div>
-  <div class="tb" id="tFire2">FIRE</div>
-  <div class="tb" id="tAds">AIM</div>
-  <div class="tb" id="tJump">JUMP</div>
-  <div class="tb" id="tReload">RLD</div>
-  <div class="tb" id="tSwap">SWAP</div>
+  <button class="tb" id="tFire" type="button">FIRE</button>
+  <button class="tb" id="tAds" type="button">AIM</button>
+  <button class="tb" id="tJump" type="button">JUMP</button>
+  <button class="tb" id="tReload" type="button">RELOAD</button>
+  <button class="tb" id="tSwap" type="button">SWAP</button>
   <div id="weaponTray" role="group" aria-label="Select weapon">
     <button type="button" data-weapon="ak">AK-47</button><button type="button" data-weapon="mac10">MAC-10</button><button type="button" data-weapon="mp5">MP5</button><button type="button" data-weapon="m700">M700</button><button type="button" data-weapon="rpg">RPG-7</button><button type="button" data-weapon="holster">HOLSTER</button><button type="button" data-weapon="unarmed">UNARMED</button>
   </div>
@@ -325,6 +353,6 @@ body.multiplayer-active #avatarToggle { display: block; }
 </div>
 
 <script src="src/startup-fallback.js"></script>
-<script type="module" src="src/main.js?build=m6.4-wallet-preview-rc1"></script>
+<script type="module" src="src/main.js?build=m6.4.1-wallet-mobile-preview-rc1"></script>
 </body>
 </html>

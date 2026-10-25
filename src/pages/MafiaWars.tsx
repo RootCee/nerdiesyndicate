@@ -3,8 +3,8 @@ import Seo from '../components/Seo';
 
 // The public preview uses the game's built-in lite destruction fallback so
 // WebGPU driver initialization cannot strand visitors on the loading screen.
-const MULTIPLAYER_GAME_PATH = '/mafia-wars/game/?phys=0&multiplayer=1';
-const SINGLE_PLAYER_GAME_PATH = '/mafia-wars/game/?phys=0';
+const MULTIPLAYER_GAME_PATH = '/mafia-wars/play';
+const SINGLE_PLAYER_GAME_PATH = '/mafia-wars/game/?phys=0&standalone=1';
 
 const controls = [
   { keys: 'W A S D', action: 'Move through the neighborhood' },
@@ -63,7 +63,7 @@ export default function MafiaWars() {
                 to="/mafia-wars/bank"
                 className="inline-flex min-w-[240px] items-center justify-center rounded-full border border-amber-200/35 bg-black/25 px-8 py-4 text-base font-bold uppercase tracking-[0.1em] text-amber-100 transition hover:border-amber-200/70 hover:text-white"
               >
-                Bank & Wallet
+                My Wallet
               </Link>
               <Link
                 to="/"

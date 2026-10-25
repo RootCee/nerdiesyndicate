@@ -41,10 +41,13 @@ import { MULTIPLAYER_WEAPON_RULES } from './multiplayer-combat.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { setupCityWalletBridge } from './wallet-bridge.js?build=m6.4-wallet-preview-rc1';
+import { setupCityWalletBridge } from './wallet-bridge.js?build=m6.4.1-wallet-mobile-preview-rc1';
 
-const GAME_BUILD_ID = 'm6.4-wallet-preview-rc1';
+const GAME_BUILD_ID = 'm6.4.1-wallet-mobile-preview-rc1';
 const qs = new URLSearchParams(location.search);
+if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
+  location.replace('/mafia-wars/play');
+}
 const multiplayerDev = qs.get('multiplayer') === '1';
 const lanIPv4 = location.hostname.split('.').map(Number);
 const isPrivateLanIPv4 = lanIPv4.length === 4 && lanIPv4.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)
@@ -89,11 +92,19 @@ const canvas = $('gl');
 const walletBridge = setupCityWalletBridge({
   onWalletState(state) {
     const button = $('cityBankButton');
-    if (!button) return;
-    button.textContent = state.connected ? 'BANK · WALLET LINKED' : 'BANK · WALLET';
+    const walletHud = $('walletHud');
+    const balance = $('walletBalance');
+    if (!button || !walletHud || !balance) return;
+    button.textContent = 'MY WALLET';
+    walletHud.classList.toggle('connected', state.connected);
+    if (!state.connected) balance.textContent = 'GUEST · WALLET OFF';
+    else if (state.chainId !== 8453) balance.textContent = 'WRONG NETWORK';
+    else if (state.nerdieBalance?.status === 'ready') balance.textContent = `${state.nerdieBalance.formatted} NERDIE`;
+    else if (state.nerdieBalance?.status === 'loading') balance.textContent = 'NERDIE · LOADING';
+    else balance.textContent = 'NERDIE · UNAVAILABLE';
     button.title = state.connected
       ? `Connected ${state.address.slice(0, 6)}…${state.address.slice(-4)} · chain ${state.chainId ?? 'unknown'}`
-      : 'Open the read-only wallet bank';
+      : 'Open My Wallet';
   },
 });
 $('cityBankButton')?.addEventListener('click', () => walletBridge.openBank());
@@ -778,7 +789,11 @@ function configureMultiplayerClient() {
   $('mpPublic').addEventListener('click', enterPublic);
   $('mpHost').addEventListener('click', () => enter(true)); $('mpJoin').addEventListener('click', () => enter(false));
   renderMultiplayerDiagnostics();
-  $('mpDiagnosticsToggle').addEventListener('click', () => setDiagnosticsOpen($('mpDiagnostics').hidden));
+  if (qs.get('debug') === '1' || qs.has('dev')) {
+    $('mpDiagnosticsToggle').hidden = false;
+    $('mpDiagnosticsToggle').classList.add('debug-visible');
+    $('mpDiagnosticsToggle').addEventListener('click', () => setDiagnosticsOpen($('mpDiagnostics').hidden));
+  }
   $('mpDiagnosticsClose').addEventListener('click', () => setDiagnosticsOpen(false));
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && !$('mpDiagnostics').hidden) setDiagnosticsOpen(false);

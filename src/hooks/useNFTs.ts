@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { getReadProvider } from '../lib/providers';
 import { CONTRACTS, ABIS } from '../lib/contracts';
+import { fetchNftMetadata, normalizeNftUrl } from '../lib/nftMetadata';
 
 export interface NFTItem {
   tokenId: number;
@@ -34,15 +35,9 @@ interface UseNFTsReturn {
   refetch: () => void;
 }
 
-const IPFS_GATEWAY = 'https://gateway.pinata.cloud/ipfs/';
 const OWNER_SCAN_BATCH_SIZE = 10;
-
-function resolveIPFS(uri: string): string {
-  if (uri.startsWith('ipfs://')) {
-    return IPFS_GATEWAY + uri.slice(7);
-  }
-  return uri;
-}
+const MAX_OWNERSHIP_SCAN = 5_000;
+const MAX_METADATA_REQUESTS = 100;
 
 async function fetchMetadata(tokenURI: string): Promise<{
   image: string;
@@ -50,40 +45,14 @@ async function fetchMetadata(tokenURI: string): Promise<{
   description: string;
   attributes: NFTAttribute[];
 }> {
-  try {
-    const url = resolveIPFS(tokenURI);
-    const res = await fetch(url);
-    const json = await res.json();
-    const attributes: NFTAttribute[] = Array.isArray(json.attributes)
-      ? json.attributes
-          .filter(
-            (attribute: unknown): attribute is { trait_type?: unknown; value?: unknown } =>
-              typeof attribute === 'object' && attribute !== null
-          )
-          .map((attribute: { trait_type?: unknown; value?: unknown }) => ({
-            trait_type:
-              typeof attribute.trait_type === 'string' ? attribute.trait_type : 'Trait',
-            value:
-              typeof attribute.value === 'string' || typeof attribute.value === 'number'
-                ? attribute.value
-                : String(attribute.value ?? ''),
-          }))
-      : [];
-
-    return {
-      image: resolveIPFS(json.image || ''),
-      name: json.name || `Nerdie Syndicate NFT`,
-      description: typeof json.description === 'string' ? json.description : '',
-      attributes,
-    };
-  } catch {
-    return {
-      image: '',
-      name: 'Nerdie Syndicate NFT',
-      description: '',
-      attributes: [],
-    };
-  }
+  const metadataUri = normalizeNftUrl(tokenURI);
+  const metadata = metadataUri ? await fetchNftMetadata([metadataUri]) : null;
+  return {
+    image: metadata?.image || '',
+    name: metadata?.name || 'Nerdie Syndicate NFT',
+    description: metadata?.description || '',
+    attributes: metadata?.attributes || [],
+  };
 }
 
 export function useNFTs(walletAddress: string | null): UseNFTsReturn {
@@ -141,7 +110,7 @@ export function useNFTs(walletAddress: string | null): UseNFTsReturn {
 
         // Find token IDs owned by this wallet by scanning totalSupply
         const totalSupply: ethers.BigNumber = await nftContract.totalSupply();
-        const total = totalSupply.toNumber();
+        const total = Math.min(totalSupply.toNumber(), MAX_OWNERSHIP_SCAN);
         setTotalSupply(total);
 
         const nextOwnedTokenIds: number[] = [];
@@ -168,7 +137,7 @@ export function useNFTs(walletAddress: string | null): UseNFTsReturn {
 
         // Fetch metadata for each owned token
         const nftItems: NFTItem[] = await Promise.all(
-          nextOwnedTokenIds.map(async (tokenId) => {
+          nextOwnedTokenIds.slice(0, MAX_METADATA_REQUESTS).map(async (tokenId) => {
             const tokenURI: string = await nftContract.tokenURI(tokenId);
             const meta = await fetchMetadata(tokenURI);
             return {

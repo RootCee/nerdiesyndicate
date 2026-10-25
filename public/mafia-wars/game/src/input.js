@@ -62,7 +62,6 @@ function initTouch() {
   canvas.addEventListener('touchend', end); canvas.addEventListener('touchcancel', end);
   const btn = (id, down, up) => { const el = document.getElementById(id); el.addEventListener('touchstart', (e) => { onFirst?.(); el.classList.add('down'); down(); e.preventDefault(); }, { passive: false }); el.addEventListener('touchend', (e) => { el.classList.remove('down'); up?.(); e.preventDefault(); }, { passive: false }); };
   btn('tFire', () => { input.fire = true; }, () => { input.fire = false; });
-  btn('tFire2', () => { input.fire = true; }, () => { input.fire = false; });
   btn('tAds', () => { input.ads = !input.ads; });
   btn('tJump', () => { input.jump = true; });
   btn('tReload', () => { input.reload = true; });

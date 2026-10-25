@@ -251,6 +251,7 @@ function AppRoutes() {
       <Route path="/hope-bridge" element={<HopeBridge />} />
       <Route path="/mafia-wars" element={<MafiaWars />} />
       <Route path="/mafia-wars/bank" element={<MafiaWarsBank />} />
+      <Route path="/mafia-wars/play" element={<MafiaWarsBank />} />
       <Route path="/music/thank-you" element={<MusicThankYou />} />
       <Route path="/music/checkout-cancelled" element={<MusicCheckoutCancelled />} />
       <Route path="/merch" element={<Merch />} />
@@ -283,9 +284,9 @@ export function AppShell({
   return (
     <div className="site-shell scroll-smooth">
       <ScrollToTop />
-      <Navbar />
+      {!location.pathname.startsWith('/mafia-wars/play') && location.pathname !== '/mafia-wars/bank' ? <Navbar /> : null}
 
-      {showConnectButton && isHydrated && location.pathname !== '/mafia-wars/bank' ? (
+      {showConnectButton && isHydrated && !location.pathname.startsWith('/mafia-wars/play') && location.pathname !== '/mafia-wars/bank' ? (
         <div className="wallet-shell fixed top-3 right-4 z-50">{connectButton}</div>
       ) : null}
 

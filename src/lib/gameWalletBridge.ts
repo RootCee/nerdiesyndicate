@@ -5,6 +5,10 @@ export interface GameWalletState {
   connected: boolean;
   address: `0x${string}` | null;
   chainId: number | null;
+  nerdieBalance?: {
+    status: 'idle' | 'loading' | 'ready' | 'error';
+    formatted: string | null;
+  };
 }
 
 interface GameWalletMessage {
@@ -20,6 +24,7 @@ export function createGameWalletState(
   address: string | undefined,
   chainId: number | undefined,
   connected: boolean,
+  nerdieBalance?: GameWalletState['nerdieBalance'],
 ): GameWalletState {
   const validAddress = address && ADDRESS_PATTERN.test(address) ? address as `0x${string}` : null;
   const isWalletConnected = connected && validAddress !== null;
@@ -27,6 +32,7 @@ export function createGameWalletState(
     connected: isWalletConnected,
     address: isWalletConnected ? validAddress : null,
     chainId: typeof chainId === 'number' && Number.isSafeInteger(chainId) && chainId > 0 ? chainId : null,
+    ...(nerdieBalance ? { nerdieBalance } : {}),
   };
 }
 
@@ -64,11 +70,21 @@ export function isGameWalletState(value: unknown): value is GameWalletMessage & 
   ) return false;
 
   const payload = message.payload as Record<string, unknown>;
-  return Object.keys(payload).every((key) => ['connected', 'address', 'chainId'].includes(key))
+  const balance = payload.nerdieBalance as Record<string, unknown> | undefined;
+  const validBalance = balance === undefined || (
+    typeof balance === 'object'
+    && balance !== null
+    && Object.keys(balance).every((key) => ['status', 'formatted'].includes(key))
+    && ['idle', 'loading', 'ready', 'error'].includes(String(balance.status))
+    && (balance.formatted === null || typeof balance.formatted === 'string')
+    && (balance.status === 'ready' ? typeof balance.formatted === 'string' : true)
+  );
+  return Object.keys(payload).every((key) => ['connected', 'address', 'chainId', 'nerdieBalance'].includes(key))
     && typeof payload.connected === 'boolean'
     && (payload.address === null || (typeof payload.address === 'string' && ADDRESS_PATTERN.test(payload.address)))
     && (payload.chainId === null || (Number.isSafeInteger(payload.chainId) && Number(payload.chainId) > 0))
-    && payload.connected === (payload.address !== null);
+    && payload.connected === (payload.address !== null)
+    && validBalance;
 }
 
 export function isTrustedGameWalletEvent(

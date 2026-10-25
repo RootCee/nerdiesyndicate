@@ -1,5 +1,5 @@
 import { getDefaultConfig } from '@rainbow-me/rainbowkit';
-import { base } from 'wagmi/chains';
+import { base } from 'viem/chains';
 import { http } from 'wagmi';
 
 const alchemyRpc = import.meta.env.VITE_ALCHEMY_RPC_URL as string | undefined;

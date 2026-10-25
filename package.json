@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "sync:mafia-wars-preview": "node scripts/sync-mafia-wars-preview.mjs",
     "test:mafia-wars-mobile": "node scripts/verify-mafia-wars-mobile-profile.mjs",
-    "test:mafia-wars-mobile": "node scripts/verify-mafia-wars-mobile-profile.mjs",
+    "test:m6-4-1-wallet": "tsx --test scripts/game-wallet-bridge.test.ts scripts/m6-4-1-wallet.test.ts",
     "test:mafia-wars-protocol-4-release": "node scripts/verify-mafia-wars-protocol-4-release.mjs",
     "test:mafia-wars-protocol-4-1-audio": "node scripts/verify-mafia-wars-protocol-4-1-audio.mjs",
     "sync:square-merch": "node scripts/sync-square-products.mjs",
@@ -45,6 +45,11 @@
   },
   "engines": {
     "node": ">=22.x"
+  },
+  "overrides": {
+    "@coinbase/wallet-sdk": "4.4.0",
+    "@walletconnect/ethereum-provider": "2.26.0",
+    "bn.js": "4.12.2"
   },
   "devDependencies": {
     "@types/react": "^18.2.56",

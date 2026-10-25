@@ -163,6 +163,31 @@ p.text-sm,
   background: linear-gradient(135deg, #35175e, #174e37) !important;
 }
 
+.wallet-panel-status {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 1rem;
+  color: rgb(163 163 163);
+  font-size: 0.875rem;
+}
+
+.wallet-panel-error {
+  border: 1px solid rgba(252, 165, 165, 0.2);
+  border-radius: 0.75rem;
+  background: rgba(69, 10, 10, 0.2);
+  padding: 1rem;
+  color: rgb(254 202 202);
+  font-size: 0.875rem;
+}
+
+.wallet-inventory-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 0.75rem;
+}
+
 .site-mobile-shell {
   border: 1px solid rgba(53, 82, 69, 0.42);
   background: linear-gradient(180deg, rgba(9, 13, 17, 0.98), rgba(12, 10, 18, 0.96));

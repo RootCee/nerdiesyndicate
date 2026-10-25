@@ -16,11 +16,20 @@ export function isWalletStateMessage(value) {
   ) return false;
 
   const payload = message.payload;
-  return Object.keys(payload).every((key) => ['connected', 'address', 'chainId'].includes(key))
+  const balance = payload.nerdieBalance;
+  const validBalance = balance === undefined || (
+    balance && typeof balance === 'object'
+    && Object.keys(balance).every((key) => ['status', 'formatted'].includes(key))
+    && ['idle', 'loading', 'ready', 'error'].includes(balance.status)
+    && (balance.formatted === null || typeof balance.formatted === 'string')
+    && (balance.status !== 'ready' || typeof balance.formatted === 'string')
+  );
+  return Object.keys(payload).every((key) => ['connected', 'address', 'chainId', 'nerdieBalance'].includes(key))
     && typeof payload.connected === 'boolean'
     && (payload.address === null || (typeof payload.address === 'string' && ADDRESS_PATTERN.test(payload.address)))
     && (payload.chainId === null || (Number.isSafeInteger(payload.chainId) && payload.chainId > 0))
-    && payload.connected === (payload.address !== null);
+    && payload.connected === (payload.address !== null)
+    && validBalance;
 }
 
 export function setupCityWalletBridge({ windowObject = window, onWalletState = () => {} } = {}) {

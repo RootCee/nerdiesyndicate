@@ -11,6 +11,7 @@ node_modules
 ._*
 dist
 dist-ssr
+.tmp/
 *.local
 .vercel
 .eliza
