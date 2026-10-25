@@ -14,7 +14,7 @@ import { FX, Weapon, GUN_SPECS } from './weapon.js';
 import { Bot, buildNav, rayVsBots, freeCellNear } from './bots.js';
 import { Character, loadCharacters, ensureCharacterModel, characterAssetStats, registerCharacterWeaponTemplate } from './characters.js';
 import { Launcher } from './rocket.js';
-import { addWall, wallSpec, initDestruction, updateDestruction, updateDestructionStreaming, beginDestructionPrewarm, destruction, blast } from './destruction.js';
+import { addWall, wallSpec, initDestruction, updateDestruction, updateDestructionStreaming, beginDestructionPrewarm, destruction, blast, applyStructureState, destructibleStructure } from './destruction.js';
 import { WALL_LOTS, GEO, houseDescs } from './world.js';
 import { addHouse } from './destruction.js';
 import { initHud, hud } from './hud.js';
@@ -50,9 +50,9 @@ import { NpcRenderer } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.8a-dev1';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.8b-dev1';
 
-const GAME_BUILD_ID = 'm6.8a-dev1';
+const GAME_BUILD_ID = 'm6.8b-dev1';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -600,6 +600,8 @@ function startGame(mode = selectedMode, options = {}) {
   $('weaponTray')?.classList.remove('on'); document.body.classList.remove('weapon-selecting');
   practiceCombat = combat && !!options.practice;
   multiplayerActive = !combat && !!options.multiplayer;
+  if (!multiplayerActive) structureServerState.clear();
+  syncStructures();
   document.body.classList.toggle('multiplayer-active', multiplayerActive);
   $('avatarPanel')?.classList.remove('on'); $('avatarToggle')?.setAttribute('aria-expanded', 'false');
   const freshCombatSession = combat ? beginCombatSession() : false;
@@ -749,6 +751,7 @@ function applyLocalContext(context, revision = localContextRevision + 1, state =
   localContext = context; localContextRevision = revision;
   const spaceId = context.space?.id || 'city', target = interiorForSpace(spaceId);
   if (spaceId !== 'city') npcRenderer.clear(); // residents are city-only
+  if ((spaceId === 'underground') !== (priorSpace === 'underground')) syncStructures();
   setLocalSafeZone(typeof safeZone === 'boolean' ? safeZone : MULTIPLAYER_SPACES[spaceId]?.safeZone === true);
   for (const interior of [city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = interior === target; interior.interior.visible = interior === target; }
   setInteriorRenderLayer(!!target);
@@ -775,6 +778,29 @@ function applyLocalContext(context, revision = localContextRevision + 1, state =
   renderMultiplayerDiagnostics();
 }
 const networkTracerRay = new THREE.Vector3(), networkTracerHit = { n: new THREE.Vector3(), t: 1 };
+// M6.8B: building damage exactly as the room decided it. The original block is
+// also the Underground arena, which stays intact, so it shows unbroken there.
+const structureServerState = new Map();
+function structureView() {
+  if (!multiplayerActive) return new Map();
+  if ((localContext?.space?.id || 'city') !== 'underground') return structureServerState;
+  const view = new Map();
+  for (const [id, mask] of structureServerState) if (destructibleStructure(id)?.streaming?.id !== ORIGINAL_NEIGHBORHOOD_LAYOUT.id) view.set(id, mask);
+  return view;
+}
+function syncStructures(options = {}) {
+  const result = applyStructureState(structureView(), options);
+  if (options.impact && result.opened) { destruction.onBlast?.(options.impact, 24 * result.opened); sfx.rubbleAt(options.impact); }
+  return result;
+}
+function applyStructureDamage(message) {
+  if (!Array.isArray(message.changes)) return;
+  const ids = new Set();
+  for (const [id, , open] of message.changes) if (typeof id === 'string' && Number.isInteger(open)) { structureServerState.set(id, open); ids.add(id); }
+  const impact = new THREE.Vector3(Number(message.impact?.x) || 0, Number(message.impact?.y) || 0, Number(message.impact?.z) || 0);
+  // The wall gives way as the drawn rocket arrives (both start when this message and its shot land).
+  setTimeout(() => syncStructures({ impact, impactIds: ids }), Math.min(5000, Math.max(0, Number(message.flightMs) || 0)) + 60);
+}
 function playNetworkShot(message) {
   const localShot = message.playerId === multiplayer?.credentials?.playerId;
   if (!localShot && (message.spaceId || 'city') !== (localContext.space?.id || 'city')) return;
@@ -898,6 +924,9 @@ function configureMultiplayerClient() {
     }
     else if (message.type === 'safe-zone') setLocalSafeZone(message.safeZone === true);
     else if (message.type === 'shot') playNetworkShot(message);
+    else if (message.type === 'structure-damage') applyStructureDamage(message);
+    else if (message.type === 'structures') { structureServerState.clear(); for (const [id, mask] of message.open || []) if (typeof id === 'string' && Number.isInteger(mask)) structureServerState.set(id, mask); syncStructures(); }
+    else if (message.type === 'structure-repair') { for (const id of message.ids || []) structureServerState.delete(id); syncStructures(); }
     else if (message.type === 'reload') playNetworkReload(message);
     else if (message.type === 'space') {
       if (message.playerId === multiplayer.credentials?.playerId) { applyLocalContext(message.context, message.contextRevision, message.state, message.safeZone); if (message.combat) applyLocalCombat(message.combat); }
@@ -1064,7 +1093,8 @@ async function boot() {
   destructionStreamingStats = updateDestructionStreaming(player.pos, Q.lowMemory ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.mobile : DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.desktop);
   updateNeighborhoodLights(destructionStreamingStats.activeStreamingId);
   pmsg.textContent = 'Welding the bricks…';
-  const physMode = await initDestruction(scene, { enabled: qs.get('phys') !== '0' });
+  // Multiplayer damage is applied in lite mode (the room decides it; GPU bodies would diverge).
+  const physMode = await initDestruction(scene, { enabled: qs.get('phys') !== '0' && !multiplayerDev });
   console.log('destruction mode:', physMode, 'blocks:', destruction.blocks);
   // brick dust thrown off a broken wall (photographic puffs, tinted brick-brown, lit low for the night scene)
   destruction.onBlast = (p, n) => { for (let i = 0; i < Math.min(12, 4 + (n >> 3)); i++) fx.billow('puff', p.clone().add(new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 1.5, (Math.random() - 0.5) * 3)), new THREE.Vector3((Math.random() - 0.5) * 4, 0.4 + Math.random() * 1.6, (Math.random() - 0.5) * 4), 2.2 + Math.random() * 1.6, 0.9, 4 + Math.random() * 2, { op: 0.75, tint: [0.085, 0.05, 0.035], drag: 1.8, rise: 0.15 }); };

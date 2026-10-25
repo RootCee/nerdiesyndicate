@@ -92,7 +92,7 @@ export function addWall(scene, w) {
   const spec = makeStructure(scene, items, blockGeometry(BLOCK, 1.6, false), wallMaterial('brick', 0xffffff), { kind: 'wall', id: w.id || null, streaming: w.streaming || null, mass: BLOCK.x * BLOCK.y * BLOCK.z * DENSITY });
   const hx = w.dir === 0 ? w.len / 2 : BLOCK.z / 2, hz = w.dir === 0 ? BLOCK.z / 2 : w.len / 2;
   const c = { minX: w.x - hx, maxX: w.x + hx, minZ: w.z - hz, maxZ: w.z + hz, minY: 0, maxY: w.courses * BLOCK.y, face: 0, destructionId: w.id || null };
-  colliders.push(c); spec.colliders = [c];
+  colliders.push(c); spec.colliders = [c]; spec.faceColliders = [c];
   return spec;
 }
 
@@ -144,7 +144,7 @@ export function addHouse(scene, h) {
     mesh.position.copy(s.c).applyMatrix4(M); mesh.quaternion.copy(Mrot).multiply(s.q); scene.add(mesh);
     spec.slabs.push({ mesh, size: s.size, p: mesh.position.clone(), q: mesh.quaternion.clone(), body: null });
   }
-  spec.colliders = h.faces.slice(); spec.statics = h.statics; spec.roofC = h.roofC;
+  spec.colliders = h.faces.slice(); spec.faceColliders = h.faces.slice(); spec.statics = h.statics; spec.roofC = h.roofC;
   return spec;
 }
 
@@ -244,6 +244,10 @@ export function updateDestruction(dt) {
         k.q.multiply(_q.setFromAxisAngle(k.w.clone().normalize(), k.w.length() * dt)); _s.set(k.size.x / spec.unit, 1, 1); const it = spec.items[k.i]; it.mesh.setMatrixAt(it.mi, _m.compose(k.p, k.q, _s));
       }
       if (any) { spec.mesh.instanceMatrix.needsUpdate = true; if (spec.paneMesh) spec.paneMesh.instanceMatrix.needsUpdate = true; }
+      if (spec.roofFall) for (const f of spec.roofFall) {
+        if (f.mesh.position.y <= f.restY) continue;
+        f.vy -= 9.8 * dt; f.mesh.position.y = Math.max(f.restY, f.mesh.position.y + f.vy * dt);
+      }
     }
   }
 }
@@ -333,4 +337,88 @@ export function blast(p, radius = 3.6, speed = 7.5) {
     }
     if (hit) { D.last.hits.push([spec.kind, hit, faceHits]); shatter(spec); faceHits.forEach((n, fi) => { if (n >= 2) openFace(spec, fi); }); D.onBlast?.(p, hit); }
   }
+}
+
+// ---------- M6.8B: server-decided damage (multiplayer) ----------
+// The room decides which faces of which structures are open (structure-damage
+// / structures / structure-repair messages); these apply exactly that state,
+// so a face's panels, its collider, and the server's bullet test always agree.
+// A face opens whole: every panel tumbles out (lite debris) or, for damage
+// that predates joining, is simply gone. Lite mode only (multiplayer forces it).
+const _zero = new THREE.Matrix4().makeScale(0, 0, 0);
+const _out = new THREE.Vector3();
+let byId = null;
+export function destructibleStructure(id) {
+  if (!byId) byId = new Map(D.walls.filter((spec) => spec.id).map((spec) => [spec.id, spec]));
+  return byId.get(id) || null;
+}
+const openCount = (mask) => { let n = 0; for (let m = mask; m; m &= m - 1) n++; return n; };
+const restMatrix = (spec, it) => _m.compose(it.p, it.q, _s.set(it.size.x / spec.unit, 1, 1));
+function markDirty(spec) { spec.mesh.instanceMatrix.needsUpdate = true; if (spec.paneMesh) spec.paneMesh.instanceMatrix.needsUpdate = true; }
+
+// Open the faces in `mask`. With `impact`, panels blow outward from it; without, they vanish.
+export function openStructureFaces(id, mask, { impact = null } = {}) {
+  const spec = destructibleStructure(id); if (!spec) return 0;
+  const add = mask & ~(spec.netOpen || 0) & (spec.kind === 'wall' ? 1 : 15); if (!add) return 0;
+  spec.lite = spec.lite || []; spec.liteIndices = spec.liteIndices || new Set(spec.lite.map((entry) => entry.i));
+  const b = spec.bounds, cx = (b.minX + b.maxX) / 2, cz = (b.minZ + b.maxZ) / 2;
+  spec.items.forEach((it, i) => {
+    if (!(add & (1 << it.face)) || spec.liteIndices.has(i)) return;
+    spec.liteIndices.add(i);
+    if (!impact) { it.mesh.setMatrixAt(it.mi, _zero); return; }
+    // away from the burst and out of the house, strongest close to the burst
+    const d = Math.hypot(it.p.x - impact.x, it.p.y - impact.y, it.p.z - impact.z), k = Math.max(0.25, 1 - d / 6);
+    _out.set(it.p.x - impact.x + (it.p.x - cx) * 0.5, 0, it.p.z - impact.z + (it.p.z - cz) * 0.5).normalize();
+    const speed = 2.5 + 5 * k;
+    spec.lite.push({ i, size: it.size, p: it.p.clone(), v: new THREE.Vector3(_out.x * speed, 1.5 + 3 * k * Math.random(), _out.z * speed), w: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(8), q: it.q.clone(), life: 4 });
+  });
+  markDirty(spec);
+  for (let fi = 0; fi < 4; fi++) if (add & (1 << fi)) openFace(spec, fi);
+  spec.netOpen = (spec.netOpen || 0) | add;
+  shatter(spec);
+  // Two walls gone: the roof comes down onto the floor (and stops shielding rockets from above).
+  if (spec.slabs.length && !spec.roofDown && openCount(spec.netOpen) >= 2) {
+    spec.roofDown = true;
+    const rc = spec.roofC && colliders.indexOf(spec.roofC); if (rc >= 0) colliders.splice(rc, 1);
+    const restY = (spec.house?.base || 0.8) + 0.35;
+    spec.roofFall = spec.slabs.map((slab) => ({ mesh: slab.mesh, vy: 0, restY }));
+    if (!impact) for (const f of spec.roofFall) f.mesh.position.y = restY;
+  }
+  return add;
+}
+
+// Rebuild the faces in `mask` exactly as they were built (panels, colliders, roof, trim).
+export function repairStructureFaces(id, mask) {
+  const spec = destructibleStructure(id); if (!spec) return 0;
+  const rem = mask & (spec.netOpen || 0); if (!rem) return 0;
+  spec.lite = (spec.lite || []).filter((entry) => !(rem & (1 << spec.items[entry.i].face)));
+  spec.items.forEach((it, i) => { if (rem & (1 << it.face)) { spec.liteIndices?.delete(i); it.mesh.setMatrixAt(it.mi, restMatrix(spec, it)); } });
+  markDirty(spec);
+  for (let fi = 0; fi < 4; fi++) if (rem & (1 << fi)) {
+    const c = spec.faceColliders?.[fi]; if (!c) continue;
+    if (!colliders.includes(c)) colliders.push(c); spec.colliders[fi] = c;
+  }
+  spec.netOpen &= ~rem;
+  if (spec.roofDown && openCount(spec.netOpen) < 2) {
+    spec.roofDown = false; spec.roofFall = null;
+    for (const slab of spec.slabs) { slab.mesh.position.copy(slab.p); slab.mesh.quaternion.copy(slab.q); }
+    if (spec.roofC && !colliders.includes(spec.roofC)) colliders.push(spec.roofC);
+  }
+  if (!spec.netOpen) {
+    spec.standing = true; spec.touched = false;
+    if (spec.statics) for (const object of spec.statics) object.visible = spec.streamVisible !== false;
+  }
+  return rem;
+}
+
+// Bring every structure to `target` (id -> open mask); structures not listed become intact.
+export function applyStructureState(target, { impact = null, impactIds = null } = {}) {
+  let opened = 0, repaired = 0;
+  for (const spec of D.walls) {
+    if (!spec.id) continue;
+    const want = target.get(spec.id) || 0, have = spec.netOpen || 0;
+    if (have & ~want) repaired += openCount(repairStructureFaces(spec.id, have & ~want));
+    if (want & ~have) opened += openCount(openStructureFaces(spec.id, want & ~have, { impact: impactIds?.has(spec.id) ? impact : null }));
+  }
+  return { opened, repaired };
 }

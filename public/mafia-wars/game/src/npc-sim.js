@@ -46,7 +46,8 @@ export class CityNpcSimulation {
   // structureOcclusion: M6.8A, shots at residents use the same city structures as player shots.
   constructor({ seed = 'room', maxActive = NPC_POPULATION.startActive, population = NPC_POPULATION.max, plan = createCityPlan(), rules = NPC_SIM_RULES, reactions = false, combat = false, structureOcclusion = false } = {}) {
     this.reactions = reactions === true; this.combat = this.reactions && combat === true; this.panicQueue = []; this.strikes = [];
-    this.structureOcclusion = structureOcclusion === true;
+    // true: the static structures; a function: the room's live test (M6.8B open faces included).
+    this.structureOcclusion = typeof structureOcclusion === 'function' ? structureOcclusion : structureOcclusion === true ? cityShotOccluded : null;
     this.rules = rules; this.plan = plan; this.random = seededRandom(`sim:${seed}`);
     this.maxActive = Math.max(0, Math.min(NPC_POPULATION.maxActive, maxActive | 0));
     this.identities = seedPopulation(seed, population);
@@ -240,7 +241,7 @@ export class CityNpcSimulation {
       if (!r.active || r.behavior === NPC_BEHAVIOR.defeated || isInsideSafeZone({ x: r.x, y: 0, z: r.z })) continue;
       const d = targetDistance(origin, direction, { x: r.x, y: 0, z: r.z });
       if (d === null || d > limit) continue;
-      if (this.structureOcclusion ? cityShotOccluded(origin, direction, d) : publicCityShotOccluded(origin, direction, d) || !segmentClear(origin, r, this.shotBlockers, { pad: 0 })) continue;
+      if (this.structureOcclusion ? this.structureOcclusion(origin, direction, d) : publicCityShotOccluded(origin, direction, d) || !segmentClear(origin, r, this.shotBlockers, { pad: 0 })) continue;
       if (!best || d < best.distance) best = { index: r.index, distance: d };
     }
     return best;
