@@ -62,7 +62,13 @@ export class RemotePlayer {
     if (this.character) this.character.obj.visible = !this.combat.dead;
     return true;
   }
-  triggerFire() { this.character?.triggerFire(); }
+  // A shot: raise and recoil now (not at the next throttled animation tick), so the muzzle flash and tracer start at the raised muzzle.
+  triggerFire(direction = null) {
+    if (!this.character) return;
+    this.character.triggerFire(direction);
+    const state = this.renderState;
+    if (Number.isFinite(state?.yaw)) this.character.update(0, this.position, state.yaw + Math.PI, (state.aim || 0) > 0.5, false, null, { moving: state.state !== 'idle' });
+  }
   push(state) {
     if (!Number.isFinite(state?.serverTime) || !Number.isSafeInteger(state.seq) || state.seq <= this.lastSeq) { this.metrics.staleSnapshots++; return; }
     const arrivedAt = performance.now();
@@ -92,10 +98,11 @@ export class RemotePlayer {
     if (!this.character.obj.visible) return;
     this.character.obj.position.copy(this.position); this.character.obj.rotation.y = state.yaw + Math.PI;
     this.character.play(state.state === 'run' ? 'Run' : state.state === 'walk' ? 'Walk' : 'Idle_Gun', 0.12);
+    this.character.aimPitch = state.pitch || 0; // M6.9: their aim, interpolated like the rest of the state
     this.animationAccum += dt;
     const animationHz = distance < 28 ? 30 : distance < 75 ? 15 : 8, interval = 1 / animationHz;
     if (this.animationAccum >= interval) {
-      this.character.update(Math.min(0.15, this.animationAccum), this.position, state.yaw + Math.PI, false, false);
+      this.character.update(Math.min(0.15, this.animationAccum), this.position, state.yaw + Math.PI, (state.aim || 0) > 0.5, false, null, { moving: state.state !== 'idle' });
       this.animationAccum = 0; this.metrics.animationUpdates++;
     }
   }

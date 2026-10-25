@@ -130,6 +130,7 @@ canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block
 #knob { position: absolute; left: 35px; top: 35px; width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,.55); }
 .tb { position: absolute; border-radius: 50%; background: rgba(10,16,26,.5); border: 1.5px solid rgba(255,255,255,.35); color: #fff; display: grid; place-items: center; font: 600 11px/1 'Barlow'; letter-spacing: .1em; pointer-events: auto; backdrop-filter: blur(4px); }
 .tb:active, .tb.down { background: rgba(255,255,255,.35); }
+.tb.on { background: rgba(245,213,142,.42); border-color: #f5d58e; color: #1b1407; } /* M6.9: latched AIM toggle */
 #tFire { right: calc(26px + var(--sar)); bottom: calc(96px + var(--sab)); width: 86px; height: 86px; font-size: 14px; border-color: rgba(255,80,90,.8); }
 #tAds { right: calc(124px + var(--sar)); bottom: calc(80px + var(--sab)); width: 58px; height: 58px; }
 #tJump { right: calc(30px + var(--sar)); bottom: calc(196px + var(--sab)); width: 56px; height: 56px; }
@@ -440,6 +441,6 @@ body.multiplayer-active #avatarToggle { display: block; }
 </div>
 
 <script src="src/startup-fallback.js"></script>
-<script type="module" src="src/main.js?build=m6.8b-dev2"></script>
+<script type="module" src="src/main.js?build=m6.9-dev1"></script>
 </body>
 </html>

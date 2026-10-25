@@ -244,6 +244,7 @@ export class Weapon {
     const dir = this.camera.getWorldDirection(new THREE.Vector3());
     const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize(), up = new THREE.Vector3().crossVectors(right, dir);
     dir.addScaledVector(right, (Math.random() - 0.5) * 2 * spread).addScaledVector(up, (Math.random() - 0.5) * 2 * spread).normalize();
+    this.onFire?.(dir); // M6.9: the third-person avatar recoils
     const origin = this.camera.position.clone();
     const hitW = { t: 1, n: new THREE.Vector3() }; const range = 160;
     raycastWorld(origin, dir.clone().multiplyScalar(range), 1, true, hitW); let t = hitW.t * range;

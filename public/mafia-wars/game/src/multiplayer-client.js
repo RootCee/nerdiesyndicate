@@ -82,9 +82,12 @@ export class MultiplayerClient extends EventTarget {
     if (new TextEncoder().encode(raw).byteLength > MULTIPLAYER_LIMITS.maxPayloadBytes) return false;
     this.socket.send(raw); this.metrics.sent++; this.metrics.sentBytes += raw.length; return true;
   }
-  sendMovement(player, now = performance.now()) {
+  // `aim` (M6.9): { raised, pitch } so other players see the weapon up and pointed.
+  sendMovement(player, now = performance.now(), aim = null) {
     const movement = { x: rounded(player.pos.x), y: rounded(player.pos.y), z: rounded(player.pos.z), yaw: rounded(player.yaw), speed: rounded(player.planar), state: player.sprinting ? 'run' : player.planar > 0.25 ? 'walk' : 'idle' };
-    const prior = this.lastMovement, changed = !prior || movement.state !== prior.state || Math.abs(movement.x - prior.x) > 0.002 || Math.abs(movement.y - prior.y) > 0.002 || Math.abs(movement.z - prior.z) > 0.002 || Math.abs(movement.yaw - prior.yaw) > 0.002;
+    if (aim) { movement.aim = aim.raised ? 1 : 0; movement.pitch = Math.round(Math.max(-1.5, Math.min(1.5, aim.pitch || 0)) * 100) / 100; }
+    const prior = this.lastMovement, changed = !prior || movement.state !== prior.state || Math.abs(movement.x - prior.x) > 0.002 || Math.abs(movement.y - prior.y) > 0.002 || Math.abs(movement.z - prior.z) > 0.002 || Math.abs(movement.yaw - prior.yaw) > 0.002
+      || movement.aim !== prior.aim || Math.abs((movement.pitch || 0) - (prior.pitch || 0)) > 0.02;
     if (!changed && movement.state === 'idle' && now - this.lastMovementAt < MULTIPLAYER_LIMITS.idleUpdateMs) { this.metrics.movementSkipped++; return false; }
     const sent = this.send({ type: 'move', seq: ++this.seq, clientTime: Math.round(now), ...movement });
     if (sent) { this.lastMovement = movement; this.lastMovementAt = now; }

@@ -28,3 +28,15 @@ export function rayCapsuleDistance(from, dir, base, radius = 0.42, height = 1.8)
   const y = from.y + dir.y * t - base.y;
   return y >= 0 && y <= height ? t : Infinity;
 }
+
+// M6.9: the weapon is raised while aim is held (right mouse, or the mobile AIM
+// toggle) or the trigger is held, for a living player with a drawn weapon.
+// Desktop and touch feed the same input flags, so both behave identically.
+export function aimRaised({ ads = false, fire = false } = {}, { dead = false, holstered = false, weaponId = null } = {}) {
+  return !!(ads || fire) && !dead && !holstered && !!weaponId;
+}
+// A unit shot direction as the character's aim yaw (facing convention: atan2(x, z)) and pitch.
+export function directionToAim(d, out = {}) {
+  out.yaw = Math.atan2(d.x, d.z); out.pitch = Math.asin(Math.max(-1, Math.min(1, d.y)));
+  return out;
+}

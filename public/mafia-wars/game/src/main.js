@@ -38,7 +38,7 @@ import { MULTIPLAYER_LIMITS, MULTIPLAYER_SPAWNS, PROTOCOL_VERSION } from './mult
 import { AVATAR_PRESETS, normalizeAvatarAppearance, sameAvatarAppearance } from './avatar-schema.js';
 import { DEFAULT_EQUIPMENT, normalizeEquipment } from './multiplayer-equipment.js';
 import { MULTIPLAYER_SHOT_EYE_HEIGHT, MULTIPLAYER_WEAPON_RULES } from './multiplayer-combat.js';
-import { crosshairShotDirection, rayCapsuleDistance } from './aim.js';
+import { crosshairShotDirection, rayCapsuleDistance, aimRaised, directionToAim } from './aim.js';
 import { createCityMap } from './city-map.js';
 import { relativeBearing } from './city-map-view.js';
 import { buildNavGraph, findRoute, routeProgress } from './city-navigation.js';
@@ -50,9 +50,9 @@ import { NpcRenderer } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.8b-dev2';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.9-dev1';
 
-const GAME_BUILD_ID = 'm6.8b-dev2';
+const GAME_BUILD_ID = 'm6.9-dev1';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -209,6 +209,8 @@ const ORDER = weaponOrderForProfile(Q.lowMemory);
 const curGun = () => guns[arsenal.cur] || null;
 const launcher = new Launcher(scene, camera, player, fx);
 const arsenal = { cur: 'ak', switchT: 0 };
+// M6.9: single-player shots recoil the third-person avatar (multiplayer shots do so from the server's shot event).
+for (const shooter of [...Object.values(guns), launcher]) shooter.onFire = (dir) => { if (!multiplayerActive) localAvatar?.triggerFire(dir); };
 const practiceResupply = new PracticeResupply(scene, guns, launcher);
 let pendingWeapon = '';
 async function ensureWeaponVisual(weaponId) {
@@ -245,6 +247,18 @@ let multiplayer = null, multiplayerActive = false, multiplayerPlayerCount = 0, m
 const multiplayerAim = new THREE.Vector3(), aimForward = new THREE.Vector3(), aimSegment = new THREE.Vector3(), aimOrigin = new THREE.Vector3();
 // Direction from the server's shot origin to whatever is under the crosshair
 // (world geometry or a remote player), so shots match the crosshair in both views.
+// M6.9: where the local avatar points its weapon. Raised (aim held, or trigger
+// held) in third person, it points along the actual shot direction, so the
+// barrel, the tracer, and the server's ray agree; otherwise along the camera.
+const localAim = { raised: false, yaw: 0, pitch: 0 }, aimButton = document.getElementById('tAds');
+function updateLocalAim() {
+  const weaponId = multiplayerActive ? localEquipment.weaponId : arsenal.cur, holstered = multiplayerActive && localEquipment.holstered;
+  localAim.raised = aimRaised(input, { dead: player.dead, holstered, weaponId });
+  if (localAim.raised && thirdCamera.enabled) directionToAim(crosshairAim((MULTIPLAYER_WEAPON_RULES[weaponId] || MULTIPLAYER_WEAPON_RULES.ak).range), localAim);
+  else { localAim.yaw = player.yaw + Math.PI; localAim.pitch = player.pitch; }
+  aimButton?.classList.toggle('on', !!input.ads); // the touch AIM toggle shows when it is latched
+  return localAim;
+}
 function crosshairAim(range) {
   camera.getWorldDirection(aimForward);
   const worldT = raycastWorld(camera.position, aimSegment.copy(aimForward).multiplyScalar(range), 1, true);
@@ -807,8 +821,12 @@ function playNetworkShot(message) {
   if (!networkAudioEvents.accept('shot', message)) return;
   const origin = new THREE.Vector3(message.origin.x, message.origin.y, message.origin.z), direction = new THREE.Vector3(message.direction.x, message.direction.y, message.direction.z).normalize();
   const remote = remotePlayers.get(message.playerId), muzzle = new THREE.Vector3();
-  if (localShot) localAvatar?.triggerFire(); else remote?.triggerFire();
-  if (remote?.character?.gun) remote.character.gun.getWorldPosition(muzzle); else if (message.playerId === multiplayer?.credentials?.playerId && localAvatar?.gun) localAvatar.gun.getWorldPosition(muzzle); else muzzle.copy(origin);
+  if (localShot) localAvatar?.triggerFire(message.direction); else remote?.triggerFire(message.direction);
+  const shooter = localShot ? localAvatar : remote?.character;
+  if (shooter?.gun) shooter.muzzleWorld(muzzle); else muzzle.copy(origin);
+  // M6.9: the shot really starts at the server's origin (the body); a muzzle poking through cover draws from the body instead.
+  networkTracerRay.subVectors(muzzle, origin);
+  if (raycastWorld(origin, networkTracerRay, 1, true) < 1) muzzle.copy(origin).addScaledVector(direction, 0.2);
   fx.flash(muzzle, message.weaponId === 'rpg' ? 0.65 : 0.38, message.playerId === multiplayer?.credentials?.playerId);
   const audibleHere = localShot || (message.spaceId || 'city') === (localContext.space?.id || 'city');
   if (message.weaponId === 'rpg') {
@@ -816,10 +834,11 @@ function playNetworkShot(message) {
     launcher.launch(muzzle.clone().addScaledVector(direction, 0.55), direction, remote?.character || player, time, { cosmetic: true, target: impact && new THREE.Vector3(impact.x, impact.y, impact.z), flightMs: impact ? Math.min(5000, impact.flightMs) : 0 });
     if (audibleHere) { if (localShot) sfx.weaponShot('rpg'); else sfx.weaponShotAt('rpg', origin); }
   } else {
-    // M6.8A: the tracer stops at the first wall, as the server's shot does.
+    // M6.8A: the tracer stops at the first wall, as the server's shot does. M6.9: it runs from
+    // the muzzle to where the server's ray (from the body) lands, so it converges on the crosshair.
     raycastWorld(origin, networkTracerRay.copy(direction).multiplyScalar(65), 1, true, networkTracerHit);
-    const end = muzzle.clone().addScaledVector(direction, Math.max(0.6, 65 * networkTracerHit.t));
-    fx.tracer(muzzle.clone().addScaledVector(direction, 0.5), end, 0xffd9a0, 1);
+    const end = origin.clone().addScaledVector(direction, Math.max(0.6, 65 * networkTracerHit.t));
+    fx.tracer(muzzle.clone().lerp(end, Math.min(0.5, 0.5 / Math.max(0.5, muzzle.distanceTo(end)))), end, 0xffd9a0, 1);
     if (networkTracerHit.t < 1) fx.impact(end, networkTracerHit.n);
     if (audibleHere) { if (localShot) sfx.weaponShot(message.weaponId); else sfx.weaponShotAt(message.weaponId, origin); }
   }
@@ -1320,11 +1339,11 @@ function loop(now) {
       // through the surface. This does not alter doorway or physics dimensions.
       avatarContactOffset.set(0, 0, 0);
       if (player.collisionHit && player.planar > 0.25) avatarContactOffset.copy(player.collisionNormal).multiplyScalar(0.14);
-      localAvatar.aimPitch = player.pitch; localAvatar.update(dt, player.pos, player.yaw + Math.PI, !!input.ads, player.dead, avatarContactOffset);
+      updateLocalAim(); localAvatar.aimPitch = localAim.pitch; localAvatar.update(dt, player.pos, localAim.yaw, localAim.raised, player.dead, avatarContactOffset, { moving: player.planar > 0.25 });
       localAvatar.obj.visible = show; if (localAvatar.gun) localAvatar.gun.visible = show && !localAvatar.holstered;
     }
     if (multiplayerActive && multiplayer?.state === 'connected') {
-      if (now >= multiplayerSendAt) { multiplayer.sendMovement(player, now); multiplayerSendAt = now + 1000 / MULTIPLAYER_LIMITS.updateHz; }
+      if (now >= multiplayerSendAt) { multiplayer.sendMovement(player, now, { raised: !!input.ads && localAim.raised, pitch: localAim.pitch }); multiplayerSendAt = now + 1000 / MULTIPLAYER_LIMITS.updateHz; }
       if (now >= multiplayerPingAt) { multiplayer.ping(); multiplayerPingAt = now + 5000; }
       const serverNow = Date.now() + multiplayerServerOffset;
       for (const remote of remotePlayers.values()) remote.update(dt, serverNow, player.pos, localContext.space?.id || 'city');

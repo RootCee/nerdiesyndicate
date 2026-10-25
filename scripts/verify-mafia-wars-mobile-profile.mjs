@@ -76,10 +76,10 @@ assert.equal((index.match(/id="tFire"/g) || []).length, 1);
 assert.doesNotMatch(index, /tFire2/);
 assert.match(index, /@media \(pointer: coarse\) and \(orientation: portrait\)/);
 assert.match(index, /id="mpDiagnosticsToggle"[^>]*hidden/);
-assert.match(index, /src="src\/main\.js\?build=m6\.8b-dev2"/);
+assert.match(index, /src="src\/main\.js\?build=m6\.9-dev1"/);
 assert.match(main, /multiplayer-endpoint\.js\?build=m6\.3-cross-device-diagnostics-rc1/);
-assert.match(main, /wallet-bridge\.js\?build=m6\.8b-dev2/);
-assert.match(main, /const GAME_BUILD_ID = 'm6\.8b-dev2'/);
+assert.match(main, /wallet-bridge\.js\?build=m6\.9-dev1/);
+assert.match(main, /const GAME_BUILD_ID = 'm6\.9-dev1'/);
 // M6.5 Underground 6v6: results panel and server match state handling.
 assert.match(index, /id="ugResults"[^>]*role="dialog"/);
 assert.match(index, /id="ugStay"/); assert.match(index, /id="ugLeave"/);
@@ -127,7 +127,7 @@ assert.match(walletPage, /src=\{GAME_URL\}/);
 assert.match(walletPage, /setWalletOpen\(true\)/);
 assert.match(walletPage, /formatTokenAmount\(tokenBalance\.data, 18\)/);
 assert.match(endpoint, /nerdie-city-multiplayer-v4\.buddieroots\.workers\.dev/);
-assert.match(endpoint, /AVATAR_PREVIEW_MULTIPLAYER_SERVICE = 'https:\/\/nerdie-city-m6-(?:3|7|7b|7b2|8a|8b)-preview\.buddieroots\.workers\.dev'/);
+assert.match(endpoint, /AVATAR_PREVIEW_MULTIPLAYER_SERVICE = 'https:\/\/nerdie-city-m6-(?:3|7|7b|7b2|8a|8b|9)-preview\.buddieroots\.workers\.dev'/);
 assert.match(endpoint, /override && \(isLocal \|\| isPrivateLan\)/);
 
 const { CITY_BOUNDS, createCityPlan, chunkVisible } = await import(
@@ -183,5 +183,17 @@ assert.doesNotMatch(main, /type: 'structure-(?:damage|repair)'[^\n]*send/);
 assert.match(await readFile(path.join(root, 'hood-geometry.js'), 'utf8'), /export const HOOD_GEOMETRY = /);
 assert.match(await readFile(path.join(root, 'rocket.js'), 'utf8'), /if \(r\.target && time >= r\.arrive\)/);
 assert.match(main, /cosmetic: true, target: impact/);
+
+// M6.9: procedural aiming, per-weapon holds, aim on the wire, muzzle-true tracers, and the latched AIM toggle (no new touch buttons).
+const [characterRig, remotePlayer, aimModule, mpClient] = await Promise.all(['characters.js', 'remote-player.js', 'aim.js', 'multiplayer-client.js'].map((file) => readFile(path.join(root, file), 'utf8')));
+assert.match(characterRig, /export const WEAPON_HOLD = Object\.freeze\(\{ ak: 'rifle', mp5: 'rifle', m700: 'rifle', mac10: 'compact', rpg: 'launcher' \}\)/);
+assert.match(characterRig, /supportHand\(matrixWorld\)/);
+assert.match(remotePlayer, /\(state\.aim \|\| 0\) > 0\.5/);
+assert.match(aimModule, /export function aimRaised/);
+assert.match(mpClient, /movement\.aim = aim\.raised \? 1 : 0/);
+assert.match(main, /shooter\.muzzleWorld\(muzzle\)/);
+assert.match(main, /aimButton\?\.classList\.toggle\('on', !!input\.ads\)/);
+assert.match(index, /\.tb\.on \{/);
+assert.equal((index.match(/class="tb" id="t\w+"/g) || []).length, 8);
 
 console.log('Mafia Wars mobile, city, M6.3 network diagnostics, and M6.4 wallet bridge verified');

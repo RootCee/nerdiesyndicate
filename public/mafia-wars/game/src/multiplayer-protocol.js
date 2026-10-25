@@ -43,8 +43,12 @@ export function validMovement(message) {
   if (!message || message.v !== PROTOCOL_VERSION || message.type !== 'move') return false;
   if (!Number.isSafeInteger(message.seq) || message.seq < 0) return false;
   return ['x', 'y', 'z', 'yaw', 'speed'].every((key) => Number.isFinite(message[key]))
-    && ['idle', 'walk', 'run'].includes(message.state);
+    && ['idle', 'walk', 'run'].includes(message.state)
+    // M6.9 (optional; older clients omit them): weapon raised (0/1) and aim pitch in radians.
+    && (message.aim === undefined || message.aim === 0 || message.aim === 1)
+    && (message.pitch === undefined || (Number.isFinite(message.pitch) && Math.abs(message.pitch) <= AIM_PITCH_LIMIT));
 }
+export const AIM_PITCH_LIMIT = 1.5;
 
 export function interpolateSnapshots(snapshots, renderAt, out = {}, maxExtrapolationMs = 0) {
   if (!snapshots.length) return null;
@@ -60,6 +64,7 @@ export function interpolateSnapshots(snapshots, renderAt, out = {}, maxExtrapola
     out.yaw = b.yaw + angle * ratio;
     out.speed = b.speed;
     out.state = b.state;
+    out.aim = b.aim || 0; out.pitch = b.pitch || 0;
     out.at = renderAt;
     out.extrapolated = true;
     return out;
@@ -73,6 +78,7 @@ export function interpolateSnapshots(snapshots, renderAt, out = {}, maxExtrapola
   out.yaw = a.yaw + angle * t;
   out.speed = a.speed + (b.speed - a.speed) * t;
   out.state = t < 0.5 ? a.state : b.state;
+  out.aim = (a.aim || 0) + ((b.aim || 0) - (a.aim || 0)) * t; out.pitch = (a.pitch || 0) + ((b.pitch || 0) - (a.pitch || 0)) * t;
   out.at = renderAt;
   out.extrapolated = false;
   return out;

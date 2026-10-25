@@ -79,7 +79,7 @@ export class Launcher {
     const origin = this.camera.position.clone().addScaledVector(dir, 1.1);
     let m = origin.clone(); if (this.model) { this.model.updateWorldMatrix(true, false); m.copy(this.muzzleLocal).applyMatrix4(this.model.matrixWorld); }
     this.fx.flash(m, 0.6, false); for (let i = 0; i < 9; i++) this.fx.billow('puff', m, new THREE.Vector3().copy(dir).multiplyScalar(-3 - Math.random() * 4).add(new THREE.Vector3((Math.random() - 0.5) * 2, Math.random() * 1.2, (Math.random() - 0.5) * 2)), 1.2 + Math.random() * 0.8, 0.3, 2.2, { op: 0.5, tint: [0.1, 0.095, 0.09], drag: 2.4 });
-    this.launch(origin, dir, p, time);
+    this.launch(origin, dir, p, time); this.onFire?.(dir); // M6.9: the third-person avatar recoils
     p.kick += 0.05; p.kickYaw += (Math.random() - 0.5) * 0.01; this.kickZ += 0.12; sfx.rocket();
   }
   // a rocket that anyone can launch (bots later): glowing head + smoke trail + a point light
