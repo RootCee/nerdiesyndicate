@@ -76,10 +76,10 @@ assert.equal((index.match(/id="tFire"/g) || []).length, 1);
 assert.doesNotMatch(index, /tFire2/);
 assert.match(index, /@media \(pointer: coarse\) and \(orientation: portrait\)/);
 assert.match(index, /id="mpDiagnosticsToggle"[^>]*hidden/);
-assert.match(index, /src="src\/main\.js\?build=m6\.8b-dev1"/);
+assert.match(index, /src="src\/main\.js\?build=m6\.8b-dev2"/);
 assert.match(main, /multiplayer-endpoint\.js\?build=m6\.3-cross-device-diagnostics-rc1/);
-assert.match(main, /wallet-bridge\.js\?build=m6\.8b-dev1/);
-assert.match(main, /const GAME_BUILD_ID = 'm6\.8b-dev1'/);
+assert.match(main, /wallet-bridge\.js\?build=m6\.8b-dev2/);
+assert.match(main, /const GAME_BUILD_ID = 'm6\.8b-dev2'/);
 // M6.5 Underground 6v6: results panel and server match state handling.
 assert.match(index, /id="ugResults"[^>]*role="dialog"/);
 assert.match(index, /id="ugStay"/); assert.match(index, /id="ugLeave"/);
@@ -179,5 +179,9 @@ assert.match(main, /message\.type === 'structure-damage'\) applyStructureDamage\
 assert.match(main, /enabled: qs\.get\('phys'\) !== '0' && !multiplayerDev/);
 assert.match(main, /streaming\?\.id !== ORIGINAL_NEIGHBORHOOD_LAYOUT\.id/);
 assert.doesNotMatch(main, /type: 'structure-(?:damage|repair)'[^\n]*send/);
+// dev2: exact kit-house geometry ships, and networked rockets burst at the server's point.
+assert.match(await readFile(path.join(root, 'hood-geometry.js'), 'utf8'), /export const HOOD_GEOMETRY = /);
+assert.match(await readFile(path.join(root, 'rocket.js'), 'utf8'), /if \(r\.target && time >= r\.arrive\)/);
+assert.match(main, /cosmetic: true, target: impact/);
 
 console.log('Mafia Wars mobile, city, M6.3 network diagnostics, and M6.4 wallet bridge verified');

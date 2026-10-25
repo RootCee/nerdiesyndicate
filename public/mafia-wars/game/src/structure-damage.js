@@ -8,7 +8,7 @@
 // exactly the unit the original Hood Warfare destruction.js opens (one face
 // collider). Clients then knock down every panel of that face and drop its
 // collider, so the visual, bullet, and movement states agree.
-import { CITY_STRUCTURES, rayBoxDistance } from './city-structures.js';
+import { CITY_STRUCTURES, partOpen, rayBoxDistance } from './city-structures.js';
 
 export const DESTRUCTION_RULES = Object.freeze({
   openRadius: 1.2,           // faces this close to the burst open
@@ -39,7 +39,7 @@ function segmentHit(a, b, open, structures) {
     if (bb.maxX < minX || bb.minX > maxX || bb.maxZ < minZ || bb.minZ > maxZ || bb.maxY < Math.min(a.y, b.y)) continue;
     const mask = open?.get(s.id) || 0;
     for (const part of s.parts || [{ face: null, box: bb }]) {
-      if (part.face >= 0 && mask & (1 << part.face)) continue;
+      if (part.face !== null && partOpen(part, mask)) continue;
       const t = rayBoxDistance(a, dir, part.box);
       if (t !== null && t > 0 && t <= len && (!best || t < best.t)) best = { t, len, structure: s, face: part.face };
     }

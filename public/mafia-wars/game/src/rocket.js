@@ -83,21 +83,25 @@ export class Launcher {
     p.kick += 0.05; p.kickYaw += (Math.random() - 0.5) * 0.01; this.kickZ += 0.12; sfx.rocket();
   }
   // a rocket that anyone can launch (bots later): glowing head + smoke trail + a point light
-  launch(origin, dir, owner, time, { cosmetic = false } = {}) {
+  // `target` (M6.8B): the server's burst point; the rocket flies straight there in `flightMs` and bursts, whatever the local world says.
+  launch(origin, dir, owner, time, { cosmetic = false, target = null, flightMs = 0 } = {}) {
     const slot = this.pool.find((s) => !s.busy) || this.pool[0]; slot.busy = true;
     const { obj, light } = slot; obj.visible = true; obj.position.copy(origin); light.intensity = 14; light.position.copy(origin);
-    this.rockets.push({ obj, light, slot, pos: origin.clone(), vel: dir.clone().multiplyScalar(38), owner, born: time, trail: 0, cosmetic });
+    const flight = Math.max(0.03, flightMs / 1000);
+    const vel = target ? target.clone().sub(origin).divideScalar(flight) : dir.clone().multiplyScalar(38);
+    this.rockets.push({ obj, light, slot, pos: origin.clone(), vel, owner, born: time, trail: 0, cosmetic, target: target?.clone() || null, arrive: time + flight });
   }
   stepRocket(r, dt, time) {
-    const prev = r.pos.clone(); r.vel.y -= 2.5 * dt; r.pos.addScaledVector(r.vel, dt);
+    if (r.target && time >= r.arrive) { this.explode(r.target, r.owner, time, r.vel.clone().normalize(), { destructive: false }); return false; }
+    const prev = r.pos.clone(); if (!r.target) r.vel.y -= 2.5 * dt; r.pos.addScaledVector(r.vel, dt);
     const seg = new THREE.Vector3().subVectors(r.pos, prev); const len = seg.length(); const dir = seg.clone().normalize();
     // world (houses, props, standing walls) then bots
-    const hitW = { t: 1, n: new THREE.Vector3() }; raycastWorld(prev, seg, 1, true, hitW);
+    const hitW = { t: 1, n: new THREE.Vector3() }; if (!r.target) raycastWorld(prev, seg, 1, true, hitW);
     const bot = !r.cosmetic && this.rayTargets ? this.rayTargets(prev, dir, len * hitW.t, r.owner) : null;
     let hit = null;
     if (bot) hit = prev.clone().addScaledVector(dir, bot.t);
     else if (hitW.t < 1) hit = prev.clone().addScaledVector(dir, len * hitW.t - 0.05);
-    else if (r.pos.y <= 0.05) { hit = r.pos.clone(); hit.y = 0.05; }
+    else if (!r.target && r.pos.y <= 0.05) { hit = r.pos.clone(); hit.y = 0.05; }
     if (hit) { this.explode(hit, r.owner, time, dir, { destructive: !r.cosmetic }); return false; }
     if (time - r.born > 5) return false;
     r.obj.position.copy(r.pos); r.light.position.copy(r.pos);

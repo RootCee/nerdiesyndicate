@@ -9,46 +9,35 @@
 // C protected, prop (parked cars). Destructible houses and walls also list
 // `parts`: the faces the client builds as separate colliders (house face
 // 0 front/porch, 1 back, 2 and 3 the sides, as world.js and destruction.js
-// number them; a wall is one face 0) plus the house floor (face -1). M6.8B
-// opens faces; occlusion then skips the open ones.
+// number them; a wall is one face 0), the house floor (face -1), and its
+// roof (face -2, gone once two faces are open, as on the client). Kit house
+// parts and garages are the client's exact colliders (hood-geometry.js,
+// generated from world.js). M6.8B opens faces; occlusion skips open ones.
 //
 // Deliberately left out, so the server never invents an invisible wall:
 // chain-link fences (single-player bullets pass through them too), lamps and
-// utility poles (0.24 m), porches and steps, and the original blocks' garages
-// (present on a random 75% of lots, decided by world.js's RNG).
+// utility poles (0.24 m), and porches and steps.
 import {
   APARTMENT_SITE, COMBAT_VENUE_SITE, DUPLICATED_ENTERABLE_HOUSE_SITE, DUPLICATED_ORIGINAL_NEIGHBORHOOD,
   ORIGINAL_EXPANSION_HOUSES, ORIGINAL_NEIGHBORHOOD_LAYOUT, createCityPlan,
 } from './city-layout.js';
 import { BANK_BUILDING_ID } from './city-pois.js';
+import { HOOD_GEOMETRY } from './hood-geometry.js';
 
 // Mirrors world.js: ROAD_HALF 4.5, SIDEWALK 2, LOT 8, HOUSE_FRONT 14,
 // HOUSE_DEPTH 10, HOUSE_W 6.2, WALL_LOTS; destruction.js BLOCK 0.4 x 0.2 x 0.2.
 const HOOD = Object.freeze({ roadHalf: 4.5, sidewalk: 2, lot: 8, firstLot: -40, lots: 10, houseFront: 14, houseDepth: 10, houseW: 6.2, block: 0.2, brick: 0.4 });
-// Shortest kit house: 1.4 floors on a 0.8 m base. Lot heights come from
-// world.js's RNG, so every house uses the lowest wall top; nothing taller is
-// ever invented.
-const HOOD_HOUSE_TOP = 0.8 + 1.4 * 3;
 const WALL_LOTS = Object.freeze(['-1:1', '-1:4', '-1:7', '1:2', '1:5', '1:8']);
 
 const box = (minX, minY, minZ, maxX, maxY, maxZ) => Object.freeze({ minX, minY, minZ, maxX, maxY, maxZ });
-// A house-local box turned by rotY (a multiple of 90°, as world.js mat()) and moved to (x, z).
-function turned(x, z, rotY, lx0, ly0, lz0, lx1, ly1, lz1) {
-  const c = Math.round(Math.cos(rotY)), s = Math.round(Math.sin(rotY));
-  const xs = [lx0 * c + lz0 * s, lx1 * c + lz1 * s], zs = [-lx0 * s + lz0 * c, -lx1 * s + lz1 * c];
-  return box(x + Math.min(...xs), ly0, z + Math.min(...zs), x + Math.max(...xs), ly1, z + Math.max(...zs));
+const fromArray = ([minX, minY, minZ, maxX, maxY, maxZ]) => box(minX, minY, minZ, maxX, maxY, maxZ);
+// world.js buildHouse with blocks: four face colliders, the floor, and the roof (hood-geometry.js).
+function kitHouseParts(id) {
+  const g = HOOD_GEOMETRY.houses[id];
+  if (!g) throw new Error(`hood-geometry.js has no house ${id}: run tools/structures/extract-hood-geometry.mjs --write`);
+  return Object.freeze([...g.faces.map((f, face) => Object.freeze({ face, box: fromArray(f) })), Object.freeze({ face: -1, box: fromArray(g.floor) }), Object.freeze({ face: -2, box: fromArray(g.roof) })]);
 }
-// world.js buildHouse with blocks: four 0.2 m face colliders and a 0.8 m floor.
-function kitHouseParts(x, z, rotY, top, d = HOOD.houseDepth, w = HOOD.houseW) {
-  const t = 0.2;
-  return Object.freeze([
-    Object.freeze({ face: 0, box: turned(x, z, rotY, d / 2 - t, 0, -w / 2, d / 2, top, w / 2) }),
-    Object.freeze({ face: 1, box: turned(x, z, rotY, -d / 2, 0, -w / 2, -d / 2 + t, top, w / 2) }),
-    Object.freeze({ face: 2, box: turned(x, z, rotY, -d / 2, 0, w / 2 - t, d / 2, top, w / 2) }),
-    Object.freeze({ face: 3, box: turned(x, z, rotY, -d / 2, 0, -w / 2, d / 2, top, -w / 2 + t) }),
-    Object.freeze({ face: -1, box: turned(x, z, rotY, -d / 2, 0, -w / 2, d / 2, 0.8, w / 2) }),
-  ]);
-}
+const bounding = (parts) => box(Math.min(...parts.map((p) => p.box.minX)), 0, Math.min(...parts.map((p) => p.box.minZ)), Math.max(...parts.map((p) => p.box.maxX)), Math.max(...parts.map((p) => p.box.maxY)), Math.max(...parts.map((p) => p.box.maxZ)));
 const wallParts = (b) => Object.freeze([Object.freeze({ face: 0, box: b })]);
 const centered = (x, z, width, depth, height) => box(x - width / 2, 0, z - depth / 2, x + width / 2, height, z + depth / 2);
 // destruction.js wallSpec rounds a wall to whole blocks.
@@ -59,10 +48,8 @@ function neighbourhoodStructures(layout) {
   for (let i = 0; i < HOOD.lots; i++) for (const side of [-1, 1]) {
     const zc = HOOD.firstLot + i * HOOD.lot + HOOD.lot / 2, row = side < 0 ? 'west' : 'east';
     const id = `${layout === ORIGINAL_NEIGHBORHOOD_LAYOUT ? 'hood-original' : 'hood-duplicate'}-${row}-${i}`;
-    const a = cx + side * HOOD.houseFront, b = cx + side * (HOOD.houseFront + HOOD.houseDepth);
-    // west row unturned (front faces +x), east row turned half a turn (front faces -x)
-    const parts = kitHouseParts(cx + side * (HOOD.houseFront + HOOD.houseDepth / 2), zc, side < 0 ? 0 : Math.PI, HOOD_HOUSE_TOP);
-    out.push({ id, kind: 'hood-house', category: id === DUPLICATED_ENTERABLE_HOUSE_SITE.id ? 'B' : 'A', box: box(Math.min(a, b), 0, zc - HOOD.houseW / 2, Math.max(a, b), HOOD_HOUSE_TOP, zc + HOOD.houseW / 2), parts });
+    const parts = kitHouseParts(id);
+    out.push({ id, kind: 'hood-house', category: id === DUPLICATED_ENTERABLE_HOUSE_SITE.id ? 'B' : 'A', box: bounding(parts), parts });
   }
   // main.js: front-yard walls on WALL_LOTS (two segments with a walkway gap), 7 courses.
   for (const key of WALL_LOTS) {
@@ -94,14 +81,20 @@ export function buildCityStructures(plan = createCityPlan()) {
   add({ id: COMBAT_VENUE_SITE.id, kind: 'venue', category: 'C', box: centered(COMBAT_VENUE_SITE.x, COMBAT_VENUE_SITE.z, COMBAT_VENUE_SITE.width, COMBAT_VENUE_SITE.depth, COMBAT_VENUE_SITE.height + 0.5) });
   // world.js kit houses turned a quarter turn to face south: 6.2 m wide in x, 10 m deep in z.
   for (const site of ORIGINAL_EXPANSION_HOUSES) {
-    const top = 0.8 + (site.spec.floors || 2) * 3;
-    add({ id: site.id, kind: 'kit-house', category: site.enterable ? 'B' : 'A', box: centered(site.x, site.z, HOOD.houseW, HOOD.houseDepth, top), parts: kitHouseParts(site.x, site.z, site.rotY, top) });
+    const parts = kitHouseParts(site.id);
+    add({ id: site.id, kind: 'kit-house', category: site.enterable ? 'B' : 'A', box: bounding(parts), parts });
   }
   for (const entry of [...neighbourhoodStructures(ORIGINAL_NEIGHBORHOOD_LAYOUT), ...neighbourhoodStructures(DUPLICATED_ORIGINAL_NEIGHBORHOOD)]) add(entry);
+  // Garages beyond the alleys (on the lots world.js gave one), protected.
+  HOOD_GEOMETRY.garages.forEach((g, i) => add({ id: `hood-garage-${i}`, kind: 'garage', category: 'C', box: fromArray(g) }));
   return Object.freeze(out);
 }
 
 export const CITY_STRUCTURES = buildCityStructures();
+
+const openCount = (mask) => { let n = 0; for (let m = mask; m; m &= m - 1) n++; return n; };
+// Is this part gone? An open face, or the roof once two faces are open (it falls in, client destruction.js).
+export const partOpen = (part, mask) => (part.face >= 0 ? (mask & (1 << part.face)) !== 0 : part.face === -2 && openCount(mask) >= 2);
 
 // Distance along a ray to a box, or null on a miss (0 when the ray starts inside).
 export function rayBoxDistance(origin, direction, b) {
@@ -133,7 +126,7 @@ export function firstStructureHit(origin, direction, distance, structures = CITY
     }
     const mask = open?.get(s.id) || 0;
     for (const part of s.parts) {
-      if (part.face >= 0 && mask & (1 << part.face)) continue;
+      if (partOpen(part, mask)) continue;
       const hit = rayBoxDistance(origin, direction, part.box);
       if (hit !== null && hit > 0.03 && hit < distance - 0.05 && (!best || hit < best.distance)) best = { structure: s, distance: hit, face: part.face };
     }

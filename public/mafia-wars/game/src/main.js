@@ -50,9 +50,9 @@ import { NpcRenderer } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.8b-dev1';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.8b-dev2';
 
-const GAME_BUILD_ID = 'm6.8b-dev1';
+const GAME_BUILD_ID = 'm6.8b-dev2';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -798,8 +798,8 @@ function applyStructureDamage(message) {
   const ids = new Set();
   for (const [id, , open] of message.changes) if (typeof id === 'string' && Number.isInteger(open)) { structureServerState.set(id, open); ids.add(id); }
   const impact = new THREE.Vector3(Number(message.impact?.x) || 0, Number(message.impact?.y) || 0, Number(message.impact?.z) || 0);
-  // The wall gives way as the drawn rocket arrives (both start when this message and its shot land).
-  setTimeout(() => syncStructures({ impact, impactIds: ids }), Math.min(5000, Math.max(0, Number(message.flightMs) || 0)) + 60);
+  // The wall gives way as the drawn rocket bursts there (both start when this message and its shot land).
+  setTimeout(() => syncStructures({ impact, impactIds: ids }), Math.min(5000, Math.max(0, Number(message.flightMs) || 0)) + 30);
 }
 function playNetworkShot(message) {
   const localShot = message.playerId === multiplayer?.credentials?.playerId;
@@ -812,7 +812,8 @@ function playNetworkShot(message) {
   fx.flash(muzzle, message.weaponId === 'rpg' ? 0.65 : 0.38, message.playerId === multiplayer?.credentials?.playerId);
   const audibleHere = localShot || (message.spaceId || 'city') === (localContext.space?.id || 'city');
   if (message.weaponId === 'rpg') {
-    launcher.launch(muzzle.clone().addScaledVector(direction, 0.55), direction, remote?.character || player, time, { cosmetic: true });
+    const impact = message.impact && ['x', 'y', 'z', 'flightMs'].every((k) => Number.isFinite(message.impact[k])) ? message.impact : null;
+    launcher.launch(muzzle.clone().addScaledVector(direction, 0.55), direction, remote?.character || player, time, { cosmetic: true, target: impact && new THREE.Vector3(impact.x, impact.y, impact.z), flightMs: impact ? Math.min(5000, impact.flightMs) : 0 });
     if (audibleHere) { if (localShot) sfx.weaponShot('rpg'); else sfx.weaponShotAt('rpg', origin); }
   } else {
     // M6.8A: the tracer stops at the first wall, as the server's shot does.
