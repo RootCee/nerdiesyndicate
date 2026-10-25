@@ -41,9 +41,9 @@ import { MULTIPLAYER_WEAPON_RULES } from './multiplayer-combat.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.4.2-final-rc1';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.5-dev1';
 
-const GAME_BUILD_ID = 'm6.4.2-final-rc1';
+const GAME_BUILD_ID = 'm6.5-dev1';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -217,6 +217,7 @@ async function selectWeapon(command) {
 const bots = []; let trooper = null, localAvatar = null, city = null, collisionDebug = null;
 let localAppearanceRequest = 0;
 let localEquipmentRequest = 0, localEquipment = normalizeEquipment(DEFAULT_EQUIPMENT), localEquipmentRevision = 0;
+let undergroundMatch = null, undergroundShownMatch = '', undergroundResultsDismissed = '';
 let localCombat = null, localContext = { space: { id: 'city', instanceId: null } }, localContextRevision = 0, localSafeZone = false, multiplayerNextShotAt = 0, multiplayerTriggerHeld = false;
 let multiplayer = null, multiplayerActive = false, multiplayerPlayerCount = 0, multiplayerServerOffset = 0, multiplayerSendAt = 0, multiplayerPingAt = 0, multiplayerStatusAt = 0;
 const multiplayerAim = new THREE.Vector3();
@@ -580,6 +581,41 @@ function setDiagnosticsOpen(open) {
   $('mpDiagnosticsToggle').setAttribute('aria-expanded', String(open));
   if (open) renderMultiplayerDiagnostics();
 }
+const UNDERGROUND_REMOTE_CONTEXT = Object.freeze({ space: Object.freeze({ id: 'underground', instanceId: 'underground' }) });
+const inLocalUnderground = () => multiplayerActive && localContext.space?.id === 'underground';
+function disposeBotRemotes() { for (const [id, remote] of remotePlayers) if (remote.bot) { remote.dispose(); remotePlayers.delete(id); } }
+function renderUndergroundScore() {
+  const m = undergroundMatch; if (!m || !inLocalUnderground()) return;
+  hud.score(m.score.red, m.score.blue);
+  for (const small of document.querySelectorAll('#score .team small')) small.textContent = `/${m.scoreLimit}`;
+  const mine = player.team === 'red' ? m.score.red : m.score.blue, theirs = player.team === 'red' ? m.score.blue : m.score.red;
+  $('state').textContent = m.phase === 'ended' ? 'MATCH OVER' : `${(player.team || 'blue').toUpperCase()} · ${mine > theirs ? 'WINNING' : mine < theirs ? 'LOSING' : 'TIED'}`;
+}
+function showUndergroundResults(m) {
+  const draw = m.winner === 'draw', won = !draw && m.winner === player.team, localId = multiplayer?.credentials?.playerId;
+  $('ugResultTitle').textContent = draw ? 'DRAW' : won ? 'VICTORY' : 'DEFEAT';
+  $('ugResultScore').textContent = `BLUE ${m.score.blue} · RED ${m.score.red}`;
+  const body = $('ugRoster').tBodies[0]; body.replaceChildren();
+  for (const row of [...m.roster].sort((a, b) => (b.kills - a.kills) || (a.deaths - b.deaths))) {
+    const tr = document.createElement('tr'); tr.className = `${row.team}${row.id === localId ? ' me' : ''}`;
+    for (const [text, numeric] of [[row.id === localId ? `${row.name} (YOU)` : row.name, false], [row.kills, true], [row.deaths, true]]) { const td = document.createElement('td'); td.textContent = String(text); if (numeric) td.className = 'n'; tr.append(td); }
+    body.append(tr);
+  }
+  if (undergroundResultsDismissed !== m.matchId) { $('ugResults').classList.add('on'); document.exitPointerLock?.(); }
+}
+function applyUndergroundMatch(match) {
+  const prior = undergroundMatch; undergroundMatch = match;
+  if (!inLocalUnderground()) return;
+  renderUndergroundScore();
+  if (match.phase === 'ended') {
+    if (prior?.phase !== 'ended' || prior?.matchId !== match.matchId) { if (match.winner === player.team) sfx.victory(); else if (match.winner !== 'draw') sfx.defeat(); }
+    showUndergroundResults(match);
+  } else $('ugResults').classList.remove('on');
+  if (match.phase === 'live' && undergroundShownMatch !== match.matchId) {
+    hud.callout(undergroundShownMatch ? 'NEW MATCH' : 'UNDERGROUND 6V6', `${(player.team || 'blue').toUpperCase()} TEAM · FIRST TO ${match.scoreLimit} · AI FILLS OPEN SLOTS`);
+    undergroundShownMatch = match.matchId;
+  }
+}
 function clearRemotePlayers() { for (const remote of remotePlayers.values()) remote.dispose(); remotePlayers.clear(); multiplayerPlayerCount = 0; networkAudioEvents.clear(); }
 function applyLocalCombat(combat) {
   if (!combat) return;
@@ -630,9 +666,11 @@ function applyLocalContext(context, revision = localContextRevision + 1, state =
     city?.setMode('combat'); setCameraMode(true); document.body.classList.add('free-roam');
     destructionStreamingStats = updateDestructionStreaming(player.pos, Q.lowMemory ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.mobile : DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.desktop, ORIGINAL_NEIGHBORHOOD_LAYOUT.id);
     updateNeighborhoodLights(destructionStreamingStats.activeStreamingId);
-    $('modebadge').textContent = 'Multiplayer Underground'; $('state').textContent = 'LIVE COMBAT'; $('timer').textContent = 'NO TIME LIMIT'; $('combatExit').classList.add('on');
-    hud.callout('THE UNDERGROUND', 'SERVER-AUTHORITATIVE MULTIPLAYER COMBAT');
+    $('modebadge').textContent = 'Underground 6v6'; $('state').textContent = 'LIVE COMBAT'; $('timer').textContent = '--:--'; $('combatExit').classList.add('on');
+    document.body.classList.add('ug-match'); renderUndergroundScore();
   } else if (priorSpace === 'underground') {
+    disposeBotRemotes(); undergroundMatch = null; undergroundShownMatch = ''; $('ugResults').classList.remove('on'); document.body.classList.remove('ug-match');
+    for (const small of document.querySelectorAll('#score .team small')) small.textContent = '/100';
     city?.setMode('free-roam'); $('modebadge').textContent = 'Multiplayer City'; $('state').textContent = '20-PLAYER CITY'; $('timer').textContent = 'NO TIME LIMIT'; $('combatExit').classList.remove('on');
     destructionStreamingStats = updateDestructionStreaming(player.pos, Q.lowMemory ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.mobile : DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.desktop);
     updateNeighborhoodLights(destructionStreamingStats.activeStreamingId); hud.callout('BACK IN NERDIE CITY', 'MULTIPLAYER FREE ROAM');
@@ -673,6 +711,7 @@ function ensureRemote(playerInfo) {
     if (playerInfo.equipment) remote.setEquipment(playerInfo.equipment, playerInfo.equipmentRevision, playerInfo.context, playerInfo.contextRevision);
     else if (playerInfo.context) remote.setContext(playerInfo.context, playerInfo.contextRevision);
   }
+  if (playerInfo.bot) remote.bot = true;
   if (playerInfo.combat) remote.setCombat(playerInfo.combat);
   return remote;
 }
@@ -714,8 +753,15 @@ function configureMultiplayerClient() {
       if (message.combat) applyLocalCombat(message.combat);
       if (message.context) applyLocalContext(message.context, message.contextRevision, message.state);
       for (const peer of message.peers || []) { const remote = ensureRemote(peer); if (remote && peer.state) remote.push(peer.state); }
-    } else if (message.type === 'peer-joined') { ensureRemote(message.player); if (Number.isInteger(message.playerCount)) multiplayerPlayerCount = message.playerCount; setMultiplayerStatus(`Connected · ${message.player.name} joined`); }
-    else if (message.type === 'peer-left') { remotePlayers.get(message.playerId)?.dispose(); remotePlayers.delete(message.playerId); if (Number.isInteger(message.playerCount)) multiplayerPlayerCount = message.playerCount; setMultiplayerStatus('Connected · a player is reconnecting'); }
+    } else if (message.type === 'peer-joined') {
+      if (message.player?.bot && !inLocalUnderground()) return;
+      ensureRemote(message.player); if (Number.isInteger(message.playerCount)) multiplayerPlayerCount = message.playerCount;
+      if (!message.player?.bot) setMultiplayerStatus(`Connected · ${message.player.name} joined`);
+    }
+    else if (message.type === 'peer-left') { remotePlayers.get(message.playerId)?.dispose(); remotePlayers.delete(message.playerId); if (Number.isInteger(message.playerCount)) multiplayerPlayerCount = message.playerCount; if (!message.bot) setMultiplayerStatus('Connected · a player is reconnecting'); }
+    else if (message.type === 'underground-roster') { if (inLocalUnderground()) for (const bot of message.players || []) { const remote = ensureRemote(bot); if (remote && bot.state) remote.push(bot.state); } }
+    else if (message.type === 'bot-states') { if (inLocalUnderground()) for (const state of message.states || []) ensureRemote({ id: state.playerId, name: state.name, bot: true, context: UNDERGROUND_REMOTE_CONTEXT })?.push(state); }
+    else if (message.type === 'underground-match') applyUndergroundMatch(message);
     else if (message.type === 'state') ensureRemote({ id: message.playerId, name: message.name })?.push(message);
     else if (message.type === 'appearance') {
       if (message.playerId === multiplayer.credentials?.playerId) applyLocalAppearance(message.appearance, { broadcast: false });
@@ -737,6 +783,11 @@ function configureMultiplayerClient() {
       const localId = multiplayer.credentials?.playerId, localImpact = message.impacts?.find((impact) => impact.targetId === localId);
       if (message.shooterId === localId && message.impacts?.length) hud.hit(!!message.elimination);
       if (localImpact && !localImpact.dead) { hurtK = 1; sfx.hurt(); }
+      if (message.elimination && inLocalUnderground()) {
+        const who = (id) => id === localId ? { name: ident.name || 'YOU', team: player.team } : { name: remotePlayers.get(id)?.name || 'PLAYER', team: remotePlayers.get(id)?.combat?.team };
+        const killer = who(message.elimination.killerId), victim = who(message.elimination.victimId);
+        hud.feed(killer.name, killer.team, victim.name, victim.team);
+      }
       if (message.elimination) hud.killText(message.elimination.killerId === localId ? 'ELIMINATION' : message.elimination.victimId === localId ? 'YOU WERE ELIMINATED' : 'PLAYER ELIMINATED');
     }
     else if (message.type === 'safe-zone') setLocalSafeZone(message.safeZone === true);
@@ -988,6 +1039,8 @@ async function boot() {
     }
   });
   $('practiceMatch').addEventListener('click', startPracticeMatch);
+  $('ugStay').addEventListener('click', () => { undergroundResultsDismissed = undergroundMatch?.matchId || ''; $('ugResults').classList.remove('on'); if (!TOUCH) requestLock(); });
+  $('ugLeave').addEventListener('click', () => { $('ugResults').classList.remove('on'); if (inLocalUnderground()) multiplayer?.updateSpace('underground', 'exit'); });
   $('backToCity').addEventListener('click', () => setCombatLobby(false));
   $('combatExit').addEventListener('click', () => {
     if (multiplayerActive && localContext.space?.id === 'underground') multiplayer?.updateSpace('underground', 'exit');
@@ -1025,6 +1078,11 @@ function loop(now) {
   } else {
     let systemStarted = performanceProfile.start();
     if (!MATCH.over && isCombatMode(MATCH.mode)) { MATCH.left -= dt; hud.timer(MATCH.left); if (MATCH.left <= 0) endMatch(); }
+    else if (undergroundMatch && inLocalUnderground()) {
+      const serverNow = Date.now() + multiplayerServerOffset;
+      if (undergroundMatch.phase === 'live') hud.timer((undergroundMatch.endsAt - serverNow) / 1000);
+      else if (undergroundMatch.phase === 'ended') { $('timer').textContent = 'RESULTS'; $('ugNext').textContent = `NEXT MATCH IN ${Math.max(0, Math.ceil((undergroundMatch.nextMatchAt - serverNow) / 1000))} S`; }
+    }
     if (input.ab) { if (isCombatMode(MATCH.mode)) useAbility(input.ab); input.ab = 0; }
     player.update(dt, MATCH.over || combatLobbyOpen ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
     if (multiplayerActive && Number.isFinite(localCombat?.health)) {
@@ -1182,6 +1240,12 @@ function loop(now) {
       if (b.team === 'blue') labelItems.push({ pos: new THREE.Vector3(b.pos.x, b.pos.y + 2.05, b.pos.z), name: '', team: 'blue', dist: d });
       else if (spotted) labelItems.push({ pos: new THREE.Vector3(b.pos.x, b.pos.y + 2.05, b.pos.z), name: b.name, team: 'red', dist: d });
     }
+    if (inLocalUnderground()) for (const remote of remotePlayers.values()) {
+      if (remote.combat?.dead || !remote.combat?.team || (remote.context?.space?.id || 'city') !== 'underground') continue;
+      const ally = remote.combat.team === player.team, d = Math.round(remote.position.distanceTo(player.pos));
+      dots.push({ pos: remote.position, team: ally ? 'blue' : 'red', spotted: d < 14 });
+      if (ally) labelItems.push({ pos: new THREE.Vector3(remote.position.x, remote.position.y + 2.05, remote.position.z), name: remote.name, team: 'blue', dist: d });
+    }
     hud.labels(camera, labelItems); hud.minimap(player, dots, snitch);
   }
   performanceProfile.end('hud', systemStarted); systemStarted = performanceProfile.start();
@@ -1195,4 +1259,4 @@ boot().catch((e) => {
   window.__showGameEntryFeedback?.(`The city could not finish loading: ${e.message}`, { error: true, retryLabel: 'Reload and retry' });
 });
 // expose for QA
-window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, remotePlayers, applyLocalAppearance, applyLocalEquipment, requestMultiplayerEquipment, ensureWeaponVisual, characterAssetStats, get localAppearance() { return localAppearance; }, get localEquipment() { return localEquipment; }, get localEquipmentRevision() { return localEquipmentRevision; }, get localCombat() { return localCombat; }, get localContext() { return localContext; }, get multiplayer() { return multiplayer; }, get multiplayerActive() { return multiplayerActive; }, get multiplayerDiagnostics() { return { client: multiplayer?.diagnostics?.() || null, localEquipment, localEquipmentRevision, localCombat, localContext, remotes: [...remotePlayers.values()].map((remote) => ({ id: remote.id, appearance: remote.appearance, ...remote.diagnostics() })) }; }, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };
+window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, remotePlayers, applyLocalAppearance, applyLocalEquipment, requestMultiplayerEquipment, ensureWeaponVisual, characterAssetStats, get localAppearance() { return localAppearance; }, get localEquipment() { return localEquipment; }, get localEquipmentRevision() { return localEquipmentRevision; }, get localCombat() { return localCombat; }, get localContext() { return localContext; }, get undergroundMatch() { return undergroundMatch; }, get multiplayer() { return multiplayer; }, get multiplayerActive() { return multiplayerActive; }, get multiplayerDiagnostics() { return { client: multiplayer?.diagnostics?.() || null, localEquipment, localEquipmentRevision, localCombat, localContext, remotes: [...remotePlayers.values()].map((remote) => ({ id: remote.id, appearance: remote.appearance, ...remote.diagnostics() })) }; }, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };

@@ -11,7 +11,7 @@ if (!sourceRoot) {
   throw new Error('Usage: node scripts/sync-mafia-wars-preview.mjs /absolute/path/to/game/source');
 }
 
-const expectedCommit = '38b1475fa8cfc7fdd06b92e738bc854b3f432127';
+const expectedCommit = '819d282486eb1e6d771c88bb504bbe1bfbb13bb6';
 const previewMultiplayerService = 'https://nerdie-city-m6-3-preview.buddieroots.workers.dev';
 const runtimeFiles = ['index.html', 'version.txt'];
 const characterFiles = ['blue_zip.glb', 'navy.glb', 'red_hoodie.glb', 'red_jersey.glb'];

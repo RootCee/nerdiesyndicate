@@ -34,6 +34,23 @@ canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block
 #timer { margin-top: 6px; font: 500 14px/1 'Barlow'; letter-spacing: .1em; color: #c9d4e0; }
 .free-roam #score .team, .free-roam #abil, .free-roam #feed { display: none; }
 .free-roam #score { padding: 10px 12px; border-radius: 8px; background: rgba(10,16,26,.55); }
+/* M6.5 multiplayer Underground 6v6: team score, kill feed, and results. */
+.free-roam.ug-match #score .team { display: flex; }
+.free-roam.ug-match #feed { display: block; }
+#ugResults { position: fixed; inset: 0; z-index: 6; display: none; align-items: center; justify-content: center; padding: calc(16px + var(--sat)) calc(16px + var(--sar)) calc(16px + var(--sab)) calc(16px + var(--sal)); background: rgba(4,6,10,.62); pointer-events: auto; }
+#ugResults.on { display: flex; }
+#ugResults .panel { width: min(520px, 100%); max-height: 100%; overflow: auto; border: 1px solid rgba(217,172,88,.55); border-radius: 10px; background: rgba(10,12,16,.94); color: #dfe7f0; padding: 18px; font: 500 13px/1.4 'Barlow'; }
+#ugResultTitle { font: 700 34px/1 'Barlow'; letter-spacing: .12em; text-align: center; color: var(--gold-bright); }
+#ugResultScore { margin-top: 6px; text-align: center; letter-spacing: .16em; font-weight: 600; }
+#ugNext { margin-top: 4px; text-align: center; font-size: 12px; letter-spacing: .14em; opacity: .75; }
+#ugRoster { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: 13px; }
+#ugRoster th { text-align: left; font-size: 10px; letter-spacing: .16em; opacity: .65; padding: 4px 6px; }
+#ugRoster td { padding: 5px 6px; border-top: 1px solid rgba(255,255,255,.08); }
+#ugRoster tr.blue td:first-child { color: var(--blue); } #ugRoster tr.red td:first-child { color: var(--red); }
+#ugRoster tr.me td { font-weight: 700; } #ugRoster td.n { text-align: right; width: 3.2em; } #ugRoster th.n { text-align: right; }
+#ugResults .actions { display: flex; gap: 10px; margin-top: 16px; }
+#ugResults .actions button { flex: 1; min-height: 48px; border-radius: 6px; border: 1px solid rgba(217,172,88,.7); background: rgba(217,172,88,.16); color: var(--gold-bright); font: 600 12px/1 'Barlow'; letter-spacing: .14em; text-transform: uppercase; cursor: pointer; }
+#ugResults .actions button.secondary { background: transparent; border-color: rgba(255,255,255,.3); color: #dfe7f0; }
 #modebadge { position: absolute; right: calc(16px + var(--sar)); top: calc(20px + var(--sat)); padding: 8px 12px; border: 1px solid rgba(255,255,255,.22); border-radius: 999px; background: rgba(10,16,26,.58); color: #dfe7f0; font: 600 11px/1 'Barlow'; letter-spacing: .18em; text-transform: uppercase; }
 #combatExit { position: fixed; z-index: 4; right: calc(16px + var(--sar)); top: calc(62px + var(--sat)); display: none; pointer-events: auto; border: 1px solid rgba(217,172,88,.7); border-radius: 6px; background: rgba(8,8,7,.82); color: var(--gold-bright); padding: 10px 13px; font: 600 11px/1 'Barlow'; letter-spacing: .14em; text-transform: uppercase; cursor: pointer; }
 #combatExit.on { display: block; }
@@ -285,6 +302,15 @@ body.multiplayer-active #avatarToggle { display: block; }
 </div>
 
 <button id="combatExit" type="button">Return to City · X</button>
+<section id="ugResults" role="dialog" aria-modal="false" aria-labelledby="ugResultTitle">
+  <div class="panel">
+    <div id="ugResultTitle">MATCH OVER</div>
+    <div id="ugResultScore">BLUE 0 · RED 0</div>
+    <div id="ugNext">NEXT MATCH SOON</div>
+    <table id="ugRoster"><thead><tr><th>PLAYER</th><th class="n">K</th><th class="n">D</th></tr></thead><tbody></tbody></table>
+    <div class="actions"><button id="ugStay" type="button">Play Next Match</button><button id="ugLeave" class="secondary" type="button">Return to City</button></div>
+  </div>
+</section>
 <button id="mpDiagnosticsToggle" type="button" aria-expanded="false" aria-controls="mpDiagnostics" hidden>NETWORK INFO</button>
 <section id="mpDiagnostics" hidden role="region" aria-labelledby="mpDiagnosticsTitle">
   <button id="mpDiagnosticsClose" type="button" aria-label="Close network diagnostics">×</button>
@@ -352,6 +378,6 @@ body.multiplayer-active #avatarToggle { display: block; }
 </div>
 
 <script src="src/startup-fallback.js"></script>
-<script type="module" src="src/main.js?build=m6.4.2-final-rc1"></script>
+<script type="module" src="src/main.js?build=m6.5-dev1"></script>
 </body>
 </html>
