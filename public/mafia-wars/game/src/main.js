@@ -45,12 +45,14 @@ import { buildNavGraph, findRoute, routeProgress } from './city-navigation.js';
 import { cityPois } from './city-pois.js';
 import { UNDERGROUND_HOUSES } from './underground-match.js';
 import { UNDERGROUND_SPAWNS } from './multiplayer-combat.js';
+import * as npcLibrary from './npc-library.js';
+import { NpcRenderer } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.6-dev1';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.7-dev1';
 
-const GAME_BUILD_ID = 'm6.6-dev1';
+const GAME_BUILD_ID = 'm6.7-dev1';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -197,6 +199,8 @@ const waypointBeacon = new THREE.Mesh(
   new THREE.MeshBasicMaterial({ color: 0xf2d28b, transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }),
 );
 waypointBeacon.name = 'waypoint-beacon'; waypointBeacon.visible = false; waypointBeacon.renderOrder = 5; scene.add(waypointBeacon);
+// M6.7A city residents: server-run, drawn nearest-first (iPhone 10, Mac 16).
+const npcRenderer = new NpcRenderer(scene, { mobile: !!Q.mobile, library: npcLibrary, groundAt: (x, z) => groundAt(x, z, 0), castShadow: !Q.lowMemory });
 const fx = new FX(scene);
 const weapon = new Weapon(scene, camera, player, fx);
 // the arsenal: AK (also the bots' third-person gun), MAC-10, MP5, M700 sniper, plus the RPG-7 launcher
@@ -659,6 +663,8 @@ function renderMultiplayerDiagnostics() {
   $('mpDiagPlayers').textContent = multiplayer?.credentials ? `${players}/${capacity}` : `0/${MULTIPLAYER_LIMITS.maxPlayers}`;
   $('mpDiagStatus').textContent = multiplayer?.state || 'Not connected';
   $('mpDiagMode').textContent = space === 'underground' ? 'Underground' : multiplayerDev ? 'Public City' : 'Solo';
+  const npc = npcRenderer.stats;
+  $('mpDiagNpc').textContent = `${npc.drawn} drawn / ${npc.known} near · ${npc.updateMs.toFixed(2)} ms · ${(npc.bytesPerSec / 1024).toFixed(1)} KB/s`;
 }
 function setMultiplayerStatus(text, on = true) {
   const el = $('mpStatus');
@@ -742,6 +748,7 @@ function applyLocalContext(context, revision = localContextRevision + 1, state =
   const priorSpace = localContext?.space?.id || 'city';
   localContext = context; localContextRevision = revision;
   const spaceId = context.space?.id || 'city', target = interiorForSpace(spaceId);
+  if (spaceId !== 'city') npcRenderer.clear(); // residents are city-only
   setLocalSafeZone(typeof safeZone === 'boolean' ? safeZone : MULTIPLAYER_SPACES[spaceId]?.safeZone === true);
   for (const interior of [city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = interior === target; interior.interior.visible = interior === target; }
   setInteriorRenderLayer(!!target);
@@ -807,7 +814,7 @@ function ensureRemote(playerInfo) {
 }
 function configureMultiplayerClient() {
   if (!multiplayerDev) return;
-  multiplayer = new MultiplayerClient({ serviceUrl: multiplayerServiceUrl, name: ident.name || 'Guest', appearance: localAppearance });
+  multiplayer = new MultiplayerClient({ serviceUrl: multiplayerServiceUrl, name: ident.name || 'Guest', appearance: localAppearance, npc: true });
   multiplayer.addEventListener('state', ({ detail }) => {
     const labels = { connecting: 'Connecting…', connected: 'Connected · public city online', reconnecting: 'Reconnecting…', 'room-full': 'Room full', 'connection-lost': 'Connection lost', 'session-expired': 'Session expired', disconnected: 'Disconnected' };
     setMultiplayerStatus(labels[detail.state] || detail.state);
@@ -830,7 +837,7 @@ function configureMultiplayerClient() {
         });
       }
     }
-    if (['connection-lost', 'session-expired', 'room-full', 'disconnected'].includes(detail.state)) clearRemotePlayers();
+    if (['connection-lost', 'session-expired', 'room-full', 'disconnected'].includes(detail.state)) { clearRemotePlayers(); npcRenderer.clear(); }
   });
   multiplayer.addEventListener('message', ({ detail: message }) => {
     if (message.type === 'welcome') {
@@ -850,6 +857,8 @@ function configureMultiplayerClient() {
     }
     else if (message.type === 'peer-left') { remotePlayers.get(message.playerId)?.dispose(); remotePlayers.delete(message.playerId); if (Number.isInteger(message.playerCount)) multiplayerPlayerCount = message.playerCount; if (!message.bot) setMultiplayerStatus('Connected · a player is reconnecting'); }
     else if (message.type === 'underground-roster') { if (inLocalUnderground()) for (const bot of message.players || []) { const remote = ensureRemote(bot); if (remote && bot.state) remote.push(bot.state); } }
+    else if (message.type === 'npc-roster') { npcRenderer.countBytes(JSON.stringify(message).length, performance.now()); npcRenderer.applyRoster(message.npcs); }
+    else if (message.type === 'npc-states') { if ((localContext.space?.id || 'city') === 'city') { npcRenderer.countBytes(JSON.stringify(message).length, performance.now()); npcRenderer.applyStates(message); } }
     else if (message.type === 'bot-states') { if (inLocalUnderground()) for (const state of message.states || []) ensureRemote({ id: state.playerId, name: state.name, bot: true, context: UNDERGROUND_REMOTE_CONTEXT })?.push(state); }
     else if (message.type === 'underground-match') applyUndergroundMatch(message);
     else if (message.type === 'state') ensureRemote({ id: message.playerId, name: message.name })?.push(message);
@@ -1281,10 +1290,12 @@ function loop(now) {
       if (now >= multiplayerPingAt) { multiplayer.ping(); multiplayerPingAt = now + 5000; }
       const serverNow = Date.now() + multiplayerServerOffset;
       for (const remote of remotePlayers.values()) remote.update(dt, serverNow, player.pos, localContext.space?.id || 'city');
+      if ((localContext.space?.id || 'city') === 'city') { npcRenderer.update(dt, serverNow, player.pos, now); npcRenderer.pushOut(player.pos); }
       if (now >= multiplayerStatusAt) {
         const capacity = multiplayer.credentials?.capacity || MULTIPLAYER_LIMITS.maxPlayers;
         setMultiplayerStatus(`Connected · ${multiplayerPlayerCount || remotePlayers.size + 1}/${capacity} · ${Math.round(multiplayer.metrics.rtt)} ms`);
         multiplayerStatusAt = now + 500;
+        if (!$('mpDiagnostics').hidden) renderMultiplayerDiagnostics(); // live NPC numbers while open
       }
     }
     if (player.stepped && !player.dead) sfx.step();
@@ -1373,4 +1384,4 @@ boot().catch((e) => {
   window.__showGameEntryFeedback?.(`The city could not finish loading: ${e.message}`, { error: true, retryLabel: 'Reload and retry' });
 });
 // expose for QA
-window.__hw = { scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, remotePlayers, applyLocalAppearance, applyLocalEquipment, requestMultiplayerEquipment, ensureWeaponVisual, characterAssetStats, get localAppearance() { return localAppearance; }, get localEquipment() { return localEquipment; }, get localEquipmentRevision() { return localEquipmentRevision; }, get localCombat() { return localCombat; }, get localContext() { return localContext; }, get undergroundMatch() { return undergroundMatch; }, get multiplayer() { return multiplayer; }, get multiplayerActive() { return multiplayerActive; }, get multiplayerDiagnostics() { return { client: multiplayer?.diagnostics?.() || null, localEquipment, localEquipmentRevision, localCombat, localContext, remotes: [...remotePlayers.values()].map((remote) => ({ id: remote.id, appearance: remote.appearance, ...remote.diagnostics() })) }; }, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };
+window.__hw = { npcRenderer, npcLibrary, scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, remotePlayers, applyLocalAppearance, applyLocalEquipment, requestMultiplayerEquipment, ensureWeaponVisual, characterAssetStats, get localAppearance() { return localAppearance; }, get localEquipment() { return localEquipment; }, get localEquipmentRevision() { return localEquipmentRevision; }, get localCombat() { return localCombat; }, get localContext() { return localContext; }, get undergroundMatch() { return undergroundMatch; }, get multiplayer() { return multiplayer; }, get multiplayerActive() { return multiplayerActive; }, get multiplayerDiagnostics() { return { client: multiplayer?.diagnostics?.() || null, localEquipment, localEquipmentRevision, localCombat, localContext, remotes: [...remotePlayers.values()].map((remote) => ({ id: remote.id, appearance: remote.appearance, ...remote.diagnostics() })) }; }, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };

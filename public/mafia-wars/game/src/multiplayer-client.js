@@ -2,12 +2,13 @@ import { MULTIPLAYER_LIMITS, PROTOCOL_VERSION } from './multiplayer-protocol.js'
 import { normalizeAvatarAppearance } from './avatar-schema.js';
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const wsUrl = (base, room, ticket) => `${base.replace(/^http/, 'ws').replace(/\/$/, '')}/rooms/${encodeURIComponent(room)}/ws?ticket=${encodeURIComponent(ticket)}&v=${PROTOCOL_VERSION}`;
+// npc=1 opts in to M6.7 city residents; older clients never receive them.
+const wsUrl = (base, room, ticket, npc = false) => `${base.replace(/^http/, 'ws').replace(/\/$/, '')}/rooms/${encodeURIComponent(room)}/ws?ticket=${encodeURIComponent(ticket)}&v=${PROTOCOL_VERSION}${npc ? '&npc=1' : ''}`;
 const rounded = (value) => Math.round(value * 1000) / 1000;
 
 export class MultiplayerClient extends EventTarget {
-  constructor({ serviceUrl, name = 'Guest', appearance }) {
-    super(); this.serviceUrl = serviceUrl.replace(/\/$/, ''); this.name = name.slice(0, 16) || 'Guest';
+  constructor({ serviceUrl, name = 'Guest', appearance, npc = false }) {
+    super(); this.npc = npc === true; this.serviceUrl = serviceUrl.replace(/\/$/, ''); this.name = name.slice(0, 16) || 'Guest';
     this.appearance = normalizeAvatarAppearance(appearance); this.state = 'disconnected'; this.seq = 0; this.appearanceSeq = 0; this.equipmentSeq = 0; this.combatSeq = 0; this.spaceSeq = 0; this.socket = null; this.credentials = null;
     this.reconnectAttempts = 0; this.closedByUser = false; this.connectedAt = 0; this.lastMovement = null; this.lastMovementAt = 0;
     this.metrics = { rtt: 0, rttJitter: 0, sent: 0, received: 0, sentBytes: 0, receivedBytes: 0, movementSkipped: 0, rejected: 0, corrections: 0 };
@@ -33,7 +34,7 @@ export class MultiplayerClient extends EventTarget {
     return new Promise((resolve, reject) => {
       let socket;
       try {
-        socket = new WebSocket(wsUrl(this.serviceUrl, credentials.roomCode, credentials.ticket));
+        socket = new WebSocket(wsUrl(this.serviceUrl, credentials.roomCode, credentials.ticket, this.npc));
       } catch {
         this.closedByUser = true;
         this.setState('connection-lost');

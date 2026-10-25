@@ -11,10 +11,12 @@ if (!sourceRoot) {
   throw new Error('Usage: node scripts/sync-mafia-wars-preview.mjs /absolute/path/to/game/source');
 }
 
-const expectedCommit = '939fe71f93001d7885ba6e2ff43c2402b839d9ff';
-const previewMultiplayerService = 'https://nerdie-city-m6-3-preview.buddieroots.workers.dev';
+const expectedCommit = '45cb43d02d6b636d795bbac7d58ec5a6e445198e';
+// M6.7 previews use their own server (city residents enabled); production is unaffected.
+const previewMultiplayerService = 'https://nerdie-city-m6-7-preview.buddieroots.workers.dev';
 const runtimeFiles = ['index.html', 'version.txt'];
 const characterFiles = ['blue_zip.glb', 'navy.glb', 'red_hoodie.glb', 'red_jersey.glb'];
+const npcFiles = ['npc_women.glb', 'npc_men.glb', 'npc_clips_women.glb', 'npc_clips_men.glb', 'LICENSES.md'];
 const fontFiles = ['BarlowCondensed-Medium.ttf', 'BarlowCondensed-SemiBold.ttf', 'PermanentMarker-Regular.ttf'];
 const soundNames = [
   'shot', 'shot_far', 'reload', 'impact', 'bodyhit', 'hitmarker', 'kill', 'step', 'hurt', 'death',
@@ -198,6 +200,7 @@ await writeFile(
 );
 
 for (const file of characterFiles) await copyFile(`assets/chars/${file}`);
+for (const file of npcFiles) await copyFile(`assets/npc/${file}`);
 for (const file of fontFiles) await copyFile(`assets/fonts/${file}`);
 for (const name of soundNames) await copyFile(`assets/sfx/${name}.mp3`);
 for (const file of effectFiles) await copyFile(`assets/fx/${file}`);
