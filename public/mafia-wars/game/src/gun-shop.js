@@ -4,7 +4,7 @@ import { addInteriorIsolationShell, wallCollider } from './apartment-system.js';
 import { KitBatch, signMaterial, PALETTE } from './city-showcase-kit.js';
 import { gunShopInterior, gunShopSpace, GUN_SHOP_RULES } from './gun-shop-layout.js';
 
-// Nerdie Arms interior: like the other interiors it sits high above the city on render layer 1,
+// Ammo (the gun shop) interior: like the other interiors it sits high above the city on render layer 1,
 // with its own colliders. Customers come in from West Avenue, restock at the counter, and pick a
 // weapon at the display cases. The server owns ammo (gun-shop-layout.js applyShopIntent).
 const TRANSITION_COOLDOWN = 0.65;
@@ -73,7 +73,7 @@ export class GunShopSystem {
     batch.box(M.trunk, L.maxX - 0.06, y + 2.1, cz, 0.06, 2.2, d - 1.2);
     const rackIds = ['ak', 'mp5', 'm700', 'ak', 'mac10', 'mp5', 'm700', 'ak'];
     rackIds.forEach((id, i) => { const z = L.minZ + 1.2 + i * ((d - 2.4) / (rackIds.length - 1)); for (const yy of [1.6, 2.6]) { weaponModelRotated(batch, M, id, L.maxX - 0.16, y + yy, z); batch.box(M.gold, L.maxX - 0.12, y + yy + 0.12, z, 0.04, 0.04, 0.3); } });
-    const neon = signMaterial(kit || { night: [], mobile: this.mobile }, (ctx, cw, chh) => { ctx.fillStyle = '#0d0b10'; ctx.fillRect(0, 0, cw, chh); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.shadowColor = '#a35cff'; ctx.shadowBlur = 30; ctx.fillStyle = '#ead8ff'; ctx.font = '700 150px Barlow, sans-serif'; ctx.fillText('NERDIE ARMS', cw / 2, chh / 2 + 6); }, { w: 1024, h: 220, day: 1.4, night: 1.4, preview: PALETTE.purple });
+    const neon = signMaterial(kit || { night: [], mobile: this.mobile }, (ctx, cw, chh) => { ctx.fillStyle = '#0d0b10'; ctx.fillRect(0, 0, cw, chh); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.shadowColor = '#a35cff'; ctx.shadowBlur = 30; ctx.fillStyle = '#ead8ff'; ctx.font = '700 150px Barlow, sans-serif'; ctx.fillText('AMMO', cw / 2, chh / 2 + 6); }, { w: 1024, h: 220, day: 1.4, night: 1.4, preview: PALETTE.purple });
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 1.0), neon); sign.position.set(L.maxX - 0.11, y + 3.55, cz); sign.rotation.y = -Math.PI / 2; sign.name = 'gun-shop-neon'; g.add(sign);
     // display cases along the south wall, one per weapon, with a name card
     for (const st of L.stations) {
@@ -121,11 +121,11 @@ export class GunShopSystem {
     const idle = (prompt = '', mobileLabel = '', action = null, weaponId = null) => ({ active: this.active, transitioned: false, prompt, name: this.site.name, mobileLabel, action, weaponId });
     if (!this.active) {
       if (!insideInteractionRange(player.pos, this.entry, 2.8)) return idle();
-      if (!interact || !interactionCooldownReady(now, this.transitionReadyAt)) return idle(`ENTER NERDIE ARMS · GUNS & AMMO · ${tap} ENTER`, 'ENTER SHOP');
+      if (!interact || !interactionCooldownReady(now, this.transitionReadyAt)) return idle(`ENTER AMMO · GUN SHOP · ${tap} ENTER`, 'ENTER SHOP');
       return this.#transition(player, now, true);
     }
     if (insideInteractionRange(player.pos, this.exit, 2.2)) {
-      if (!interact || !interactionCooldownReady(now, this.transitionReadyAt)) return idle(`EXIT NERDIE ARMS · ${tap} EXIT`, 'EXIT SHOP');
+      if (!interact || !interactionCooldownReady(now, this.transitionReadyAt)) return idle(`EXIT AMMO · ${tap} EXIT`, 'EXIT SHOP');
       return this.#transition(player, now, false);
     }
     if (insideInteractionRange(player.pos, this.layout.counterStand, GUN_SHOP_RULES.counterReach - 0.3)) {

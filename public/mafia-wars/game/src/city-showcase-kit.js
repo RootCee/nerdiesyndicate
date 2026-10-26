@@ -57,6 +57,18 @@ function tileTexture() { // glazed deep-green tiles with a soft highlight (The B
     return b.map((v, i) => v + g * (i === 1 ? 46 : 30) + ly * 0.6);
   }, { tileU: 1, tileV: 1, name: 'showcase-green-tile' });
 }
+function shingleTexture(base, seed, name) { // staggered roof shingles, each lit from the top edge
+  const r = rand(seed), shade = Array.from({ length: 96 }, () => (r() - 0.5) * 20), b = hex(base);
+  return dataTexture(128, 128, (x, y) => {
+    const row = Math.floor(y / 16), off = row % 2 ? 12 : 0, col = Math.floor(((x + off) % 128) / 24), lx = (x + off) % 24, ly = y % 16;
+    if (ly < 2 || lx < 1) return b.map((v) => v - 34);
+    return b.map((v) => v + shade[row * 6 + col] + (ly / 16) * 16);
+  }, { tileU: 1.6, tileV: 1.6, name });
+}
+function ribTexture(base, name, horizontal = false) { // corrugated cladding / roll-up door slats
+  const b = hex(base);
+  return dataTexture(64, 64, (x, y) => { const t = (horizontal ? y : x) % 16, k = Math.sin((t / 16) * Math.PI * 2) * 18 + (t < 2 ? -16 : 0); return b.map((v) => v + k); }, { tileU: horizontal ? 2 : 0.8, tileV: horizontal ? 0.8 : 2, name });
+}
 function grassTexture() { // painted lawn: soft blotches of two greens, a few lighter tufts
   const r = rand(31), blobs = Array.from({ length: 22 }, () => [r() * 128, r() * 128, 8 + r() * 22, (r() - 0.5) * 26]), b = hex(0x4a6438);
   return dataTexture(128, 128, (x, y) => {
@@ -85,6 +97,8 @@ export function createShowcaseMaterials({ mobile = false } = {}) {
     creamBrick: brickTexture(0xb49c7e, 0x857b70, { seed: 23, vary: 18, name: 'showcase-cream-brick' }),
     ashlar: ashlarTexture(), stucco: stuccoTexture(PALETTE.concrete, 9, 'showcase-stucco'), stuccoWarm: stuccoTexture(0xb2917a, 13, 'showcase-stucco-warm'),
     grass: grassTexture(),
+    shingleCharcoal: shingleTexture(0x3e4248, 41, 'showcase-shingle-charcoal'), shingleTerracotta: shingleTexture(0x8a4f3a, 43, 'showcase-shingle-terracotta'),
+    metal: ribTexture(0x5d6a6c, 'showcase-corrugated'), slats: ribTexture(0x9aa0a4, 'showcase-door-slats', true),
     tile: tileTexture(), pavers: paverTexture(),
   };
   const m = {
@@ -92,6 +106,11 @@ export function createShowcaseMaterials({ mobile = false } = {}) {
     stone: std(0xffffff, { map: tex.ashlar, ao: true, roughness: 0.78 }), stucco: std(0xffffff, { map: tex.stucco, ao: true }), stuccoWarm: std(0xffffff, { map: tex.stuccoWarm, ao: true }),
     tile: std(0xffffff, { map: tex.tile, ao: true, roughness: 0.32, metalness: 0.05 }), pavers: std(0xb4b0a8, { map: tex.pavers, roughness: 0.9 }),
     forecourt: std(0xd2c3aa, { map: tex.pavers, roughness: 0.85 }), grass: std(0xffffff, { map: tex.grass, roughness: 1 }),
+    // residential: muted house tints on the stucco texture, shingle roofs; industrial: corrugated metal, door slats
+    houseSage: std(0xb7c2ac, { map: tex.stucco, ao: true }), houseSand: std(0xe2d2b8, { map: tex.stucco, ao: true }), houseSlate: std(0xa9b4c2, { map: tex.stucco, ao: true }), houseBlush: std(0xd9b8a8, { map: tex.stucco, ao: true }),
+    roofCharcoal: std(0xffffff, { map: tex.shingleCharcoal, roughness: 0.9 }), roofTerracotta: std(0xffffff, { map: tex.shingleTerracotta, roughness: 0.9 }),
+    metal: std(0xffffff, { map: tex.metal, ao: true, roughness: 0.55, metalness: 0.35 }), slats: std(0xffffff, { map: tex.slats, roughness: 0.6, metalness: 0.3 }),
+    driveway: std(0x9a958c, { roughness: 0.95 }),
     trim: std(0xcfc7b8, { ao: true, roughness: 0.8 }), concrete: std(PALETTE.concrete, { ao: true }), curb: std(0x9d978c, { roughness: 0.9 }),
     charcoal: std(PALETTE.charcoal, { roughness: 0.55, metalness: 0.35 }), frame: std(0x24272d, { roughness: 0.45, metalness: 0.55 }), roof: std(0x3a3d43, { roughness: 0.95 }),
     gold: std(PALETTE.gold, { roughness: 0.32, metalness: 0.75 }), purple: std(PALETTE.purple, { roughness: 0.6 }), green: std(PALETTE.green, { roughness: 0.6 }),
@@ -106,15 +125,18 @@ export function createShowcaseMaterials({ mobile = false } = {}) {
   };
   for (const k of ['pavers', 'grass']) m[k].userData.tile = tex[k].userData.tile;
   m.forecourt.userData.tile = [2.4, 2.4];
+  for (const k of ['houseSage', 'houseSand', 'houseSlate', 'houseBlush']) m[k].userData.tile = tex.stucco.userData.tile;
+  m.roofCharcoal.userData.tile = tex.shingleCharcoal.userData.tile; m.roofTerracotta.userData.tile = tex.shingleTerracotta.userData.tile;
+  m.metal.userData.tile = tex.metal.userData.tile; m.slats.userData.tile = tex.slats.userData.tile;
   for (const [k, t] of [['brick', 'brick'], ['darkBrick', 'darkBrick'], ['creamBrick', 'creamBrick'], ['stone', 'ashlar'], ['stucco', 'stucco'], ['stuccoWarm', 'stuccoWarm'], ['tile', 'tile']]) m[k].userData.tile = tex[t].userData.tile;
   for (const [k, v] of Object.entries(m)) v.name = `showcase-${k}`;
   return { m, tex, night, mobile, setNight(level) { for (const n of night) n.m.emissiveIntensity = n.day + (n.night - n.day) * level; } };
 }
 
 // Signs: a canvas texture that reads by day and glows at night (one material and mesh per sign).
-export function signMaterial(kit, draw, { w = 1024, h = 256, day = 0.18, night = 1.25, preview = 0x2a2830 } = {}) {
-  // mobile draws every sign at half resolution (the art is laid out in w x h units either way)
-  const s = kit.mobile ? 0.5 : 1, canvas = document.createElement('canvas'); canvas.width = Math.round(w * s); canvas.height = Math.round(h * s);
+export function signMaterial(kit, draw, { w = 1024, h = 256, day = 0.18, night = 1.25, preview = 0x2a2830, res = 1 } = {}) {
+  // the art is laid out in w x h units; `res` (and mobile, at half) sets the canvas resolution
+  const s = (kit.mobile ? 0.5 : 1) * res, canvas = document.createElement('canvas'); canvas.width = Math.round(w * s); canvas.height = Math.round(h * s);
   const ctx = canvas.getContext('2d'), paint = () => { ctx.setTransform?.(s, 0, 0, s, 0, 0); draw(ctx, w, h); };
   paint();
   const t = new THREE.CanvasTexture(canvas); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = kit.mobile ? 2 : 4;
@@ -129,7 +151,7 @@ const tmpColor = [];
 // One batch per chunk: every piece is added as geometry and merged into a single mesh per material.
 export class KitBatch {
   constructor() { this.parts = new Map(); this.triangles = 0; }
-  add(mat, geometry) { if (!this.parts.has(mat)) this.parts.set(mat, []); this.parts.get(mat).push(geometry); return geometry; }
+  add(mat, geometry) { if (!mat) throw new Error('KitBatch: missing material'); if (!this.parts.has(mat)) this.parts.set(mat, []); this.parts.get(mat).push(geometry); return geometry; }
   box(mat, cx, cy, cz, sx, sy, sz) { if (sx <= 0 || sy <= 0 || sz <= 0) return null; return this.add(mat, new THREE.BoxGeometry(sx, sy, sz).translate(cx, cy, cz)); }
   cyl(mat, cx, cy, cz, r, h, seg = 10, rTop = r) { return this.add(mat, new THREE.CylinderGeometry(rTop, r, h, seg).translate(cx, cy, cz)); }
   blob(mat, cx, cy, cz, r, detail = 0) { return this.add(mat, new THREE.IcosahedronGeometry(r, detail).translate(cx, cy, cz)); }

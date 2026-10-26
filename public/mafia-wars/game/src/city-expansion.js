@@ -155,7 +155,8 @@ export function buildCityExpansion(scene, Q = {}) {
   // M7.0B1: the North Market showcase (city-showcase*.js); ?showcase=0 shows the city without it.
   const kit = Q.showcase === false ? null : createShowcaseMaterials({ mobile: plan.profile.key === 'mobile' });
   kit?.setNight(1); // lit, matching the city's shipped dusk look until the clock says otherwise
-  const showcaseWalk = (w) => kit && inShowcase((w.minX + w.maxX) / 2, (w.minZ + w.maxZ) / 2);
+  // M7.0B2: the style covers the whole city now; North Market keeps its hero buildings
+  const showcaseWalk = () => !!kit;
   merged(ground.sidewalks.filter((w) => !showcaseWalk(w)), mats.sidewalk, 0.005, GROUND.sidewalkTop, 'city-sidewalks');
   const showcaseStats = { buildings: 0, triangles: 0, furniture: 0 };
   if (kit) {
@@ -167,7 +168,7 @@ export function buildCityExpansion(scene, Q = {}) {
       if (w.vertical) batch.box(kit.m.curb, edge, 0.065, (w.minZ + w.maxZ) / 2, c, 0.13, w.maxZ - w.minZ); else batch.box(kit.m.curb, (w.minX + w.maxX) / 2, 0.065, edge, w.maxX - w.minX, 0.13, c);
     }
     // painted lawn over the showcase's open ground (below roads and sidewalks)
-    batch.box(kit.m.grass, (SHOWCASE.minX + SHOWCASE.maxX) / 2, -0.015, (SHOWCASE.minZ + SHOWCASE.maxZ) / 2, SHOWCASE.maxX - SHOWCASE.minX, 0.02, SHOWCASE.maxZ - SHOWCASE.minZ);
+    batch.box(kit.m.grass, (plan.bounds.minX + plan.bounds.maxX) / 2, -0.015, (plan.bounds.minZ + plan.bounds.maxZ) / 2, plan.bounds.maxX - plan.bounds.minX, 0.02, plan.bounds.maxZ - plan.bounds.minZ);
     for (const r of showcaseForecourts(plan, ground)) batch.box(kit.m.forecourt, (r.minX + r.maxX) / 2, 0.05, (r.minZ + r.maxZ) / 2, r.maxX - r.minX, 0.1, r.maxZ - r.minZ);
     for (const f of showcaseFurniture(plan, ground)) {
       furniturePiece(batch, kit, f); showcaseStats.furniture++;
@@ -195,7 +196,15 @@ export function buildCityExpansion(scene, Q = {}) {
     const group = new THREE.Group(); group.name = `city-chunk-${district.id}`; scene.add(group);
     const batch = kit ? new KitBatch() : null;
     for (const spec of district.buildings) {
-      if (kit && inShowcase(spec.x, spec.z)) { showcaseBuilding(batch, kit, spec, group, { mobile: plan.profile.key === 'mobile' }); registerBuilding(spec); showcaseStats.buildings++; }
+      if (kit) {
+        showcaseBuilding(batch, kit, spec, group, { mobile: plan.profile.key === 'mobile' }); registerBuilding(spec); showcaseStats.buildings++;
+        // houses keep their driveways (the same strip addBuilding drew, from the avenue sidewalk to the house)
+        if (spec.kind === 'house' && spec.driveway && (spec.front === 'east' || spec.front === 'west')) {
+          const dir = spec.front === 'east' ? 1 : -1, sidewalkEdge = dir > 0 ? 82 : 94, buildingEdge = spec.x + dir * spec.width / 2, length = Math.abs(sidewalkEdge - buildingEdge), mid = (sidewalkEdge + buildingEdge) / 2;
+          batch.box(kit.m.driveway, mid, 0.035, spec.z, length, 0.07, 3.1);
+          mapRects.push({ x: mid - length / 2, z: spec.z - 1.55, w: length, h: 3.1, type: 'garage' });
+        }
+      }
       else addBuilding(group, spec, plan.profile, mats);
     }
     if (batch?.parts.size) { batch.build(group, `showcase-${district.id}`); showcaseStats.triangles += batch.triangles; }
@@ -244,7 +253,7 @@ export function buildCityExpansion(scene, Q = {}) {
   // metre (or on a mode/level change), without allocating, so walking makes no per-frame garbage.
   const lightFocus = { x: 0, z: 28, picked: false }, nearest = [];
   const lightSites = ground.streetlights.map((l) => ({ x: l.x, z: l.z, lx: l.x + l.armX * 1.35, ly: 4.4, lz: l.z + l.armZ * 1.35, color: 0xffc57a, intensity: 28 }));
-  // M7.0B1: the showcase's entrances (bank, Nerdie Threads, The Blaq Note, North Court) join the pool at night
+  // M7.0B1: the showcase's entrances (bank, 3 Piece, The Blaq Note, North Court) join the pool at night
   if (kit) for (const [x, y, z] of [[-65, 3.6, 85.2], [-65, 3.2, 107.2], [-65, 2.9, 54.6], [18.2, 2.7, 112]]) lightSites.push({ x, z, lx: x, ly: y, lz: z, color: 0xffd2a0, intensity: 22 });
   function updateCityLights(focus = null) {
     if (focus) {

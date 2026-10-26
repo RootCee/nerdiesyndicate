@@ -11,11 +11,12 @@ export const inShowcase = (x, z) => x > SHOWCASE.minX && x < SHOWCASE.maxX && z 
 
 export const SHOWCASE_HEROES = Object.freeze({ bank: 'west-mixed-north-1', boutique: 'west-mixed-north-2', lounge: 'west-mixed-north-0', apartment: 'north-court' });
 
-// Provisional storefront identities, chosen from the Business NFT playable types (website
-// src/config/gameplay/business.ts): streetwear_boutique (Retail Business, class 1) and
-// music_lounge (Entertainment Venue, class 3). Names are placeholders for the founder to confirm.
+// Storefront identities, mapped to the Business NFT playable types (website
+// src/config/gameplay/business.ts): 3 Piece sells three-piece suits (Retail Business, class 1;
+// streetwear_boutique is the closest apparel type) and The Blaq Note is a music_lounge
+// (Entertainment Venue, class 3). Names confirmed by the founder.
 export const SHOWCASE_BUSINESSES = Object.freeze({
-  'west-mixed-north-2': Object.freeze({ id: 'nerdie-threads', name: 'Nerdie Threads', category: 'Streetwear Boutique', businessTypeId: 'streetwear_boutique', nftClass: 'retail_business', status: 'coming-soon' }),
+  'west-mixed-north-2': Object.freeze({ id: 'three-piece', name: '3 Piece', category: 'Three-Piece Suits', businessTypeId: 'streetwear_boutique', nftClass: 'retail_business', status: 'coming-soon' }),
   'west-mixed-north-0': Object.freeze({ id: 'the-blaq-note', name: 'The Blaq Note', category: 'Music Lounge', businessTypeId: 'music_lounge', nftClass: 'entertainment_venue', status: 'coming-soon' }),
 });
 
@@ -25,7 +26,7 @@ const item = (id, kind, x, z, rotated = false, extra = {}) => {
   return Object.freeze({ id, kind, x, z, width: rotated ? d : w, depth: rotated ? w : d, height: h, ...extra });
 };
 
-// Street furniture: curb trees between the streetlights on the showcase's sidewalks, and planters,
+// Street furniture: curb trees between the streetlights on every street (M7.0B2: citywide), and planters,
 // benches, and bollards on the forecourts in front of the hero buildings, clear of every entrance
 // approach (at least 3 m off its axis) and of the sidewalk walk lines.
 export function showcaseFurniture(plan = createCityPlan(), ground = cityGroundLayout(plan)) {
@@ -38,7 +39,7 @@ export function showcaseFurniture(plan = createCityPlan(), ground = cityGroundLa
   const heroAxes = [...heroes.map((b) => [b.x, b.z, 'x']), ...(plan.apartment ? [[plan.apartment.x, plan.apartment.z, 'z']] : [])];
   // curb trees: half way between same-side streetlights on the same street
   const bySide = new Map();
-  for (const l of ground.streetlights) if (inShowcase(l.x, l.z)) { const k = `${l.street}:${l.armX}:${l.armZ}`; if (!bySide.has(k)) bySide.set(k, []); bySide.get(k).push(l); }
+  for (const l of ground.streetlights) { const k = `${l.street}:${l.armX}:${l.armZ}`; if (!bySide.has(k)) bySide.set(k, []); bySide.get(k).push(l); }
   for (const lights of bySide.values()) {
     const vertical = lights[0].armX !== 0;
     lights.sort((a, b) => (vertical ? a.z - b.z : a.x - b.x));
@@ -46,13 +47,13 @@ export function showcaseFurniture(plan = createCityPlan(), ground = cityGroundLa
       const a = lights[i], b = lights[i + 1], gap = vertical ? b.z - a.z : b.x - a.x;
       if (gap < 18) continue;
       const x = vertical ? a.x : (a.x + b.x) / 2, z = vertical ? (a.z + b.z) / 2 : a.z;
-      if (!inShowcase(x, z) || !clearOf(x, z, 0.6)) continue;
+      if (!clearOf(x, z, 0.6)) continue;
       if (heroAxes.some(([ax, az, axis]) => (axis === 'x' ? Math.abs(x - ax) < 5 && Math.abs(z - az) < 14 : Math.abs(z - az) < 5 && Math.abs(x - ax) < 14))) continue; // keep hero facades in view
       if (!ground.sidewalks.some((w) => x > w.minX && x < w.maxX && z > w.minZ && z < w.maxZ)) continue;
       out.push(item(`tree-${a.street}-${out.length}`, 'tree', x, z));
     }
   }
-  // forecourts: the bank (north-market, facing north), Nerdie Threads (facing south), North Court (facing west)
+  // forecourts: the bank (north-market, facing north), 3 Piece (facing south), North Court (facing west)
   const bank = plan.districts.flatMap((d) => d.buildings).find((b) => b.id === SHOWCASE_HEROES.bank);
   if (bank) {
     const fz = bank.z + bank.depth / 2 + 3.2;

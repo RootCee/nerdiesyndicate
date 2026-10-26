@@ -55,9 +55,9 @@ import { NpcRenderer, NPC_RENDER_RULES } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m7.0b-dev2';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m7.0b-dev3';
 
-const GAME_BUILD_ID = 'm7.0b-dev2';
+const GAME_BUILD_ID = 'm7.0b-dev3';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -314,10 +314,10 @@ let neighborhoodLightSpecs = [], neighborhoodLightBlock = null;
 // M7.0A2: the Hood lamps (bulbs, glows, pooled lights) follow the city clock's night level
 let lampLevel = 1, lampBulbMat = null, dayNight = null, nightApplied = -1;
 const lampGlows = [];
-// Nerdie Arms: equip from a display case, or restock at the counter (the server decides in multiplayer).
+// Ammo (gun shop): equip from a display case, or restock at the counter (the server decides in multiplayer).
 let soloShopReadyAt = 0;
 function handleGunShopAction(state) {
-  if (state.action === 'equip') { if (multiplayerActive) requestMultiplayerEquipment(state.weaponId); else { selectWeapon(state.weaponId); hud.callout(`${WEAPON_LABELS[state.weaponId]} EQUIPPED`, 'NERDIE ARMS'); } return; }
+  if (state.action === 'equip') { if (multiplayerActive) requestMultiplayerEquipment(state.weaponId); else { selectWeapon(state.weaponId); hud.callout(`${WEAPON_LABELS[state.weaponId]} EQUIPPED`, 'AMMO · GUN SHOP'); } return; }
   if (state.action !== 'restock') return;
   if (multiplayerActive) { if (!multiplayer?.shopRestock()) hud.callout('SHOP UNAVAILABLE', 'RECONNECTING'); return; }
   if (time < soloShopReadyAt) { hud.callout('RESTOCK COOLING DOWN', `READY IN ${Math.ceil(soloShopReadyAt - time)} S`); return; }
@@ -330,7 +330,7 @@ function handleGunShopAction(state) {
 function showShopReject(message) {
   if (message.reason === 'shop_cooldown') hud.callout('RESTOCK COOLING DOWN', Number.isFinite(message.readyAt) ? `READY IN ${Math.max(1, Math.ceil((message.readyAt - (Date.now() + multiplayerServerOffset)) / 1000))} S` : 'TRY AGAIN SOON');
   else if (message.reason === 'ammo_full') hud.callout('AMMO FULL', 'NOTHING TO RESTOCK');
-  else if (message.reason === 'not_at_counter' || message.reason === 'not_in_shop') hud.callout('STEP UP TO THE COUNTER', 'NERDIE ARMS');
+  else if (message.reason === 'not_at_counter' || message.reason === 'not_in_shop') hud.callout('STEP UP TO THE COUNTER', 'AMMO · GUN SHOP');
 }
 function updateDayNight() {
   if (!dayNight) return;
@@ -1352,7 +1352,7 @@ function loop(now) {
       destructionStreamingStats = updateDestructionStreaming(player.pos, Q.lowMemory ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.mobile : DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.desktop, ORIGINAL_NEIGHBORHOOD_LAYOUT.id);
       updateNeighborhoodLights(destructionStreamingStats.activeStreamingId);
     } else if (city && MATCH.mode === GAME_MODES.FREE_ROAM) {
-      // Nerdie Arms first: while inside it (or stepping through its door) the other interiors stand still
+      // Ammo (the gun shop) first: while inside it (or stepping through its door) the other interiors stand still
       const gunShopState = city.gunShop ? city.gunShop.update(player, input, time) : { active: false, transitioned: false, prompt: '' };
       const apartmentState = gunShopState.active || gunShopState.transitioned ? { active: false, transitioned: false, prompt: '' } : city.apartment.update(player, input, time);
       const originalHouseState = apartmentState.active || apartmentState.transitioned

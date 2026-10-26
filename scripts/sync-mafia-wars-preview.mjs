@@ -11,7 +11,7 @@ if (!sourceRoot) {
   throw new Error('Usage: node scripts/sync-mafia-wars-preview.mjs /absolute/path/to/game/source');
 }
 
-const expectedCommit = '3c1a9540497014648c7629fdc200031f5dd8a302';
+const expectedCommit = '4f7c50d1a622d2743e03ec722a3d974171cd57b3';
 // M7.0B previews use their own server (the shared day/night clock and the North Market showcase); production is unaffected.
 const previewMultiplayerService = 'https://nerdie-city-m7-0b-preview.buddieroots.workers.dev';
 const runtimeFiles = ['index.html', 'version.txt'];

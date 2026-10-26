@@ -1,4 +1,4 @@
-// Nerdie Arms gun and ammo shop: its site, interior layout, server space, and the restock rule.
+// Ammo, the gun and ammo shop (internal id nerdie-arms): its site, interior layout, server space, and the restock rule.
 // Pure (no Three.js): the server (room-core), the client (gun-shop.js), and the tests share it.
 // The shop is the North Market storefront facing West Avenue (formerly the provisional Diner);
 // its footprint, height, and collider are unchanged.
@@ -15,7 +15,7 @@ const round = (v) => Math.round(v * 100) / 100;
 export function gunShopSite(plan = createCityPlan()) {
   const b = plan.districts.flatMap((d) => d.buildings).find((x) => x.id === GUN_SHOP_BUILDING_ID);
   // the interior sits high above the city, like the other interiors (40, 55, 70, 85 m)
-  return Object.freeze({ id: GUN_SHOP_ID, buildingId: b.id, name: 'Nerdie Arms', x: b.x, z: b.z, width: b.width, depth: b.depth, height: b.height, front: b.front, interiorY: 115 });
+  return Object.freeze({ id: GUN_SHOP_ID, buildingId: b.id, name: 'Ammo', x: b.x, z: b.z, width: b.width, depth: b.depth, height: b.height, front: b.front, interiorY: 115 });
 }
 
 // The interior in world coordinates. The door is on the west wall; customers stand west of the

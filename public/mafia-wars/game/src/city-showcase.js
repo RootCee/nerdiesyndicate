@@ -32,17 +32,20 @@ const SIGN_ART = {
     ctx.fillStyle = '#f0d28a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '600 120px Barlow, sans-serif'; ctx.fillText('NB', w / 2, h * 0.43);
     ctx.font = '500 34px Barlow, sans-serif'; ctx.fillText('NERDIE BLAQ', w / 2, h * 0.8);
   },
-  threads: (ctx, w, h) => {
+  threads: (ctx, w, h) => { // 3 Piece: three-piece suits
     ctx.fillStyle = hexCss(PALETTE.charcoal); ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = hexCss(PALETTE.gold); ctx.lineWidth = 4; ctx.strokeRect(14, 14, w - 28, h - 28);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.shadowColor = '#a35cff'; ctx.shadowBlur = 26; ctx.fillStyle = '#e6d4ff'; ctx.font = '600 128px Barlow, sans-serif'; ctx.fillText('NERDIE THREADS', w / 2, h * 0.44);
-    ctx.shadowBlur = 0; ctx.fillStyle = hexCss(PALETTE.gold); ctx.font = '500 40px Barlow, sans-serif'; ctx.fillText('STREETWEAR BOUTIQUE', w / 2, h * 0.84);
+    ctx.shadowColor = '#a35cff'; ctx.shadowBlur = 22; ctx.fillStyle = '#efe4ff'; ctx.font = '700 136px Barlow, sans-serif'; ctx.fillText('3 PIECE', w / 2, h * 0.43);
+    ctx.shadowBlur = 0; ctx.fillStyle = hexCss(PALETTE.gold); ctx.font = '500 40px Barlow, sans-serif'; ctx.fillText('THREE-PIECE SUITS  ·  TAILORING', w / 2, h * 0.84);
   },
-  threadsBlade: (ctx, w, h) => {
+  threadsBlade: (ctx, w, h) => { // vertical "3 PIECE" with a suit-jacket mark
     ctx.fillStyle = hexCss(PALETTE.purple); ctx.fillRect(0, 0, w, h);
     ctx.strokeStyle = '#d6b4ff'; ctx.lineWidth = 8; ctx.strokeRect(12, 12, w - 24, h - 24);
-    ctx.fillStyle = '#f3e8ff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '600 92px Barlow, sans-serif';
-    [...'THREADS'].forEach((c, i) => ctx.fillText(c, w / 2, 80 + i * ((h - 140) / 6)));
+    ctx.fillStyle = '#f3e8ff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '700 150px Barlow, sans-serif'; ctx.fillText('3', w / 2, 120);
+    ctx.font = '600 82px Barlow, sans-serif'; [...'PIECE'].forEach((c, i) => ctx.fillText(c, w / 2, 250 + i * 86));
+    ctx.fillStyle = hexCss(PALETTE.gold); ctx.beginPath(); ctx.moveTo(w / 2, h - 120); ctx.lineTo(w / 2 - 40, h - 70); ctx.lineTo(w / 2 + 40, h - 70); ctx.fill(); // lapel notch
   },
   marquee: (ctx, w, h) => {
     ctx.fillStyle = '#f4ead8'; ctx.fillRect(0, 0, w, h);
@@ -64,15 +67,15 @@ const SIGN_ART = {
   arms: (ctx, w, h) => {
     ctx.fillStyle = hexCss(PALETTE.charcoal); ctx.fillRect(0, 0, w, h);
     ctx.strokeStyle = hexCss(PALETTE.gold); ctx.lineWidth = 6; ctx.strokeRect(10, 10, w - 20, h - 20);
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#efcf86'; ctx.font = '700 132px Barlow, sans-serif'; ctx.fillText('NERDIE ARMS', w / 2, h * 0.42);
-    ctx.shadowColor = '#a35cff'; ctx.shadowBlur = 18; ctx.fillStyle = '#e2ccff'; ctx.font = '600 44px Barlow, sans-serif'; ctx.fillText('GUNS  ·  AMMO  ·  GEAR', w / 2, h * 0.82);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#efcf86'; ctx.font = '700 150px Barlow, sans-serif'; ctx.fillText('AMMO', w / 2, h * 0.42);
+    ctx.shadowColor = '#a35cff'; ctx.shadowBlur = 18; ctx.fillStyle = '#e2ccff'; ctx.font = '600 44px Barlow, sans-serif'; ctx.fillText('GUNS  ·  AMMUNITION  ·  GEAR', w / 2, h * 0.82);
   },
   armsBlade: (ctx, w, h) => { // crosshair logo
     ctx.fillStyle = hexCss(PALETTE.green); ctx.fillRect(0, 0, w, h);
     ctx.strokeStyle = hexCss(PALETTE.gold); ctx.lineWidth = 10; ctx.strokeRect(12, 12, w - 24, h - 24);
     const cx = w / 2, cy = h * 0.4, r = w * 0.3; ctx.lineWidth = 12; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(cx - r * 1.3, cy); ctx.lineTo(cx + r * 1.3, cy); ctx.moveTo(cx, cy - r * 1.3); ctx.lineTo(cx, cy + r * 1.3); ctx.stroke();
-    ctx.fillStyle = '#f0d28a'; ctx.textAlign = 'center'; ctx.font = '700 64px Barlow, sans-serif'; ctx.fillText('ARMS', cx, h * 0.84);
+    ctx.fillStyle = '#f0d28a'; ctx.textAlign = 'center'; ctx.font = '700 64px Barlow, sans-serif'; ctx.fillText('AMMO', cx, h * 0.84);
   },
   interiorArms: (ctx, w, h) => { // a lit wall of rifles behind the counter
     const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#6b5a44'); g.addColorStop(0.75, '#2a241d'); g.addColorStop(1, '#17140f'); ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
@@ -80,10 +83,6 @@ const SIGN_ART = {
     ctx.fillStyle = '#4a3f33'; ctx.fillRect(0, 40, w, 150);
     for (let i = 0; i < 9; i++) { const x = 40 + i * 110, y = 70 + (i % 2) * 50; ctx.fillStyle = '#16161a'; ctx.fillRect(x, y, 90, 10); ctx.fillRect(x + 10, y + 10, 14, 18); ctx.fillStyle = '#6a4a2c'; ctx.fillRect(x - 18, y - 2, 22, 14); }
     ctx.fillStyle = hexCss(PALETTE.gold); ctx.fillRect(0, 210, w, 6); ctx.fillStyle = '#1d1a16'; ctx.fillRect(0, 216, w, h - 216);
-  },
-  diner: (ctx, w, h) => {
-    ctx.fillStyle = '#f2e6cf'; ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = hexCss(PALETTE.green); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '600 140px Barlow, sans-serif'; ctx.fillText('DINER', w / 2, h * 0.5);
   },
   poster: (ctx, w, h) => {
     const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, hexCss(PALETTE.purple)); g.addColorStop(1, hexCss(PALETTE.green)); ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
@@ -99,11 +98,18 @@ const SIGN_ART = {
     ctx.save(); ctx.translate(w / 2, h * 0.58); ctx.rotate(-0.06); ctx.lineWidth = 14; ctx.strokeStyle = hexCss(PALETTE.charcoal); ctx.strokeText('NERDIE CITY', 0, 0); ctx.fillText('NERDIE CITY', 0, 0); ctx.restore();
   },
   // painted shop interiors behind the glass: warm light, racks, silhouettes
-  interiorThreads: (ctx, w, h) => {
-    const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#5a4a6e'); g.addColorStop(0.7, '#2c2433'); g.addColorStop(1, '#1b1720'); ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(255,230,190,.55)'; for (let i = 0; i < 6; i++) ctx.fillRect(40 + i * 160, 18, 70, 10);
-    for (let i = 0; i < 5; i++) { const x = 70 + i * 180; ctx.fillStyle = '#c9b9a0'; ctx.fillRect(x, 120, 120, 6); for (let k = 0; k < 6; k++) { ctx.fillStyle = ['#6a2fc0', '#e8e2d8', '#1f6b4a', '#222', '#c19a49', '#8a8f99'][(i + k) % 6]; ctx.fillRect(x + 6 + k * 19, 126, 15, 70 + (k % 3) * 12); } }
-    ctx.fillStyle = '#16131a'; for (const x of [250, 610]) { ctx.beginPath(); ctx.ellipse(x, 150, 22, 26, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillRect(x - 32, 176, 64, 130); }
+  interiorThreads: (ctx, w, h) => { // 3 Piece: suits on mannequins, a tie wall, warm wood
+    const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#6a5440'); g.addColorStop(0.7, '#33281f'); g.addColorStop(1, '#1d1712'); ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(255,230,190,.55)'; for (let i = 0; i < 6; i++) ctx.fillRect(40 + i * 160, 16, 70, 9);
+    ctx.fillStyle = '#4a3a2c'; ctx.fillRect(0, 210, w, 8);
+    for (let i = 0; i < 18; i++) { ctx.fillStyle = ['#6a2fc0', '#c19a49', '#123d2a', '#8a1d2c', '#2c3e6a'][i % 5]; ctx.fillRect(420 + i * 13, 60, 9, 60 + (i % 3) * 8); } // ties
+    for (const [x, suit, vest] of [[130, '#22252c', '#3a3f4a'], [300, '#2c3e6a', '#c19a49'], [700, '#3a2a22', '#6a2fc0'], [880, '#17191d', '#123d2a']]) {
+      ctx.fillStyle = '#d8cbb8'; ctx.beginPath(); ctx.ellipse(x, 72, 18, 22, 0, 0, Math.PI * 2); ctx.fill(); // mannequin head
+      ctx.fillStyle = suit; ctx.beginPath(); ctx.moveTo(x - 46, 108); ctx.lineTo(x + 46, 108); ctx.lineTo(x + 52, 250); ctx.lineTo(x - 52, 250); ctx.fill(); // jacket
+      ctx.fillStyle = vest; ctx.beginPath(); ctx.moveTo(x - 16, 108); ctx.lineTo(x + 16, 108); ctx.lineTo(x + 20, 210); ctx.lineTo(x - 20, 210); ctx.fill(); // waistcoat
+      ctx.fillStyle = '#f2ece2'; ctx.beginPath(); ctx.moveTo(x - 7, 108); ctx.lineTo(x + 7, 108); ctx.lineTo(x, 150); ctx.fill(); // shirt
+      ctx.fillStyle = suit; ctx.fillRect(x - 40, 250, 34, 60); ctx.fillRect(x + 6, 250, 34, 60); // trousers
+    }
   },
   interiorLounge: (ctx, w, h) => {
     const g = ctx.createRadialGradient(w * 0.5, h * 0.35, 20, w * 0.5, h * 0.4, w * 0.6); g.addColorStop(0, '#7a4fb0'); g.addColorStop(0.5, '#2c1c40'); g.addColorStop(1, '#120d18'); ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
@@ -116,7 +122,28 @@ const SIGN_ART = {
   },
 };
 
-for (const [k, c] of Object.entries({ arms: PALETTE.charcoal, armsBlade: PALETTE.green, interiorArms: 0x4a3d2e, bank: PALETTE.green, emblem: PALETTE.purple, threads: PALETTE.charcoal, threadsBlade: PALETTE.purple, marquee: 0xf4ead8, noteVertical: PALETTE.charcoal, northCourt: PALETTE.green, diner: 0xf2e6cf, poster: 0x3a2a6a, mural: 0x5a3f8a, interiorThreads: 0x4a3c58, interiorLounge: 0x3a2850, interiorDiner: 0xc89a6a })) PREVIEW.set(SIGN_ART[k], c);
+for (const [k, c] of Object.entries({ arms: PALETTE.charcoal, armsBlade: PALETTE.green, interiorArms: 0x4a3d2e, bank: PALETTE.green, emblem: PALETTE.purple, threads: PALETTE.charcoal, threadsBlade: PALETTE.purple, marquee: 0xf4ead8, noteVertical: PALETTE.charcoal, northCourt: PALETTE.green, poster: 0x3a2a6a, mural: 0x5a3f8a, interiorThreads: 0x4a3c58, interiorLounge: 0x3a2850, interiorDiner: 0xc89a6a })) PREVIEW.set(SIGN_ART[k], c);
+
+// Sign art made per business: a name board with an "opening soon" line, and a painted shop interior.
+const SHOP_TINTS = [[PALETTE.green, '#efd08a'], [PALETTE.charcoal, '#f2e7cf'], [PALETTE.purple, '#f0d28a'], [0xf2e6cf, hexCss(PALETTE.green)]];
+function storefrontSign(name, i) {
+  const [bg, fg] = SHOP_TINTS[i % SHOP_TINTS.length];
+  const draw = (ctx, w, h) => {
+    ctx.fillStyle = hexCss(bg); ctx.fillRect(0, 0, w, h); ctx.strokeStyle = hexCss(PALETTE.gold); ctx.lineWidth = 6; ctx.strokeRect(10, 10, w - 20, h - 20);
+    ctx.fillStyle = fg; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '700 110px Barlow, sans-serif'; ctx.fillText(name.toUpperCase(), w / 2, h * 0.42);
+    ctx.font = '500 38px Barlow, sans-serif'; ctx.fillText('OPENING SOON', w / 2, h * 0.82);
+  };
+  return [draw, bg];
+}
+function shopInterior(i) {
+  const tints = ['#c9a77a', '#8fa7b8', '#b9a0c9', '#a9c29a'];
+  const draw = (ctx, w, h) => {
+    const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, tints[i % 4]); g.addColorStop(1, '#2a241f'); ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(255,240,210,.6)'; for (let k = 0; k < 6; k++) ctx.fillRect(40 + k * 160, 16, 70, 8);
+    for (let k = 0; k < 5; k++) { ctx.fillStyle = '#3a312a'; ctx.fillRect(60 + k * 190, 90, 150, 6); ctx.fillRect(60 + k * 190, 170, 150, 6); for (let j = 0; j < 7; j++) { ctx.fillStyle = ['#c19a49', '#123d2a', '#4b168c', '#d8d0c4', '#8a1d2c'][(j + k) % 5]; ctx.fillRect(66 + k * 190 + j * 20, 60 + (j % 2) * 4, 14, 30); ctx.fillRect(66 + k * 190 + j * 20, 140, 14, 30); } }
+  };
+  return [draw, 0x7a6a58];
+}
 
 // A sign plane on a facade, facing out of it.
 function signPlane(parent, mat, f, a, y, out, w, h, name) {
@@ -217,7 +244,7 @@ function bank(batch, kit, b, parent) {
   }
 }
 
-// --------------------------------------------- Nerdie Threads (streetwear boutique)
+// --------------------------------------------- 3 Piece (three-piece suits)
 function threads(batch, kit, b, parent) {
   const m = kit.m, f = facade(b, b.front), half = f.length / 2;
   batch.box(m.darkBrick, b.x, b.height / 2, b.z, b.width, b.height, b.depth);
@@ -225,7 +252,7 @@ function threads(batch, kit, b, parent) {
   // full-width shopfront: steel frame, a painted interior behind the glass, centre doors
   for (const s of [-1, 1]) fbox(batch, m.charcoal, f, s * (half - 0.4), 1.75, 0.08, 0.8, 3.5, 0.16);
   const interior = interiorMaterial(kit, 'interiorThreads');
-  signPlane(parent, interior, f, 0, 1.6, 0.03, 2 * half - 1.6, 2.5, 'showcase-threads-interior');
+  signPlane(parent, interior, f, 0, 1.6, 0.03, 2 * half - 1.6, 2.5, 'showcase-three-piece-interior');
   for (let i = 0; i <= 6; i++) fbox(batch, m.frame, f, -half + 0.8 + i * ((2 * half - 1.6) / 6), 1.6, 0.06, 0.08, 2.6, 0.08);
   fbox(batch, m.frame, f, 0, 2.92, 0.06, 2 * half - 1.6, 0.1, 0.1); fbox(batch, m.charcoal, f, 0, 0.42, 0.06, 2 * half - 1.6, 0.36, 0.1);
   fbox(batch, m.glassWarm, f, 0, 3.3, 0.04, 2 * half - 1.6, 0.5, 0.04);
@@ -236,7 +263,7 @@ function threads(batch, kit, b, parent) {
   fbox(batch, m.neonPurple, f, 0, 3.6, 1.41, 2 * half - 1.0, 0.06, 0.04);
   for (let i = -2; i <= 2; i++) fbox(batch, m.lamp, f, i * 2.3, 3.59, 0.9, 0.3, 0.02, 0.3);
   fbox(batch, m.charcoal, f, 0, 4.35, 0.08, 2 * half - 1.0, 1.0, 0.16);
-  signPlane(parent, drawn(kit, SIGN_ART.threads, { w: 1024, h: 200, day: 0.2, night: 1.2 }), f, 0, 4.35, 0.17, 7.6, 0.95, 'showcase-threads-sign');
+  signPlane(parent, drawn(kit, SIGN_ART.threads, { w: 1024, h: 200, day: 0.2, night: 1.2 }), f, 0, 4.35, 0.17, 7.6, 0.95, 'showcase-three-piece-sign');
   // upper floor: industrial steel windows with forest-green surrounds
   for (const a of [-4.2, 0, 4.2]) {
     fbox(batch, m.glassWarm, f, a, 6.25, 0.03, 2.8, 2.0, 0.04);
@@ -248,7 +275,7 @@ function threads(batch, kit, b, parent) {
   for (const side of ['north', 'south', 'east', 'west']) { const g = facade(b, side); fbox(batch, m.gold, g, 0, b.height - 0.38, 0.27, g.length + 0.5, 0.04, 0.02); }
   parapet(batch, kit, b, m.darkBrick, 0.5, 0.3);
   // blade sign at the corner, mural on the open east wall, windows elsewhere
-  bladeSign(parent, batch, kit, drawn(kit, SIGN_ART.threadsBlade, { w: 256, h: 760, day: 0.25, night: 1.35 }), f, half - 0.6, 6.0, 0.75, 0.9, 2.7, 'showcase-threads-blade');
+  bladeSign(parent, batch, kit, drawn(kit, SIGN_ART.threadsBlade, { w: 256, h: 760, day: 0.25, night: 1.35 }), f, half - 0.6, 6.0, 0.75, 0.9, 2.7, 'showcase-three-piece-blade');
   const east = facade(b, 'east');
   signPlane(parent, drawn(kit, SIGN_ART.mural, { w: 1024, h: 576, day: 0.0, night: 0.08 }), east, 0, 4.0, 0.02, 9.4, 5.3, 'showcase-mural');
   const r = rng(hashId(b.id));
@@ -295,7 +322,7 @@ function lounge(batch, kit, b, parent) {
   roofUnits(batch, kit, b.x + 3, b.height, b.z + 2.5, 3, r);
 }
 
-// ------------------------------------------------- Nerdie Arms (gun and ammo shop)
+// ------------------------------------------------- Ammo (gun and ammo shop)
 function arms(batch, kit, b, parent) {
   const m = kit.m, f = facade(b, b.front), half = f.length / 2, base = 4.4;
   batch.box(m.darkBrick, b.x, b.height / 2, b.z, b.width, b.height, b.depth);
@@ -335,6 +362,83 @@ function arms(batch, kit, b, parent) {
   roofUnits(batch, kit, b.x + 2, b.height, b.z - 2, 2, r);
 }
 
+// ----------------------------------------------------- houses (east residential)
+// A gable roof whose ridge runs along the front facade; `gable` triangles close its ends.
+function gableRoof(batch, kit, b, roofMat, wallMat, rise, overhang = 0.45) {
+  const alongX = !(b.front === 'east' || b.front === 'west'); // ridge direction
+  const span = alongX ? b.depth : b.width, length = alongX ? b.width : b.depth, run = span / 2 + overhang, angle = Math.atan2(rise, run), slab = Math.hypot(run, rise);
+  for (const s of [-1, 1]) {
+    const g = alongX ? new THREE.BoxGeometry(length + 0.6, 0.14, slab).rotateX(s * angle) : new THREE.BoxGeometry(slab, 0.14, length + 0.6).rotateZ(-s * angle);
+    batch.add(roofMat, g.translate(b.x + (alongX ? 0 : s * run / 2), b.height + rise / 2 - 0.02, b.z + (alongX ? s * run / 2 : 0)));
+  }
+  const tri = new THREE.Shape([new THREE.Vector2(-span / 2, 0), new THREE.Vector2(span / 2, 0), new THREE.Vector2(0, rise * (span / 2) / run)]);
+  for (const s of [-1, 1]) {
+    const g = new THREE.ShapeGeometry(tri);
+    if (alongX) g.rotateY(s > 0 ? Math.PI / 2 : -Math.PI / 2); else if (s < 0) g.rotateY(Math.PI);
+    batch.add(wallMat, g.translate(b.x + (alongX ? s * (b.width / 2 + 0.002) : 0), b.height, b.z + (alongX ? 0 : s * (b.depth / 2 + 0.002))));
+  }
+  batch.box(kit.m.trim, b.x, b.height + rise + 0.03, b.z, alongX ? length + 0.6 : 0.16, 0.1, alongX ? 0.16 : length + 0.6); // ridge cap
+}
+function house(batch, kit, b, parent, { mobile = false } = {}) {
+  const m = kit.m, h = hashId(b.id), r = rng(h), f = facade(b, b.front), half = f.length / 2;
+  const body = [m.houseSage, m.houseSand, m.houseSlate, m.houseBlush, m.creamBrick][h % 5], roofMat = h % 3 ? m.roofCharcoal : m.roofTerracotta;
+  const accent = [m.green, m.purple, m.charcoal, m.green][(h >>> 3) % 4];
+  batch.box(body, b.x, b.height / 2, b.z, b.width, b.height, b.depth);
+  batch.box(m.concrete, b.x, 0.3, b.z, b.width + 0.16, 0.6, b.depth + 0.16);
+  course(batch, kit, b, b.height * 0.48, m.trim);
+  for (const side of ['north', 'south', 'east', 'west']) { const g = facade(b, side); fbox(batch, m.trim, g, 0, b.height - 0.12, 0.08, g.length + 0.16, 0.24, 0.16); }
+  gableRoof(batch, kit, b, roofMat, body, 1.7);
+  batch.box(m.brick, b.x + (r() - 0.5) * b.width * 0.4, b.height + 1.6, b.z + (r() - 0.5) * b.depth * 0.3, 0.8, 2.2, 0.8); // chimney
+  const garage = b.driveway && !b.enterableHouseId && f.nx, doorAt = garage ? half - 1.25 : 0, lower = 1.35, upper = b.height * 0.48 + 1.55;
+  // porch: a roof on two slim posts, a light; the enterable house's door comes from its interior system
+  fbox(batch, m.trim, f, doorAt, 2.72, 0.55, 2.1, 0.12, 1.1); fbox(batch, roofMat, f, doorAt, 2.8, 0.55, 2.2, 0.06, 1.2);
+  for (const s of [-1, 1]) fbox(batch, m.trim, f, doorAt + s * 0.95, 1.36, 0.42, 0.1, 2.72, 0.1);
+  fbox(batch, m.lamp, f, doorAt + 0.75, 2.2, 0.06, 0.14, 0.22, 0.08);
+  if (!b.enterableHouseId) { fbox(batch, m.trim, f, doorAt, 1.18, 0.05, 1.22, 2.36, 0.08); fbox(batch, accent, f, doorAt, 1.12, 0.09, 1.0, 2.22, 0.06); fbox(batch, m.glassWarm, f, doorAt, 1.75, 0.13, 0.4, 0.5, 0.02); fbox(batch, m.gold, f, doorAt + 0.36, 1.1, 0.13, 0.06, 0.06, 0.04); }
+  if (garage) { fbox(batch, m.trim, f, -0.4, 1.3, 0.05, 3.0, 2.6, 0.08); fbox(batch, m.slats, f, -0.4, 1.2, 0.09, 2.7, 2.4, 0.05); fbox(batch, m.lamp, f, -0.4, 2.75, 0.08, 0.3, 0.06, 0.08); }
+  const shutters = (g, a, y, w, wh) => { if (mobile) return; for (const s of [-1, 1]) fbox(batch, accent, g, a + s * (w / 2 + 0.28), y, 0.05, 0.36, wh + 0.1, 0.05); };
+  // front windows: one beside the door downstairs (none beside a garage), two upstairs
+  if (!garage) for (const s of [-1, 1]) { const a = doorAt + s * 2.4; if (Math.abs(a) < half - 0.6) { windowUnit(batch, kit, f, a, lower, 1.1, 1.3, { glass: litGlass(kit, r, 0.4), surround: m.trim, mullion: !mobile }); shutters(f, a, lower, 1.1, 1.3); } }
+  for (const a of [-half / 2, half / 2]) { windowUnit(batch, kit, f, a, upper, 1.0, 1.2, { glass: litGlass(kit, r, 0.4), surround: m.trim, mullion: !mobile }); shutters(f, a, upper, 1.0, 1.2); }
+  for (const side of ['north', 'south', 'east', 'west']) {
+    if (side === b.front) continue; const g = facade(b, side), n = g.length > 10 ? 3 : 2;
+    for (let i = 0; i < n; i++) { const a = (i - (n - 1) / 2) * (g.length / n); for (const y of [lower, upper]) windowUnit(batch, kit, g, a, y, 0.95, 1.15, { glass: litGlass(kit, r, 0.3), surround: m.trim, mullion: false, sill: !mobile }); }
+  }
+}
+
+// ------------------------------------------------- warehouses (west industrial)
+const warehouseSign = (n) => (ctx, w, h) => {
+  ctx.fillStyle = '#3c4446'; ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#e8dfc8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '700 120px Barlow, sans-serif'; ctx.fillText(`WAREHOUSE ${n}`, w / 2, h * 0.45);
+  ctx.fillStyle = hexCss(PALETTE.gold); ctx.fillRect(w * 0.2, h * 0.8, w * 0.6, 8);
+};
+function warehouse(batch, kit, b, parent) {
+  const m = kit.m, r = rng(hashId(b.id)), f = facade(b, b.front), half = f.length / 2, base = 1.6;
+  batch.box(m.brick, b.x, base / 2, b.z, b.width, base, b.depth);
+  batch.box(m.metal, b.x, base + (b.height - base) / 2, b.z, b.width, b.height - base, b.depth);
+  course(batch, kit, b, base, m.concrete);
+  for (const side of ['north', 'south', 'east', 'west']) {
+    const g = facade(b, side), n = Math.max(2, Math.round(g.length / 4.75));
+    for (let i = 0; i <= n; i++) fbox(batch, m.charcoal, g, -g.length / 2 + i * (g.length / n), b.height / 2, 0.06, 0.3, b.height, 0.12); // structural ribs
+    fbox(batch, m.glassCool, g, 0, 6.7, 0.03, g.length - 1.0, 0.8, 0.04); fbox(batch, m.frame, g, 0, 7.15, 0.06, g.length - 0.8, 0.08, 0.08); fbox(batch, m.frame, g, 0, 6.25, 0.06, g.length - 0.8, 0.08, 0.08);
+    for (let i = 1; i < Math.round(g.length / 1.6); i++) fbox(batch, m.frame, g, -g.length / 2 + 0.5 + i * ((g.length - 1) / Math.round(g.length / 1.6)), 6.7, 0.06, 0.05, 0.8, 0.05);
+  }
+  // two roll-up loading doors with canopies and lamps, a personnel door between them
+  for (const s of [-1, 1]) {
+    const a = s * half / 2;
+    fbox(batch, m.charcoal, f, a, 2.2, 0.08, 4.2, 4.4, 0.14); fbox(batch, m.slats, f, a, 2.05, 0.17, 3.8, 4.1, 0.04); // the door in front of its frame
+    fbox(batch, m.charcoal, f, a, 4.75, 0.6, 4.6, 0.12, 1.2); fbox(batch, m.lamp, f, a, 4.67, 1.0, 0.4, 0.04, 0.2);
+    fbox(batch, m.gold, f, a - 1.6, 0.6, 0.18, 0.12, 1.1, 0.12); // bump post on the door jamb
+  }
+  fbox(batch, m.frame, f, 0, 1.15, 0.06, 1.2, 2.3, 0.08); fbox(batch, m.charcoal, f, 0, 1.1, 0.1, 1.0, 2.2, 0.05); fbox(batch, m.green, f, 0, 2.55, 0.35, 1.5, 0.08, 0.7);
+  const n = Number(b.id.match(/(\d+)$/)?.[1] ?? 1) - 3;
+  signPlane(parent, drawn(kit, warehouseSign(n), { w: 1024, h: 200, res: 0.5, day: 0.12, night: 0.6, preview: 0x3c4446 }), f, 0, 5.35, 0.13, 6.2, 1.2, `showcase-${b.id}-sign`);
+  parapet(batch, kit, b, m.metal, 0.5, 0.25);
+  for (let i = 0; i < 4; i++) batch.cyl(m.frame, b.x + (i - 1.5) * b.width * 0.2, b.height + 0.5, b.z + (i % 2 ? 2 : -2), 0.35, 1.0, 10, 0.25);
+  for (const s of [-1, 1]) batch.box(m.glassCool, b.x, b.height + 0.2, b.z + s * b.depth * 0.22, b.width * 0.6, 0.35, 1.2);
+  void r;
+}
+
 // ----------------------------------------- the rest of North Market: mid-rise kit
 function midrise(batch, kit, b, parent, { mobile = false } = {}) {
   const m = kit.m, r = rng(hashId(b.id));
@@ -361,12 +465,13 @@ function midrise(batch, kit, b, parent, { mobile = false } = {}) {
     }
     if (front && shop) {
       const half = f.length / 2, business = STOREFRONT_BUSINESSES[b.id];
-      const interior = interiorMaterial(kit, 'interiorDiner');
+      const shopIndex = hashId(b.id) % 4, [interiorArt, interiorPreview] = shopInterior(shopIndex);
+      const interior = drawn(kit, interiorArt, { w: 1024, h: 320, res: 0.5, day: 0.32, night: 1.0, preview: interiorPreview }); interior.roughness = 0.2; interior.metalness = 0.2;
       signPlane(parent, interior, f, 0, 1.55, 0.03, 2 * half - 1.4, 2.3, `showcase-${b.id}-interior`);
       for (let i = 0; i <= 4; i++) fbox(batch, m.frame, f, -half + 0.7 + i * ((2 * half - 1.4) / 4), 1.55, 0.06, 0.08, 2.4, 0.08);
       for (const s of [-1, 1]) fbox(batch, m.trim, f, s * (half - 0.35), 1.7, 0.08, 0.7, 3.4, 0.16);
-      awning(batch, m.fabricGreen, f, 0, 3.15, 2 * half - 1.2, 1.4, 0.5);
-      if (business) signPlane(parent, drawn(kit, SIGN_ART.diner, { w: 512, h: 160, day: 0.2, night: 1.1 }), f, 0, 3.75, 0.06, 3.6, 0.9, `showcase-${b.id}-sign`);
+      awning(batch, [m.fabricGreen, m.fabricPurple, m.charcoal][shopIndex % 3], f, 0, 3.15, 2 * half - 1.2, 1.4, 0.5);
+      if (business) { const [art, preview] = storefrontSign(business.name, shopIndex); signPlane(parent, drawn(kit, art, { w: 1024, h: 200, res: 0.6, day: 0.2, night: 1.1, preview }), f, 0, 3.85, 0.06, Math.min(6.4, 2 * half - 1.6), 1.25, `showcase-${b.id}-sign`); }
     }
   }
   cornice(batch, kit, b, b.height - 0.25, m.trim, 0.3, 0.34);
@@ -377,7 +482,7 @@ function midrise(batch, kit, b, parent, { mobile = false } = {}) {
 }
 
 export const SHOWCASE_DESIGNS = Object.freeze({ [SHOWCASE_HEROES.bank]: bank, [SHOWCASE_HEROES.boutique]: threads, [SHOWCASE_HEROES.lounge]: lounge, [GUN_SHOP_BUILDING_ID]: arms });
-export function showcaseBuilding(batch, kit, b, parent, opts = {}) { (SHOWCASE_DESIGNS[b.id] || midrise)(batch, kit, b, parent, opts); }
+export function showcaseBuilding(batch, kit, b, parent, opts = {}) { (SHOWCASE_DESIGNS[b.id] || (b.kind === 'house' ? house : b.kind === 'warehouse' ? warehouse : midrise))(batch, kit, b, parent, opts); }
 
 // ------------------------------------------------------------- North Court
 // The apartment's exterior. HybridApartmentSystem keeps its colliders, door, entry, and interior.
