@@ -9,7 +9,8 @@
 // (28 x 15 m), 7v7 football (27.4 x 64 m including end zones).
 
 export const PARK = Object.freeze({ id: 'central-park', name: 'Nerdie Central Park', minX: 120, maxX: 244, minZ: 55, maxZ: 148 });
-export const CIVIC_BLOCK = Object.freeze({ id: 'civic-center', name: 'Civic Center', minX: -81, maxX: -43, minZ: -42, maxZ: 42 });
+// (east edge stops at the Hood garages, which reach x -43.4)
+export const CIVIC_BLOCK = Object.freeze({ id: 'civic-center', name: 'Civic Center', minX: -81, maxX: -43.5, minZ: -42, maxZ: 42 });
 export const PATH_WIDTH = 3;
 
 // Buildings (they join the city plan's districts, so they get colliders, server structures, and nav obstacles).
