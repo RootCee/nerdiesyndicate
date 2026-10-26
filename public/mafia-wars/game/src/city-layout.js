@@ -1,3 +1,4 @@
+import { CITY_HALL, CIVIC_BLOCK, PARK, PARK_BLEACHERS, PARK_PAVILION } from './city-park-layout.js';
 // Pure, deterministic city plan. Rendering code consumes this data so desktop
 // and mobile share one collision/layout topology while choosing different
 // visibility and detail budgets.
@@ -185,6 +186,9 @@ function centralCrossSegments() {
   const spans = []; let cursor = CITY_BOUNDS.minX;
   for (const b of blocks) { if (b.minX > cursor) spans.push([cursor, b.minX]); cursor = b.maxX; }
   if (cursor < CITY_BOUNDS.maxX) spans.push([cursor, CITY_BOUNDS.maxX]);
+  // M7.1A: the westmost span stopped at the back of the Hood (a dead end); it now ends at West
+  // Avenue's east curb, and the civic block takes its place
+  if (spans[0][1] === ORIGINAL_NEIGHBORHOOD_LAYOUT.footprint.minX) spans[0][1] = CIVIC_BLOCK.minX - 2;
   return spans.map(([a, b], i) => ({ id: i === 0 ? 'central-cross' : `central-cross-${i}`, x: (a + b) / 2, z: 0, width: b - a, depth: 10 }));
 }
 
@@ -220,14 +224,16 @@ export function createCityPlan(profileName = 'desktop') {
       { id: 'main', x: 0, z: 0, width: 9, depth: 296 },
       { id: 'west-avenue', x: -88, z: 0, width: 10, depth: 296 },
       { id: 'east-avenue', x: 88, z: 0, width: 10, depth: 296 },
-      { id: 'hood-duplicate-main', x: DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX, z: 0, width: 9, depth: 140 },
+      // M7.1A: its stub north of North Cross (a dead end) gave way to Central Park
+      { id: 'hood-duplicate-main', x: DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX, z: (-70 + PARK.minZ - 2) / 2, width: 9, depth: PARK.minZ - 2 + 70 },
       { id: 'hood-duplicate-west-alley', x: DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX - 35.5, z: 0, width: 4, depth: 90 },
       { id: 'hood-duplicate-east-alley', x: DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX + 35.5, z: 0, width: 4, depth: 90 },
       // M7.0A: the central cross street stops at both Hood Warfare blocks instead of running
       // under the houses either side of it (their lots 4 and 5 meet at z = 0).
       ...centralCrossSegments(),
       { id: 'north-cross', x: horizontalCenter, z: 48.5, width: horizontalWidth, depth: 9 },
-      { id: 'north-market', x: horizontalCenter, z: 96, width: horizontalWidth, depth: 9 },
+      // M7.1A: North Market ends at the park entrance (x 118); its dead-end east section became Central Park
+      { id: 'north-market', x: (CITY_BOUNDS.minX + PARK.minX - 2) / 2, z: 96, width: PARK.minX - 2 - CITY_BOUNDS.minX, depth: 9 },
       { id: 'south-cross', x: horizontalCenter, z: -48.5, width: horizontalWidth, depth: 9 },
       { id: 'south-market', x: horizontalCenter, z: -96, width: horizontalWidth, depth: 9 },
     ],
@@ -237,6 +243,9 @@ export function createCityPlan(profileName = 'desktop') {
       eastResidential('east-residential-south', -96, 1601),
       westMixedUse('west-mixed-north', 96, 2203),
       westMixedUse('west-industrial-south', -96, 2801, true),
+      // M7.1A: the Civic Center (City Hall) and Nerdie Central Park (its pavilion and bleachers)
+      { id: CIVIC_BLOCK.id, kind: 'civic', center: { x: (CIVIC_BLOCK.minX + CIVIC_BLOCK.maxX) / 2, z: 0 }, radius: 48, buildings: [{ ...CITY_HALL }], vehicles: [] },
+      { id: PARK.id, kind: 'park', center: { x: (PARK.minX + PARK.maxX) / 2, z: (PARK.minZ + PARK.maxZ) / 2 }, radius: 72, buildings: [{ ...PARK_PAVILION }, { ...PARK_BLEACHERS }], vehicles: [] },
       { id: DUPLICATED_ORIGINAL_NEIGHBORHOOD.id, kind: 'original-copy', center: { x: DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX, z: 0 }, radius: 58, buildings: [], vehicles: [] },
     ],
     apartment: { ...APARTMENT_SITE },
@@ -246,7 +255,8 @@ export function createCityPlan(profileName = 'desktop') {
     duplicatedEnterableHouse: { ...DUPLICATED_ENTERABLE_HOUSE_SITE, entry: { ...DUPLICATED_ENTERABLE_HOUSE_SITE.entry }, outsideSpawn: { ...DUPLICATED_ENTERABLE_HOUSE_SITE.outsideSpawn } },
     combatVenue: { ...COMBAT_VENUE_SITE },
   };
-  for (const district of plan.districts) for (const building of district.buildings) building.front = buildingFront(building, plan.roads);
+  // (M7.1A park buildings face what they serve, not a street: fixedFront)
+  for (const district of plan.districts) for (const building of district.buildings) building.front = building.fixedFront || buildingFront(building, plan.roads);
   return plan;
 }
 

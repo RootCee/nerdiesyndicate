@@ -9,8 +9,8 @@
 export const mapDotVisible = (dot, snitch = false) => dot.team !== 'red' || snitch || !!dot.spotted;
 
 export const MINIMAP_BACKGROUND = Object.freeze({
-  colors: Object.freeze({ road: '#2a2f38', alley: '#35383d', walk: '#737a80', house: '#d8d2c5', apartment: '#b88a4a', venue: '#d9ac58', bank: '#c9a24a', garage: '#b3ada2', fence: '#8a9a88', tree: '#2c5a2e', pole: '#9a9a9a' }),
-  order: Object.freeze(['road', 'alley', 'walk', 'fence', 'tree', 'garage', 'house', 'apartment', 'venue', 'bank', 'pole']),
+  colors: Object.freeze({ park: '#3f6b3a', field: '#5a8a4a', civic: '#6a3fae', road: '#2a2f38', alley: '#35383d', walk: '#737a80', house: '#d8d2c5', apartment: '#b88a4a', venue: '#d9ac58', bank: '#c9a24a', garage: '#b3ada2', fence: '#8a9a88', tree: '#2c5a2e', pole: '#9a9a9a' }),
+  order: Object.freeze(['park', 'field', 'road', 'alley', 'walk', 'fence', 'tree', 'garage', 'house', 'apartment', 'venue', 'bank', 'pole']),
 });
 
 // Draws the baked top-down background (x right, z down in canvas pixels; the

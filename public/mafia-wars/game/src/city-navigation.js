@@ -8,6 +8,7 @@
 // so Node tests can check every route against the same obstacles.
 import { cityGroundLayout } from './city-ground-layout.js';
 import { showcaseFurniture } from './city-showcase-layout.js';
+import { CHESS_AISLES, CIVIC_PATHS, PARK_PATHS, parkFixtures, parkSoftZones } from './city-park-layout.js';
 import { createCityPlan } from './city-layout.js';
 
 // Mirrors world.js: ROAD_HALF 4.5, SIDEWALK 2, LOT 8, HOUSE_FRONT 14,
@@ -62,6 +63,10 @@ export function buildNavObstacles(plan = createCityPlan()) {
   for (const l of ground.streetlights) out.push(around(l.x, l.z, 0.3, 0.3, { id: l.id }));
   // M7.0B1: the North Market showcase's street furniture (trees at the curb, forecourt planters and benches)
   for (const f of showcaseFurniture(plan, ground)) out.push(around(f.x, f.z, f.width, f.depth, { id: f.id }));
+  // M7.1A: Central Park and the City Hall plaza: tables, benches, hoops, goalposts, lamps, the fountain;
+  // the playing fields are soft zones residents keep off until park activities lead them on
+  for (const f of parkFixtures()) out.push(rect(f.minX, f.minZ, f.maxX, f.maxZ, { id: f.id }));
+  for (const z of parkSoftZones()) out.push(rect(z.minX, z.minZ, z.maxX, z.maxZ, { id: z.id, soft: true }));
   const { apartment, combatVenue, enterableHouse, duplicatedEnterableHouse } = plan;
   out.push(around(apartment.x, apartment.z, apartment.width, apartment.depth, { id: apartment.id }));
   out.push(around(combatVenue.x, combatVenue.z, combatVenue.width, combatVenue.depth, { id: combatVenue.id }));
@@ -110,6 +115,8 @@ export function walkLines(plan = createCityPlan()) {
     }
   }
   for (const s of [-1, 1]) add('x', s * BLOCK.alley, -45, 45, `original-alley:${s}`);
+  // M7.1A: Central Park's paths, the chess plaza aisle and the City Hall plaza walks
+  for (const p of [...PARK_PATHS, ...CIVIC_PATHS, ...CHESS_AISLES]) add(p.axis, p.c, p.a0, p.a1, p.id);
   return lines;
 }
 

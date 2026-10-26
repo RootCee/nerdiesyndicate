@@ -76,10 +76,10 @@ assert.equal((index.match(/id="tFire"/g) || []).length, 1);
 assert.doesNotMatch(index, /tFire2/);
 assert.match(index, /@media \(pointer: coarse\) and \(orientation: portrait\)/);
 assert.match(index, /id="mpDiagnosticsToggle"[^>]*hidden/);
-assert.match(index, /src="src\/main\.js\?build=m7\.0b-dev3"/);
+assert.match(index, /src="src\/main\.js\?build=m7\.1a-dev1"/);
 assert.match(main, /multiplayer-endpoint\.js\?build=m6\.3-cross-device-diagnostics-rc1/);
-assert.match(main, /wallet-bridge\.js\?build=m7\.0b-dev3/);
-assert.match(main, /const GAME_BUILD_ID = 'm7\.0b-dev3'/);
+assert.match(main, /wallet-bridge\.js\?build=m7\.1a-dev1/);
+assert.match(main, /const GAME_BUILD_ID = 'm7\.1a-dev1'/);
 // M6.5 Underground 6v6: results panel and server match state handling.
 assert.match(index, /id="ugResults"[^>]*role="dialog"/);
 assert.match(index, /id="ugStay"/); assert.match(index, /id="ugLeave"/);
@@ -127,7 +127,7 @@ assert.match(walletPage, /src=\{GAME_URL\}/);
 assert.match(walletPage, /setWalletOpen\(true\)/);
 assert.match(walletPage, /formatTokenAmount\(tokenBalance\.data, 18\)/);
 assert.match(endpoint, /nerdie-city-multiplayer-v4\.buddieroots\.workers\.dev/);
-assert.match(endpoint, /AVATAR_PREVIEW_MULTIPLAYER_SERVICE = 'https:\/\/nerdie-city-(?:m6-(?:3|7|7b|7b2|8a|8b|9)|m7-0a|m7-0b)-preview\.buddieroots\.workers\.dev'/);
+assert.match(endpoint, /AVATAR_PREVIEW_MULTIPLAYER_SERVICE = 'https:\/\/nerdie-city-(?:m6-(?:3|7|7b|7b2|8a|8b|9)|m7-0a|m7-0b|m7-1a)-preview\.buddieroots\.workers\.dev'/);
 assert.match(endpoint, /override && \(isLocal \|\| isPrivateLan\)/);
 
 const { CITY_BOUNDS, createCityPlan, chunkVisible } = await import(
@@ -140,8 +140,9 @@ assert.deepEqual(desktop.roads, mobile.roads);
 assert.deepEqual(desktop.districts, mobile.districts);
 assert.deepEqual(desktop.apartment, mobile.apartment);
 assert.deepEqual(desktop.combatVenue, mobile.combatVenue);
-assert.equal(desktop.districts.length, 7);
-assert.equal(desktop.districts.reduce((total, district) => total + district.buildings.length, 0) + 2, 65);
+// M7.1A: the Civic Center (City Hall) and Central Park (pavilion, bleachers) districts
+assert.equal(desktop.districts.length, 9);
+assert.equal(desktop.districts.reduce((total, district) => total + district.buildings.length, 0) + 2, 68);
 assert.equal(desktop.districts.reduce((total, district) => total + district.vehicles.length, 0), 12);
 assert.deepEqual(CITY_BOUNDS, { minX: -140, maxX: 244, minZ: -148, maxZ: 148 });
 const mobileChunkRadius = (district) => mobile.profile.activeRadius + district.radius * 0.35;
@@ -154,11 +155,12 @@ const mobileTransition = [28, 20, -20, -24].map((z) => ({
     .filter((district) => chunkVisible(district.center, { x: 0, z }, mobileChunkRadius(district)))
     .map((district) => district.id),
 }));
+// M7.1A: City Hall (62 m west of spawn) is a landmark and streams in with the spawn area on mobile
 assert.deepEqual(mobileTransition, [
-  { z: 28, visible: ['north'] },
-  { z: 20, visible: [] },
-  { z: -20, visible: [] },
-  { z: -24, visible: ['south'] },
+  { z: 28, visible: ['north', 'civic-center'] },
+  { z: 20, visible: ['civic-center'] },
+  { z: -20, visible: ['civic-center'] },
+  { z: -24, visible: ['south', 'civic-center'] },
 ]);
 const southNearestBuildingEdge = Math.max(...mobile.districts[1].buildings.map((building) => building.z + building.depth / 2));
 assert.ok(-24 - southNearestBuildingEdge > 40, 'south geometry must stream in well before the player can reach it');

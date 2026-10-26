@@ -84,6 +84,15 @@ const SIGN_ART = {
     for (let i = 0; i < 9; i++) { const x = 40 + i * 110, y = 70 + (i % 2) * 50; ctx.fillStyle = '#16161a'; ctx.fillRect(x, y, 90, 10); ctx.fillRect(x + 10, y + 10, 14, 18); ctx.fillStyle = '#6a4a2c'; ctx.fillRect(x - 18, y - 2, 22, 14); }
     ctx.fillStyle = hexCss(PALETTE.gold); ctx.fillRect(0, 210, w, 6); ctx.fillStyle = '#1d1a16'; ctx.fillRect(0, 216, w, h - 216);
   },
+  cityHall: (ctx, w, h) => {
+    ctx.fillStyle = '#d8cfbf'; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = hexCss(PALETTE.charcoal); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '700 120px Barlow, sans-serif'; ctx.fillText('NERDIE CITY HALL', w / 2, h * 0.5, w * 0.8);
+    ctx.fillStyle = hexCss(PALETTE.gold); ctx.fillRect(w * 0.08, h * 0.12, w * 0.84, 6); ctx.fillRect(w * 0.08, h * 0.86, w * 0.84, 6);
+  },
+  pavilion: (ctx, w, h) => {
+    ctx.fillStyle = hexCss(PALETTE.green); ctx.fillRect(0, 0, w, h); ctx.fillStyle = '#efd08a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '700 96px Barlow, sans-serif'; ctx.fillText('PARK PAVILION', w / 2, h * 0.42, w * 0.9); ctx.font = '500 44px Barlow, sans-serif'; ctx.fillText('RESTROOMS  ·  WATER  ·  INFO', w / 2, h * 0.8);
+  },
   poster: (ctx, w, h) => {
     const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, hexCss(PALETTE.purple)); g.addColorStop(1, hexCss(PALETTE.green)); ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = hexCss(PALETTE.gold); ctx.beginPath(); ctx.arc(w / 2, h * 0.36, w * 0.24, 0, Math.PI * 2); ctx.fill();
@@ -122,7 +131,7 @@ const SIGN_ART = {
   },
 };
 
-for (const [k, c] of Object.entries({ arms: PALETTE.charcoal, armsBlade: PALETTE.green, interiorArms: 0x4a3d2e, bank: PALETTE.green, emblem: PALETTE.purple, threads: PALETTE.charcoal, threadsBlade: PALETTE.purple, marquee: 0xf4ead8, noteVertical: PALETTE.charcoal, northCourt: PALETTE.green, poster: 0x3a2a6a, mural: 0x5a3f8a, interiorThreads: 0x4a3c58, interiorLounge: 0x3a2850, interiorDiner: 0xc89a6a })) PREVIEW.set(SIGN_ART[k], c);
+for (const [k, c] of Object.entries({ cityHall: 0xd8cfbf, pavilion: PALETTE.green, arms: PALETTE.charcoal, armsBlade: PALETTE.green, interiorArms: 0x4a3d2e, bank: PALETTE.green, emblem: PALETTE.purple, threads: PALETTE.charcoal, threadsBlade: PALETTE.purple, marquee: 0xf4ead8, noteVertical: PALETTE.charcoal, northCourt: PALETTE.green, poster: 0x3a2a6a, mural: 0x5a3f8a, interiorThreads: 0x4a3c58, interiorLounge: 0x3a2850, interiorDiner: 0xc89a6a })) PREVIEW.set(SIGN_ART[k], c);
 
 // Sign art made per business: a name board with an "opening soon" line, and a painted shop interior.
 const SHOP_TINTS = [[PALETTE.green, '#efd08a'], [PALETTE.charcoal, '#f2e7cf'], [PALETTE.purple, '#f0d28a'], [0xf2e6cf, hexCss(PALETTE.green)]];
@@ -439,6 +448,95 @@ function warehouse(batch, kit, b, parent) {
   void r;
 }
 
+// ------------------------------------------------- M7.1A Nerdie City Hall (civic)
+// A stone civic hall facing West Avenue: an eight-column portico, bronze doors, the inscribed
+// entablature, a pediment with the Nerdie Blaq seal, purple banners, and a forest-green dome.
+function cityHall(batch, kit, b, parent) {
+  const m = kit.m, f = facade(b, b.front), half = f.length / 2, base = 1.2;
+  batch.box(m.stone, b.x, b.height / 2, b.z, b.width, b.height, b.depth);
+  batch.box(m.concrete, b.x, base / 2, b.z, b.width + 0.4, base, b.depth + 0.4);
+  course(batch, kit, b, base + 0.02, m.gold);
+  // portico: eight engaged columns, doors in the centre bay, tall windows between
+  const cols = [-8.75, -6.25, -3.75, -1.25, 1.25, 3.75, 6.25, 8.75];
+  for (const a of cols) {
+    fbox(batch, m.trim, f, a, base + 0.2, 0.1, 1.05, 0.4, 0.6);
+    const [x, z] = fpoint(f, a, 0.02); batch.cyl(m.trim, x, base + 0.4 + 3.4, z, 0.46, 6.8, 18, 0.4); // engaged: within 0.5 m of the wall
+    fbox(batch, m.trim, f, a, base + 7.35, 0.1, 1.1, 0.3, 0.6);
+    fbox(batch, m.lamp, f, a, base + 0.45, 0.4, 0.34, 0.06, 0.14); // uplights at each column foot
+  }
+  for (let i = 0; i + 1 < cols.length; i++) {
+    const a = (cols[i] + cols[i + 1]) / 2;
+    if (Math.abs(a) < 0.1) { // bronze doors with a transom
+      fbox(batch, m.gold, f, a, base + 1.85, 0.06, 2.4, 3.7, 0.08); fbox(batch, m.charcoal, f, a, base + 1.8, 0.1, 2.1, 3.5, 0.06);
+      fbox(batch, m.gold, f, a, base + 1.8, 0.14, 0.05, 3.5, 0.04); fbox(batch, m.glassWarm, f, a, base + 4.4, 0.06, 2.1, 1.0, 0.04);
+      for (const s of [-1, 1]) fbox(batch, m.gold, f, a + s * 0.3, base + 1.6, 0.16, 0.05, 0.6, 0.06);
+      continue;
+    }
+    fbox(batch, m.glassWarm, f, a, base + 3.4, 0.03, 1.5, 4.6, 0.04);
+    for (const k of [-1, 1]) fbox(batch, m.gold, f, a + k * 0.25, base + 3.4, 0.06, 0.05, 4.6, 0.05);
+    fbox(batch, m.gold, f, a, base + 4.4, 0.06, 1.5, 0.05, 0.05); fbox(batch, m.trim, f, a, base + 5.85, 0.1, 1.8, 0.16, 0.22); fbox(batch, m.trim, f, a, base + 1.0, 0.12, 1.9, 0.12, 0.26);
+  }
+  // entablature with the name, the pediment and seal above
+  fbox(batch, m.stone, f, 0, base + 8.1, 0.25, 20.2, 1.3, 0.5);
+  for (const y of [base + 7.48, base + 8.73]) fbox(batch, m.gold, f, 0, y, 0.51, 20.2, 0.05, 0.02);
+  signPlane(parent, drawn(kit, SIGN_ART.cityHall, { w: 1024, h: 140, day: 0.1, night: 0.85 }), f, 0, base + 8.1, 0.515, 13, 1.0, 'showcase-city-hall-sign');
+  const tri = new THREE.Shape([new THREE.Vector2(-10.4, 0), new THREE.Vector2(10.4, 0), new THREE.Vector2(0, 3.0)]);
+  const ped = new THREE.ShapeGeometry(tri).rotateY(Math.atan2(f.nx, f.nz)); const [px, pz] = fpoint(f, 0, 0.5);
+  batch.add(m.stone, ped.translate(px, base + 8.75, pz));
+  const pedBack = new THREE.ExtrudeGeometry(tri, { depth: 0.5, bevelEnabled: false }).translate(0, 0, -0.5).rotateY(Math.atan2(f.nx, f.nz)); batch.add(m.stone, pedBack.translate(px, base + 8.75, pz));
+  disc(batch, m.purple, f, 0, base + 9.85, 0.52, 0.8, 0.06); disc(batch, m.gold, f, 0, base + 9.85, 0.51, 0.95, 0.04);
+  fbox(batch, m.gold, f, 0, base + 9.85, 0.56, 0.56, 0.08, 0.02); fbox(batch, m.gold, f, 0, base + 9.85, 0.56, 0.08, 0.56, 0.02);
+  // wings: two floors of windows, purple banners on the pylons beside the portico
+  const emblem = drawn(kit, SIGN_ART.emblem, { w: 256, h: 512, day: 0.1, night: 0.7 });
+  for (const s of [-1, 1]) {
+    signPlane(parent, emblem, f, s * 10.6, base + 4.6, 0.06, 1.3, 2.6, `showcase-city-hall-banner-${s < 0 ? 'l' : 'r'}`); fbox(batch, m.gold, f, s * 10.6, base + 6.0, 0.06, 1.4, 0.06, 0.1);
+    for (const a of [12.6, 15.4, 18.2]) for (const y of [base + 2.6, base + 6.6]) { windowUnit(batch, kit, f, s * a, y, 1.3, 2.2, { glass: s * a % 2 ? m.glassWarm : m.glass, surround: m.trim }); }
+  }
+  cornice(batch, kit, b, b.height - 0.35, m.trim, 0.5, 0.36);
+  parapet(batch, kit, b, m.stone, 0.6, 0.35);
+  for (const side of ['north', 'south', 'east']) {
+    const g = facade(b, side), n = side === 'east' ? 10 : 5;
+    for (let i = 0; i < n; i++) { const a = (i - (n - 1) / 2) * (g.length / n); for (const y of [base + 2.6, base + 6.6]) windowUnit(batch, kit, g, a, y, 1.2, 2.2, { glass: i % 3 ? m.glass : m.glassWarm, surround: m.trim }); }
+  }
+  // the council chamber's dome, toward the rear: a drum with arched windows, ribs, a lantern
+  const dx = b.x + 3.5, dz = b.z, top = b.height;
+  batch.cyl(m.stone, dx, top + 1.6, dz, 6.2, 3.2, 28);
+  batch.cyl(m.trim, dx, top + 3.3, dz, 6.5, 0.3, 28);
+  for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2, x = dx + Math.cos(a) * 6.22, z = dz + Math.sin(a) * 6.22; batch.box(m.glassWarm, x, top + 1.6, z, Math.abs(Math.cos(a)) > 0.7 ? 0.06 : 1.0, 1.8, Math.abs(Math.cos(a)) > 0.7 ? 1.0 : 0.06); }
+  batch.add(m.green, new THREE.SphereGeometry(6.3, 28, 12, 0, Math.PI * 2, 0, Math.PI / 2).translate(dx, top + 3.45, dz));
+  // gold ribs: quarter arcs from the drum to the crown
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; batch.add(m.gold, new THREE.TorusGeometry(6.33, 0.07, 4, 20, Math.PI / 2).rotateY(-a).translate(dx, top + 3.45, dz)); }
+  batch.cyl(m.trim, dx, top + 10.1, dz, 0.9, 1.2, 12); batch.cyl(m.gold, dx, top + 10.95, dz, 1.0, 0.5, 12, 0.1); batch.blob(m.gold, dx, top + 11.4, dz, 0.25, 1);
+}
+
+// ------------------------------------------------- M7.1A park pavilion and bleachers
+function pavilion(batch, kit, b, parent) {
+  const m = kit.m, f = facade(b, b.front);
+  batch.box(m.stone, b.x, 1.1, b.z, b.width, 2.2, b.depth); batch.box(m.stuccoWarm, b.x, 2.2 + (b.height - 2.2) / 2, b.z, b.width, b.height - 2.2, b.depth);
+  batch.box(m.charcoal, b.x, b.height + 0.1, b.z, b.width + 1.6, 0.2, b.depth + 1.6); batch.box(m.gold, b.x, b.height - 0.02, b.z, b.width + 1.62, 0.04, b.depth + 1.62);
+  for (const s of [-1, 1]) { fbox(batch, m.green, f, s * 2.2, 1.15, 0.05, 1.1, 2.3, 0.08); fbox(batch, m.trim, f, s * 2.2, 2.4, 0.08, 1.4, 0.14, 0.16); }
+  fbox(batch, m.frame, f, 0, 0.5, 0.18, 0.5, 1.0, 0.35); fbox(batch, m.lamp, f, 0, 3.0, 0.08, 1.2, 0.05, 0.12);
+  signPlane(parent, drawn(kit, SIGN_ART.pavilion, { w: 1024, h: 220, day: 0.2, night: 1.0 }), f, 0, 3.1, 0.06, 5.2, 1.1, 'showcase-pavilion-sign');
+  // timber corner posts and fascia, frosted side windows, an info board, a bench, a drinking fountain
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) batch.box(m.trunk, b.x + sx * (b.width / 2 + 0.3), b.height / 2, b.z + sz * (b.depth / 2 + 0.3), 0.22, b.height, 0.22);
+  for (const side of ['north', 'south', 'east', 'west']) { const g = facade(b, side); fbox(batch, m.trunk, g, 0, b.height - 0.15, 0.82, g.length + 1.64, 0.3, 0.06); if (side !== b.front) for (const a of [-1.6, 1.6]) { fbox(batch, m.glassCool, g, a, 2.8, 0.03, 1.0, 0.5, 0.04); fbox(batch, m.trim, g, a, 2.8, 0.05, 1.2, 0.7, 0.06); } }
+  fbox(batch, m.frame, f, -2.3, 1.0, 0.2, 0.1, 2.0, 0.1); fbox(batch, m.green, f, -2.3, 1.5, 0.26, 0.9, 0.7, 0.05); fbox(batch, m.gold, f, -2.3, 1.88, 0.26, 0.95, 0.04, 0.06);
+  fbox(batch, m.trunk, f, 2.0, 0.46, 0.25, 1.4, 0.06, 0.4); for (const k of [-0.6, 0.6]) fbox(batch, m.frame, f, 2.0 + k, 0.22, 0.25, 0.06, 0.44, 0.36);
+}
+function bleachers(batch, kit, b) {
+  const m = kit.m, f = facade(b, b.front); // three tiers rising away from the field
+  for (let row = 0; row < 3; row++) {
+    const out = -0.6 - row * 1.4, y = 0.45 + row * 0.7;
+    fbox(batch, m.frame, f, 0, y / 2, out, b.depth, y, 0.08); fbox(batch, m.trim, f, 0, y + 0.02, out - 0.3, b.depth, 0.05, 0.75);
+  }
+  for (let i = 0; i <= 9; i++) { const a = -b.depth / 2 + i * (b.depth / 9); fbox(batch, m.frame, f, a, b.height / 2, -2.2, 0.08, b.height, 4.3); }
+  fbox(batch, m.frame, f, 0, b.height, -4.3, b.depth, 0.06, 0.06); fbox(batch, m.purple, f, 0, 0.25, -0.1, b.depth, 0.5, 0.06);
+  // end panels, three aisles of steps, a back railing
+  for (const s of [-1, 1]) fbox(batch, m.charcoal, f, s * (b.depth / 2 - 0.05), b.height / 2, -2.2, 0.1, b.height, 4.4);
+  for (const a of [-b.depth / 3, 0, b.depth / 3]) for (let k = 0; k < 3; k++) fbox(batch, m.trim, f, a, 0.12 + k * 0.35, -0.3 - k * 0.7, 1.0, 0.06, 0.4);
+  for (let i = 0; i <= 11; i++) fbox(batch, m.frame, f, -b.depth / 2 + 0.3 + i * ((b.depth - 0.6) / 11), b.height - 0.45, -4.3, 0.05, 0.9, 0.05);
+}
+
 // ----------------------------------------- the rest of North Market: mid-rise kit
 function midrise(batch, kit, b, parent, { mobile = false } = {}) {
   const m = kit.m, r = rng(hashId(b.id));
@@ -482,7 +580,7 @@ function midrise(batch, kit, b, parent, { mobile = false } = {}) {
 }
 
 export const SHOWCASE_DESIGNS = Object.freeze({ [SHOWCASE_HEROES.bank]: bank, [SHOWCASE_HEROES.boutique]: threads, [SHOWCASE_HEROES.lounge]: lounge, [GUN_SHOP_BUILDING_ID]: arms });
-export function showcaseBuilding(batch, kit, b, parent, opts = {}) { (SHOWCASE_DESIGNS[b.id] || (b.kind === 'house' ? house : b.kind === 'warehouse' ? warehouse : midrise))(batch, kit, b, parent, opts); }
+export function showcaseBuilding(batch, kit, b, parent, opts = {}) { (SHOWCASE_DESIGNS[b.id] || (b.kind === 'house' ? house : b.kind === 'warehouse' ? warehouse : b.kind === 'civic' ? cityHall : b.kind === 'pavilion' ? pavilion : b.kind === 'bleachers' ? bleachers : midrise))(batch, kit, b, parent, opts); }
 
 // ------------------------------------------------------------- North Court
 // The apartment's exterior. HybridApartmentSystem keeps its colliders, door, entry, and interior.

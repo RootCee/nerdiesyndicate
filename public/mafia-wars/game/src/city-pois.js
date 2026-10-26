@@ -1,3 +1,4 @@
+import { CITY_HALL, CITY_HALL_ENTRY, PARK } from './city-park-layout.js';
 // M6.6 location registry: the single list of places the map, waypoints, and
 // interactions share. Every coordinate is derived from the existing source of
 // truth (city-layout.js site records, the server's MULTIPLAYER_SPACES entrance
@@ -40,6 +41,7 @@ export const STREET_NAMES = Object.freeze({
   'central-cross': 'Central Cross', 'north-cross': 'North Cross', 'north-market': 'North Market', 'south-cross': 'South Cross', 'south-market': 'South Market',
 });
 export const DISTRICT_NAMES = Object.freeze({
+  'central-park': 'Nerdie Central Park', 'civic-center': 'Civic Center',
   north: 'North Blocks', south: 'South Blocks', 'east-residential-north': 'East Market', 'east-residential-south': 'East Side',
   'west-mixed-north': 'West Market', 'west-industrial-south': 'Industrial South', 'hood-duplicate-neighborhood': '184 East Block',
 });
@@ -64,6 +66,9 @@ const fromSpace = (spaceId) => {
 export function cityPois(plan = createCityPlan()) {
   const pois = [
     { id: 'the-underground', name: COMBAT_VENUE_SITE.name, kind: 'arena', status: 'open', x: COMBAT_VENUE_SITE.x, z: COMBAT_VENUE_SITE.z, entry: fromSpace('underground'), spaceId: 'underground', description: '6v6 combat arena. Enter at the front door.' },
+    // M7.1A: the Civic Center and Nerdie Central Park
+    { id: CITY_HALL.id, name: CITY_HALL.name, kind: 'civic', status: 'coming-soon', x: CITY_HALL.x, z: CITY_HALL.z, entry: { x: CITY_HALL_ENTRY.x, z: CITY_HALL_ENTRY.z }, approach: [{ x: CITY_HALL_ENTRY.x - 1.6, z: CITY_HALL_ENTRY.z }], description: 'City Hall. Civic services coming soon.' },
+    { id: PARK.id, name: PARK.name, kind: 'park', status: 'open', x: (PARK.minX + PARK.maxX) / 2, z: (PARK.minZ + PARK.maxZ) / 2, entry: { x: PARK.minX + 1, z: 96 }, description: 'Baseball, basketball, 7v7 football, chess tables, paths, picnic grove.' },
     { id: APARTMENT_SITE.id, name: APARTMENT_SITE.name, kind: 'apartment', status: 'open', x: APARTMENT_SITE.x, z: APARTMENT_SITE.z, entry: fromSpace(APARTMENT_SITE.id), spaceId: APARTMENT_SITE.id, description: 'Apartment interior. Safe zone.' },
     { id: ENTERABLE_HOUSE_SITE.id, name: ENTERABLE_HOUSE_SITE.name, kind: 'house', status: 'open', x: ENTERABLE_HOUSE_SITE.x, z: ENTERABLE_HOUSE_SITE.z, entry: fromSpace(ENTERABLE_HOUSE_SITE.id), spaceId: ENTERABLE_HOUSE_SITE.id, description: 'Enterable house. Safe zone.' },
     { id: DUPLICATED_ENTERABLE_HOUSE_SITE.id, name: DUPLICATED_ENTERABLE_HOUSE_SITE.name, kind: 'house', status: 'open', x: DUPLICATED_ENTERABLE_HOUSE_SITE.x, z: DUPLICATED_ENTERABLE_HOUSE_SITE.z, entry: fromSpace(DUPLICATED_ENTERABLE_HOUSE_SITE.id), spaceId: DUPLICATED_ENTERABLE_HOUSE_SITE.id, description: 'Enterable house. Safe zone.' },

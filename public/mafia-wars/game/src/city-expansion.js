@@ -13,6 +13,8 @@ import { createShowcaseMaterials, KitBatch, furniturePiece } from './city-showca
 import { showcaseBuilding } from './city-showcase.js';
 import { SHOWCASE, inShowcase, showcaseFurniture, showcaseForecourts } from './city-showcase-layout.js';
 import { GunShopSystem } from './gun-shop.js';
+import { buildPark, buildCivicPlaza, addParkColliders } from './city-park.js';
+import { PARK, CIVIC_FIXTURES, COURTS, FOOTBALL, BASEBALL, CHESS_PLAZA, PARK_PATHS, CIVIC_PATHS, PATH_WIDTH, CITY_HALL_ENTRY } from './city-park-layout.js';
 import { GUN_SHOP_BUILDING_ID, gunShopSite } from './gun-shop-layout.js';
 
 const material = (color, roughness = 0.88, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
@@ -228,6 +230,9 @@ export function buildCityExpansion(scene, Q = {}) {
       duplicatedHouse = new HybridHouseSystem(scene, plan.duplicatedEnterableHouse, { addCollider, mobile: plan.profile.key === 'mobile' });
       group.add(duplicatedHouse.exterior);
     }
+    // M7.1A: Nerdie Central Park and the City Hall plaza (drawn with the kit; their colliders are added below either way)
+    if (kit && district.id === PARK.id) showcaseStats.triangles += buildPark(kit, group, { mobile: plan.profile.key === 'mobile' }).triangles;
+    if (kit && district.id === 'civic-center') showcaseStats.triangles += buildCivicPlaza(kit, group).triangles;
     if (district.buildings.some((b) => b.id === GUN_SHOP_BUILDING_ID)) gunShop = new GunShopSystem(scene, gunShopSite(plan), { addCollider, mobile: plan.profile.key === 'mobile', kit });
     if (district.buildings.some((b) => b.id === BANK_BUILDING_ID)) bank = new BankSystem(group, bankSite(plan), { mobile: plan.profile.key === 'mobile', visuals: !kit || !inShowcase(bankSite(plan).x, bankSite(plan).z) });
     if (district.id === 'west-industrial-south') {
@@ -238,6 +243,14 @@ export function buildCityExpansion(scene, Q = {}) {
     }
     chunks.push({ id: district.id, center: district.center, radius: district.radius || 48, group, visible: true });
   }
+
+  // M7.1A: park and plaza fixtures block walking (not bullets), matching resident navigation
+  addParkColliders(addCollider);
+  mapRects.push({ x: PARK.minX, z: PARK.minZ, w: PARK.maxX - PARK.minX, h: PARK.maxZ - PARK.minZ, type: 'park' });
+  for (const r of [BASEBALL.fair, ...COURTS, FOOTBALL]) mapRects.push({ x: r.minX, z: r.minZ, w: r.maxX - r.minX, h: r.maxZ - r.minZ, type: 'field' });
+  for (const p of [...PARK_PATHS, ...CIVIC_PATHS]) { const h = PATH_WIDTH / 2; mapRects.push(p.axis === 'x' ? { x: p.c - h, z: p.a0, w: PATH_WIDTH, h: p.a1 - p.a0, type: 'walk' } : { x: p.a0, z: p.c - h, w: p.a1 - p.a0, h: PATH_WIDTH, type: 'walk' }); }
+  const pl = CIVIC_FIXTURES.plaza; mapRects.push({ x: pl.minX, z: pl.minZ, w: pl.maxX - pl.minX, h: pl.maxZ - pl.minZ, type: 'walk' });
+  mapRects.push({ x: CHESS_PLAZA.minX, z: CHESS_PLAZA.minZ, w: CHESS_PLAZA.maxX - CHESS_PLAZA.minX, h: CHESS_PLAZA.maxZ - CHESS_PLAZA.minZ, type: 'walk' });
 
   // Keep a fixed number of live point lights while district meshes stream.
   // Three.js specializes shaders for the current light count, so parenting
@@ -254,7 +267,8 @@ export function buildCityExpansion(scene, Q = {}) {
   const lightFocus = { x: 0, z: 28, picked: false }, nearest = [];
   const lightSites = ground.streetlights.map((l) => ({ x: l.x, z: l.z, lx: l.x + l.armX * 1.35, ly: 4.4, lz: l.z + l.armZ * 1.35, color: 0xffc57a, intensity: 28 }));
   // M7.0B1: the showcase's entrances (bank, 3 Piece, The Blaq Note, North Court) join the pool at night
-  if (kit) for (const [x, y, z] of [[-65, 3.6, 85.2], [-65, 3.2, 107.2], [-65, 2.9, 54.6], [18.2, 2.7, 112]]) lightSites.push({ x, z, lx: x, ly: y, lz: z, color: 0xffd2a0, intensity: 22 });
+  // (M7.1A adds the chess plaza, the park gates, and City Hall's doors)
+  if (kit) for (const [x, y, z] of [[-65, 3.6, 85.2], [-65, 3.2, 107.2], [-65, 2.9, 54.6], [18.2, 2.7, 112], [(CHESS_PLAZA.minX + CHESS_PLAZA.maxX) / 2, 3.6, (CHESS_PLAZA.minZ + CHESS_PLAZA.maxZ) / 2], [118.5, 3.6, 96], [193.5, 3.6, 53.5], [CITY_HALL_ENTRY.x - 1.2, 4.2, CITY_HALL_ENTRY.z]]) lightSites.push({ x, z, lx: x, ly: y, lz: z, color: 0xffd2a0, intensity: 22 });
   function updateCityLights(focus = null) {
     if (focus) {
       if (lightFocus.picked && (focus.x - lightFocus.x) ** 2 + (focus.z - lightFocus.z) ** 2 < 1) return;
