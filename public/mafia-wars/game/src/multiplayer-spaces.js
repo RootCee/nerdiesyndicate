@@ -1,5 +1,6 @@
 import { APARTMENT_SITE } from './city-layout.js';
 import { gunShopSpace } from './gun-shop-layout.js';
+import { CHESS_PLAZA } from './city-park-layout.js';
 
 export const SPACE_SCHEMA_VERSION = 1;
 
@@ -30,12 +31,16 @@ export const MULTIPLAYER_SPACES = Object.freeze({
 export const MULTIPLAYER_SAFE_ZONES = Object.freeze(Object.values(MULTIPLAYER_SPACES)
   .filter((space) => space.safeZone && space.bounds)
   .map((space) => Object.freeze({ id: space.id, bounds: space.bounds })));
+// M7.1D: open-air no-combat zones in the city. The chess plaza in Central Park protects the
+// players and residents standing in it (a game cannot be broken up by gunfire), but unlike an
+// interior shell (MULTIPLAYER_SAFE_ZONES also occlude shots) it does not stop shots passing over it.
+export const CITY_SAFE_ZONES = Object.freeze([Object.freeze({ id: 'chess-plaza', bounds: Object.freeze({ ...CHESS_PLAZA, minY: -1, maxY: 4 }) })]);
 
 export const isProtectedSpace = (spaceId) => MULTIPLAYER_SPACES[spaceId]?.safeZone === true;
 
 export function isInsideSafeZone(position) {
   if (!position || !['x', 'y', 'z'].every((key) => Number.isFinite(position[key]))) return false;
-  return MULTIPLAYER_SAFE_ZONES.some(({ bounds }) =>
+  return [...MULTIPLAYER_SAFE_ZONES, ...CITY_SAFE_ZONES].some(({ bounds }) =>
     position.x >= bounds.minX && position.x <= bounds.maxX
     && position.y >= bounds.minY && position.y <= bounds.maxY
     && position.z >= bounds.minZ && position.z <= bounds.maxZ);

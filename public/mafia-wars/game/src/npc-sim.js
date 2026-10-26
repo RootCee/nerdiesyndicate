@@ -266,6 +266,16 @@ export class CityNpcSimulation {
 
   drainStrikes() { const strikes = this.strikes; this.strikes = []; return strikes; }
 
+  // M7.1D: a resident playing chess holds its seat (stand point, facing the board) until released;
+  // it stays active and visible, skips its routine and reactions, and resumes them afterwards.
+  holdSeat(index, { x, z, yaw }) {
+    const r = this.residents[index]; if (!r) return false;
+    r.held = { x, z, yaw };
+    Object.assign(r, { x, z, yaw, route: null, lastRoute: null, step: 0, speed: 0, anim: NPC_ANIM.idle, placed: true, behavior: NPC_BEHAVIOR.calm, fleeing: false, fight: null, threat: null, pending: null, aware: null, trail: null });
+    return true;
+  }
+  releaseSeat(index) { const r = this.residents[index]; if (!r?.held) return false; r.held = null; r.route = null; r.waitUntil = 0; return true; }
+
   #targetable(p) { return p && !p.dead && !p.safe && !p.protected; }
   // Reach, line of sight through the city (buildings, walls, fences), and target state.
   canStrike(r, p) {
@@ -455,10 +465,11 @@ export class CityNpcSimulation {
       if (!r.placed) { this.#reset(r, this.#streetPoint()); r.lastDormantAt = now; }
       const nearest = Math.min(...players.map((p) => dist(p, r)));
       r.nearest = nearest;
-      if (nearest > rules.relocateRadius && relocations < rules.relocationsPerTick && this.#placeNear(r, players)) { relocations++; r.nearest = Math.min(...players.map((p) => dist(p, r))); }
+      if (!r.held && nearest > rules.relocateRadius && relocations < rules.relocationsPerTick && this.#placeNear(r, players)) { relocations++; r.nearest = Math.min(...players.map((p) => dist(p, r))); }
     }
     // Activate the residents nearest to players.
-    const ranked = this.residents.filter((r) => r.nearest <= rules.activeRadius).sort((a, b) => a.nearest - b.nearest);
+    // (residents holding a chess seat near a player come first: they must stay visible at the table)
+    const ranked = this.residents.filter((r) => r.nearest <= rules.activeRadius).sort((a, b) => (b.held ? 1 : 0) - (a.held ? 1 : 0) || a.nearest - b.nearest);
     const active = ranked.slice(0, this.maxActive);
     for (const r of this.residents) r.active = false;
     for (const r of active) r.active = true;
@@ -466,6 +477,7 @@ export class CityNpcSimulation {
     for (const r of this.residents) {
       r.memory = r.memory.filter((m) => now - m.at < rules.memoryMs);
       if (r.threats.length) r.threats = r.threats.filter((t) => now - t.at < NPC_BEHAVIOR_RULES.threatMemoryMs); // forget on time, active or not
+      if (r.held) { Object.assign(r, { x: r.held.x, z: r.held.z, yaw: r.held.yaw, speed: 0, anim: NPC_ANIM.idle, route: null, behavior: NPC_BEHAVIOR.calm, fleeing: false, fight: null, aware: null, pending: null }); r.lastDormantAt = now; continue; }
       if (!r.active) {
         // A defeated resident stays down until it can respawn out of sight.
         if (r.behavior === NPC_BEHAVIOR.defeated && !this.#outOfSight(r, players)) { r.speed = 0; continue; }

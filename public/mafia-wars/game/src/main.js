@@ -45,6 +45,7 @@ import { MULTIPLAYER_SHOT_EYE_HEIGHT, MULTIPLAYER_WEAPON_RULES } from './multipl
 import { crosshairShotDirection, aimRaised, directionToAim } from './aim.js';
 import { bodyHit, playerBodyOptions, playerFacing, residentBodyOptions } from './hit-regions.js';
 import { createCityMap } from './city-map.js';
+import { ChessClient } from './chess-client.js';
 import { relativeBearing } from './city-map-view.js';
 import { buildNavGraph, findRoute, routeProgress } from './city-navigation.js';
 import { cityPois } from './city-pois.js';
@@ -55,9 +56,9 @@ import { NpcRenderer, NPC_RENDER_RULES } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m7.1a-dev2';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m7.1d-dev1';
 
-const GAME_BUILD_ID = 'm7.1a-dev2';
+const GAME_BUILD_ID = 'm7.1d-dev1';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -201,6 +202,10 @@ let preferThirdPerson = (() => { try { return localStorage.getItem(CAMERA_STORAG
 // multiplayer service, and markers come from the same list as the minimap.
 let cityMap = null, cityNav = null, cityPoiList = [], waypoint = null, waypointRoute = null, waypointNote = '', waypointCheckAt = 0;
 let cityInteriorName = '', cityInteriorId = '', mapDots = [], mapSnitch = false;
+// M7.1D chess at the Central Park tables: the panel pauses movement and releases the mouse while open.
+const chessClient = new ChessClient({ send: (body) => multiplayer?.sendChess(body), mobile: Q.mobile, onOpen: (open) => {
+  if (open) { input.moveX = input.moveY = 0; input.fire = input.ads = input.sprint = false; document.exitPointerLock?.(); } else if (MATCH.started && !MATCH.over && !TOUCH) requestLock();
+} });
 const waypointBeacon = new THREE.Mesh(
   new THREE.CylinderGeometry(0.45, 0.45, 26, 16, 1, true),
   new THREE.MeshBasicMaterial({ color: 0xf2d28b, transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }),
@@ -977,6 +982,7 @@ function configureMultiplayerClient() {
     }
     else if (message.type === 'peer-left') { remotePlayers.get(message.playerId)?.dispose(); remotePlayers.delete(message.playerId); if (Number.isInteger(message.playerCount)) multiplayerPlayerCount = message.playerCount; if (!message.bot) setMultiplayerStatus('Connected · a player is reconnecting'); }
     else if (message.type === 'underground-roster') { if (inLocalUnderground()) for (const bot of message.players || []) { const remote = ensureRemote(bot); if (remote && bot.state) remote.push(bot.state); } }
+    else if (message.type === 'chess' || message.type === 'chess-tables') chessClient.onMessage(message);
     else if (message.type === 'npc-roster') { npcRenderer.countBytes(JSON.stringify(message).length, performance.now()); npcRenderer.applyRoster(message.npcs); }
     else if (message.type === 'npc-hit') { npcRenderer.onEvent(message); if (message.shooterId === multiplayer.credentials?.playerId) { const head = message.region === 'head'; hud.hit(!!message.defeated, head); sfx.hit({ head }); } }
     // M6.9 sync: everyone sees the punch now; the victim's flinch and sound land on the punch's contact frame
@@ -1025,6 +1031,7 @@ function configureMultiplayerClient() {
       else { const remote = ensureRemote({ id: message.playerId, name: 'PLAYER', context: message.context, contextRevision: message.contextRevision, combat: message.combat }); remote?.setContext(message.context, message.contextRevision); remote?.setCombat(message.combat); if (remote && message.state) remote.teleport(message.state); }
     }
     else if (message.type === 'shop') { hud.callout('AMMO RESTOCKED', 'ALL RESERVES FULL · FREE'); sfx.ding(); }
+    else if (message.type === 'reject' && message.chess) chessClient.onReject(message);
     else if (message.type === 'reject') { showShopReject(message); if (message.context) applyLocalContext(message.context, message.contextRevision || localContextRevision, message.state, message.safeZone); if (message.combat) applyLocalCombat(message.combat); }
     else if (message.type === 'correction' && message.state) player.pos.lerp(new THREE.Vector3(message.state.x, message.state.y, message.state.z), 0.35);
   });
@@ -1306,6 +1313,7 @@ let lastProfileChunks = '', lastProfileStream = null;
 addEventListener('keydown', (e) => {
   if (e.target && e.target.tagName === 'INPUT') return;
   if (e.code === 'Escape' && $('avatarPanel')?.classList.contains('on')) { $('avatarPanel').classList.remove('on'); $('avatarToggle').setAttribute('aria-expanded', 'false'); if (MATCH.started && !MATCH.over) requestLock(); return; }
+  if (e.code === 'Escape' && chessClient.open) { chessClient.close(); return; }
   if (e.code === 'Escape' && combatLobbyOpen) { setCombatLobby(false); return; }
   if (e.code === 'KeyX' && practiceCombat && MATCH.started) { returnToCity(); return; }
   if (e.code === 'Escape' && cityMap?.isOpen) { setCityMap(false); return; }
@@ -1320,7 +1328,7 @@ function loop(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now; time += dt;
   fpsAcc += dt; fpsN++; if (fpsAcc > 0.5) { hud.fps(Math.round(fpsN / fpsAcc)); fpsAcc = 0; fpsN = 0; }
   const look = poll();
-  if (!MATCH.started || combatLobbyOpen || cityMap?.isOpen || (!input.locked && !TOUCH && !MATCH.over && MATCH.started)) { look.dx = look.dy = 0; }
+  if (!MATCH.started || combatLobbyOpen || cityMap?.isOpen || chessClient.open || (!input.locked && !TOUCH && !MATCH.over && MATCH.started)) { look.dx = look.dy = 0; }
   if (!MATCH.started) { // idle camera drift on the title
     player.yaw += dt * 0.03; player.update(dt, { moveX: 0, moveY: 0 }, { dx: 0, dy: 0 }, time); input.camera = false;
   } else {
@@ -1334,8 +1342,8 @@ function loop(now) {
     if (input.ab) { if (isCombatMode(MATCH.mode)) useAbility(input.ab); input.ab = 0; }
     if (input.camera) { input.camera = false; if (!combatLobbyOpen) toggleCamera(); }
     if (input.map) { input.map = false; setCityMap(!cityMap?.isOpen); }
-    if (cityMap?.isOpen) { input.fire = false; input.ads = false; input.jump = false; input.interact = false; input.reload = false; }
-    player.update(dt, MATCH.over || combatLobbyOpen || cityMap?.isOpen ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
+    if (cityMap?.isOpen || chessClient.open) { input.fire = false; input.ads = false; input.jump = false; input.interact = false; input.reload = false; }
+    player.update(dt, MATCH.over || combatLobbyOpen || cityMap?.isOpen || chessClient.open ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
     if (multiplayerActive && Number.isFinite(localCombat?.health)) {
       player.hp = localCombat.health; player.dead = localCombat.dead === true;
     }
@@ -1379,9 +1387,14 @@ function loop(now) {
         ? { prompt: '', opened: false, mobileLabel: '' }
         : city.bank.update(player, !!input.interact, time);
       if (bankState.opened) { walletBridge.openBank(); hud.callout('NERDIE CITY BANK', 'WALLET ONLY · BANKING SERVICES COMING SOON'); }
-      const prompt = gunShopState.prompt || apartmentState.prompt || originalHouseState.prompt || duplicatedHouseState.prompt || houseState.prompt || venueState.prompt || bankState.prompt;
+      // M7.1D chess tables (open city only; the server checks the seat and everything after it)
+      if (chessClient.open && (!multiplayerActive || (localContext.space?.id || 'city') !== 'city')) chessClient.reset();
+      const chessState = interiorActive || venueState.prompt || bankState.prompt || apartmentState.transitioned || originalHouseState.transitioned || duplicatedHouseState.transitioned || houseState.transitioned
+        ? { prompt: '', mobileLabel: '' }
+        : chessClient.update(player, !!input.interact, multiplayerActive && multiplayer?.state === 'connected');
+      const prompt = gunShopState.prompt || apartmentState.prompt || originalHouseState.prompt || duplicatedHouseState.prompt || houseState.prompt || venueState.prompt || bankState.prompt || chessState.prompt;
       const activeHouseState = [originalHouseState, duplicatedHouseState, houseState].find((state) => state.prompt) || houseState;
-      const mobileLabel = gunShopState.mobileLabel ? gunShopState.mobileLabel : venueState.prompt ? 'ENTER COMBAT' : bankState.prompt ? bankState.mobileLabel : activeHouseState.prompt && !activeHouseState.blocked ? (activeHouseState.active ? 'EXIT HOUSE' : 'ENTER HOUSE') : '';
+      const mobileLabel = gunShopState.mobileLabel ? gunShopState.mobileLabel : venueState.prompt ? 'ENTER COMBAT' : bankState.prompt ? bankState.mobileLabel : chessState.prompt ? chessState.mobileLabel : activeHouseState.prompt && !activeHouseState.blocked ? (activeHouseState.active ? 'EXIT HOUSE' : 'ENTER HOUSE') : '';
       hud.prompt(prompt, interiorActive, mobileLabel);
       input.interact = false;
       if (gunShopState.action) handleGunShopAction(gunShopState);
