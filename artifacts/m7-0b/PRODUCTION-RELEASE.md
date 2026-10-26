@@ -32,8 +32,9 @@
   - Hit regions.
 - A foreign origin gets 403.
 - 273/273 game tests pass, and the website verifiers pass.
-- **Not run after release:** the resident combat sync check. The command runner's safety check was
-  unavailable at the time. It passed on the preview Worker with the same code.
+- **Resident combat sync, run after release:** two runs passed, with identical events on every
+  client. Neither run found a resident within range to shoot, so they confirm sync but not hits.
+  Hits on residents were confirmed on the preview Worker with the same code.
 - **Not verified:** iPhone performance on a real device.
 
 ## Rollback
