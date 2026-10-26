@@ -12,7 +12,7 @@ import { createNaturalSkyTexture } from './natural-sky.js';
 import { Player } from './player.js';
 import { FX, Weapon, GUN_SPECS } from './weapon.js';
 import { Bot, buildNav, rayVsBots, freeCellNear } from './bots.js';
-import { Character, loadCharacters, ensureCharacterModel, characterAssetStats, registerCharacterWeaponTemplate } from './characters.js';
+import { Character, LOCOMOTION_FADE, loadCharacters, ensureCharacterModel, characterAssetStats, registerCharacterWeaponTemplate } from './characters.js';
 import { Launcher } from './rocket.js';
 import { addWall, wallSpec, initDestruction, updateDestruction, updateDestructionStreaming, beginDestructionPrewarm, destruction, blast, applyStructureState, destructibleStructure } from './destruction.js';
 import { WALL_LOTS, GEO, houseDescs } from './world.js';
@@ -50,9 +50,9 @@ import { NpcRenderer } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.9-dev1';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.9-dev2';
 
-const GAME_BUILD_ID = 'm6.9-dev1';
+const GAME_BUILD_ID = 'm6.9-dev2';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -1333,7 +1333,7 @@ function loop(now) {
     city?.house?.updateCameraVisibility(camera, player, dt);
     if (localAvatar) {
       const show = thirdCamera.enabled && !player.dead && !thirdCamera.obstructed;
-      if (show) localAvatar.play(player.sprinting ? 'Run' : player.planar > 0.25 ? 'Walk' : 'Idle_Gun', 0.12);
+      if (show) localAvatar.play(player.sprinting ? 'Run' : player.planar > 0.25 ? 'Walk' : 'Idle_Gun', LOCOMOTION_FADE);
       // The physics root now remains outside solids; add a small visual-only
       // contact clearance so the run clip's leaning torso/stride does not draw
       // through the surface. This does not alter doorway or physics dimensions.

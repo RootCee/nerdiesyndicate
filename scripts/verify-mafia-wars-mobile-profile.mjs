@@ -76,10 +76,10 @@ assert.equal((index.match(/id="tFire"/g) || []).length, 1);
 assert.doesNotMatch(index, /tFire2/);
 assert.match(index, /@media \(pointer: coarse\) and \(orientation: portrait\)/);
 assert.match(index, /id="mpDiagnosticsToggle"[^>]*hidden/);
-assert.match(index, /src="src\/main\.js\?build=m6\.9-dev1"/);
+assert.match(index, /src="src\/main\.js\?build=m6\.9-dev2"/);
 assert.match(main, /multiplayer-endpoint\.js\?build=m6\.3-cross-device-diagnostics-rc1/);
-assert.match(main, /wallet-bridge\.js\?build=m6\.9-dev1/);
-assert.match(main, /const GAME_BUILD_ID = 'm6\.9-dev1'/);
+assert.match(main, /wallet-bridge\.js\?build=m6\.9-dev2/);
+assert.match(main, /const GAME_BUILD_ID = 'm6\.9-dev2'/);
 // M6.5 Underground 6v6: results panel and server match state handling.
 assert.match(index, /id="ugResults"[^>]*role="dialog"/);
 assert.match(index, /id="ugStay"/); assert.match(index, /id="ugLeave"/);
@@ -188,6 +188,12 @@ assert.match(main, /cosmetic: true, target: impact/);
 const [characterRig, remotePlayer, aimModule, mpClient] = await Promise.all(['characters.js', 'remote-player.js', 'aim.js', 'multiplayer-client.js'].map((file) => readFile(path.join(root, file), 'utf8')));
 assert.match(characterRig, /export const WEAPON_HOLD = Object\.freeze\(\{ ak: 'rifle', mp5: 'rifle', m700: 'rifle', mac10: 'compact', rpg: 'launcher' \}\)/);
 assert.match(characterRig, /supportHand\(matrixWorld\)/);
+// dev2: weapons placed by measured body contacts; palms on weapon surfaces; in-place clips; smooth crossfade.
+assert.match(characterRig, /calibrateContacts\(\)/);
+assert.match(characterRig, /const WEAPON_HANDS = Object\.freeze/);
+assert.match(characterRig, /export const LOCOMOTION_FADE = 0\.25/);
+assert.match(characterRig, /hold\.anchor === 'shoulder' && c\.pocket/);
+assert.match(remotePlayer, /LOCOMOTION_FADE\)/);
 assert.match(remotePlayer, /\(state\.aim \|\| 0\) > 0\.5/);
 assert.match(aimModule, /export function aimRaised/);
 assert.match(mpClient, /movement\.aim = aim\.raised \? 1 : 0/);
