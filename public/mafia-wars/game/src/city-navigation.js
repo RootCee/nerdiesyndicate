@@ -8,6 +8,7 @@
 // so Node tests can check every route against the same obstacles.
 import { cityGroundLayout } from './city-ground-layout.js';
 import { showcaseFurniture } from './city-showcase-layout.js';
+import { entrySteps } from './entry-steps.js';
 import { CHESS_AISLES, CIVIC_PATHS, PARK_PATHS, parkFixtures, parkSoftZones } from './city-park-layout.js';
 import { createCityPlan } from './city-layout.js';
 
@@ -56,6 +57,9 @@ export function buildNavObstacles(plan = createCityPlan()) {
   const out = [];
   for (const district of plan.districts) {
     for (const b of district.buildings) out.push(around(b.x, b.z, b.width, b.depth, { id: b.id }));
+    // M7.1B: residents walk to the foot of City Hall's stairs, not up them (house stoops stay
+    // walkable: each sits on its door's approach)
+    for (const b of district.buildings) if (b.kind === 'civic') for (const s of entrySteps(b)) out.push(rect(s.minX, s.minZ, s.maxX, s.maxZ, { id: s.id }));
     for (const v of district.vehicles || []) out.push(around(v.x, v.z, 1.9, 4.2));
   }
   // M7.0A: the streetlight poles city-expansion.js draws (and collides with), from the shared ground layout

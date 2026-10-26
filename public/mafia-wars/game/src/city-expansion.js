@@ -10,6 +10,7 @@ import { mergeGeometries } from '/mafia-wars/game/vendor/three/jsm/utils/BufferG
 import { BankSystem } from './city-bank.js';
 import { BANK_BUILDING_ID, bankSite } from './city-pois.js';
 import { createShowcaseMaterials, KitBatch, furniturePiece } from './city-showcase-kit.js';
+import { entrySteps, HOUSE_STOOP } from './entry-steps.js';
 import { showcaseBuilding } from './city-showcase.js';
 import { SHOWCASE, inShowcase, showcaseFurniture, showcaseForecourts } from './city-showcase-layout.js';
 import { GunShopSystem } from './gun-shop.js';
@@ -200,6 +201,8 @@ export function buildCityExpansion(scene, Q = {}) {
     for (const spec of district.buildings) {
       if (kit) {
         showcaseBuilding(batch, kit, spec, group, { mobile: plan.profile.key === 'mobile' }); registerBuilding(spec); showcaseStats.buildings++;
+        // M7.1B: front steps up to raised doors (climbable; shots pass over them as over other low fixtures)
+        for (const st of entrySteps(spec)) addCollider(st.minX, st.minZ, st.maxX, st.maxZ, 0, st.top, { step: true, fence: true, cityChunk: spec.id, entrySteps: st.id });
         // houses keep their driveways (the same strip addBuilding drew, from the avenue sidewalk to the house)
         if (spec.kind === 'house' && spec.driveway && (spec.front === 'east' || spec.front === 'west')) {
           const dir = spec.front === 'east' ? 1 : -1, sidewalkEdge = dir > 0 ? 82 : 94, buildingEdge = spec.x + dir * spec.width / 2, length = Math.abs(sidewalkEdge - buildingEdge), mid = (sidewalkEdge + buildingEdge) / 2;
@@ -221,7 +224,7 @@ export function buildCityExpansion(scene, Q = {}) {
       group.add(originalHouse.exterior);
     }
     if (district.id === plan.enterableHouse.districtId) {
-      house = new HybridHouseSystem(scene, plan.enterableHouse, { addCollider, mobile: plan.profile.key === 'mobile' });
+      house = new HybridHouseSystem(scene, plan.enterableHouse, { addCollider, mobile: plan.profile.key === 'mobile', sill: kit ? HOUSE_STOOP.height : 0 }); // its door sits on the showcase foundation, up the stoop
       group.add(house.exterior);
     }
     if (district.id === plan.duplicatedOriginalNeighborhood.id) {

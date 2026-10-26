@@ -30,8 +30,9 @@ export function addInteriorIsolationShell(parent, center, size, name) {
 }
 
 export class HybridApartmentSystem {
-  constructor(scene, site, { addCollider, mobile = false, kit = null } = {}) {
+  constructor(scene, site, { addCollider, mobile = false, kit = null, sill = 0 } = {}) {
     this.kit = kit;
+    this.sill = sill; // M7.1B: a house door raised onto its foundation (reached by the showcase stoop)
     this.scene = scene;
     this.site = site;
     this.addCollider = addCollider;

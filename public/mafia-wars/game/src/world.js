@@ -181,6 +181,17 @@ function buildHouse(b, M, spec, hb = null) {
     if (collide) solidLocal(M, px, base / 2, 0, pd, base, w, { step: true });
     if (collide) { solidLocal(M, px + pd / 2 - 0.1, base + 1.5, -w / 2 + 0.2, 0.2, 3, 0.2); solidLocal(M, px + pd / 2 - 0.1, base + 1.5, w / 2 - 0.2, 0.2, 3, 0.2); }
     if (collide) { solidLocal(M, px, base + 0.6, -w / 2 + 0.1, pd, 1.2, 0.1); solidLocal(M, px + pd / 2 - 0.1, base + 0.6, -w / 4 - 0.2, 0.1, 1.2, w / 2 - 0.9); }
+  } else {
+    // M7.1B: a porchless house's door still sits on its base: a concrete stoop and two steps up to it
+    // (climbable; shots pass over them as over the server's structures, which leave steps out).
+    // boxGeo draws texture offsets from the seeded RNG: restore it so the rest of the Hood is unchanged.
+    const keepSeed = seed;
+    for (let k = 0; k < 3; k++) {
+      const depth = k ? 0.35 : 0.9, sx = d / 2 + (k ? 0.9 + (k - 0.5) * 0.35 : 0.45), topY = base * (3 - k) / 3;
+      b.add('concrete', boxGeo(depth, topY, 1.6, 1, 0xffffff).translate(sx, topY / 2, dz), M);
+      if (collide) solidLocal(M, sx, topY / 2, dz, depth, topY, 1.6, { step: true, fence: true });
+    }
+    seed = keepSeed;
   }
   if (chimney) { b.add('brick', boxGeo(0.7, H + 3.4, 0.7, 1.5, 0xffffff).translate(-d / 4, base + (H + 3.4) / 2 - 0.4, w / 2 + 0.1), M); if (collide) solidLocal(M, -d / 4, 2, w / 2 + 0.1, 0.7, 4, 0.7); }
   if (collide && !blocks) solidLocal(M, 0, (top + 2) / 2, 0, d, top + 2, w);

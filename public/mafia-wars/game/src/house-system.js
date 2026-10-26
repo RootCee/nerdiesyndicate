@@ -29,13 +29,13 @@ export class HybridHouseSystem extends HybridApartmentSystem {
     if (s.useExistingExterior) return;
     const door = makeMaterial(0x3d261d, { roughness: 0.72 });
     const trim = makeMaterial(0xd1c4a4), brass = makeMaterial(0xc49a42, { roughness: 0.3, metalness: 0.75 });
-    const concrete = makeMaterial(0x8b8982), frontX = s.x - s.width / 2;
-    box(g, concrete, [2.8, 0.12, 3.2], [frontX - 1.1, 0.04, s.z], `house-porch-${s.id}`);
-    box(g, trim, [0.18, 2.65, 2.25], [frontX - 0.12, 1.325, s.z], `house-door-trim-${s.id}`);
-    box(g, door, [0.2, 2.35, 1.86], [frontX - 0.24, 1.175, s.z], `house-exterior-door-${s.id}`);
-    box(g, brass, [0.1, 0.1, 0.1], [frontX - 0.36, 1.02, s.z - 0.58], `house-exterior-handle-${s.id}`);
-    box(g, trim, [1.9, 0.2, 2.8], [frontX - 0.85, 2.68, s.z], `house-entry-awning-${s.id}`);
-    wallCollider(this.addCollider, frontX - 0.24, 1.175, s.z, 0.2, 2.35, 1.86, { door: `${s.id}-exterior`, house: s.id });
+    const concrete = makeMaterial(0x8b8982), frontX = s.x - s.width / 2, y = this.sill; // y: the door sill (the showcase stoop leads up to it)
+    if (!y) box(g, concrete, [2.8, 0.12, 3.2], [frontX - 1.1, 0.04, s.z], `house-porch-${s.id}`);
+    box(g, trim, [0.18, 2.65, 2.25], [frontX - 0.12, y + 1.325, s.z], `house-door-trim-${s.id}`);
+    box(g, door, [0.2, 2.35, 1.86], [frontX - 0.24, y + 1.175, s.z], `house-exterior-door-${s.id}`);
+    box(g, brass, [0.1, 0.1, 0.1], [frontX - 0.36, y + 1.02, s.z - 0.58], `house-exterior-handle-${s.id}`);
+    box(g, trim, [1.9, 0.2, 2.8], [frontX - 0.85, y + 2.68, s.z], `house-entry-awning-${s.id}`);
+    wallCollider(this.addCollider, frontX - 0.24, y + 1.175, s.z, 0.2, 2.35, 1.86, { door: `${s.id}-exterior`, house: s.id });
   }
 
   buildInterior() {

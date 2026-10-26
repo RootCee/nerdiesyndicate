@@ -2,6 +2,7 @@ import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { KitBatch, facade, fbox, fpoint, windowUnit, waterTank, roofUnits, signMaterial, PALETTE } from './city-showcase-kit.js';
 import { SHOWCASE_HEROES, SHOWCASE_BUSINESSES } from './city-showcase-layout.js';
 import { STOREFRONT_BUSINESSES } from './city-pois.js';
+import { CIVIC_STAIRS, HOUSE_STOOP, entrySteps, flightDepth } from './entry-steps.js';
 import { GUN_SHOP_BUILDING_ID } from './gun-shop-layout.js';
 
 // M7.0B1 North Market showcase buildings. Every design keeps its building's footprint, height,
@@ -399,11 +400,14 @@ function house(batch, kit, b, parent, { mobile = false } = {}) {
   gableRoof(batch, kit, b, roofMat, body, 1.7);
   batch.box(m.brick, b.x + (r() - 0.5) * b.width * 0.4, b.height + 1.6, b.z + (r() - 0.5) * b.depth * 0.3, 0.8, 2.2, 0.8); // chimney
   const garage = b.driveway && !b.enterableHouseId && f.nx, doorAt = garage ? half - 1.25 : 0, lower = 1.35, upper = b.height * 0.48 + 1.55;
+  // M7.1B: the door sits on the foundation, up a stoop (a landing and two steps; entry-steps.js)
+  const sill = HOUSE_STOOP.height;
+  for (const st of entrySteps(b)) batch.box(m.concrete, (st.minX + st.maxX) / 2, st.top / 2, (st.minZ + st.maxZ) / 2, st.maxX - st.minX, st.top, st.maxZ - st.minZ);
   // porch: a roof on two slim posts, a light; the enterable house's door comes from its interior system
-  fbox(batch, m.trim, f, doorAt, 2.72, 0.55, 2.1, 0.12, 1.1); fbox(batch, roofMat, f, doorAt, 2.8, 0.55, 2.2, 0.06, 1.2);
-  for (const s of [-1, 1]) fbox(batch, m.trim, f, doorAt + s * 0.95, 1.36, 0.42, 0.1, 2.72, 0.1);
-  fbox(batch, m.lamp, f, doorAt + 0.75, 2.2, 0.06, 0.14, 0.22, 0.08);
-  if (!b.enterableHouseId) { fbox(batch, m.trim, f, doorAt, 1.18, 0.05, 1.22, 2.36, 0.08); fbox(batch, accent, f, doorAt, 1.12, 0.09, 1.0, 2.22, 0.06); fbox(batch, m.glassWarm, f, doorAt, 1.75, 0.13, 0.4, 0.5, 0.02); fbox(batch, m.gold, f, doorAt + 0.36, 1.1, 0.13, 0.06, 0.06, 0.04); }
+  fbox(batch, m.trim, f, doorAt, sill + 2.72, 0.55, 2.1, 0.12, 1.1); fbox(batch, roofMat, f, doorAt, sill + 2.8, 0.55, 2.2, 0.06, 1.2);
+  for (const s of [-1, 1]) fbox(batch, m.trim, f, doorAt + s * 0.95, sill + 1.36, 0.42, 0.1, 2.72, 0.1);
+  fbox(batch, m.lamp, f, doorAt + 0.75, sill + 2.2, 0.06, 0.14, 0.22, 0.08);
+  if (!b.enterableHouseId) { fbox(batch, m.trim, f, doorAt, sill + 1.18, 0.05, 1.22, 2.36, 0.08); fbox(batch, accent, f, doorAt, sill + 1.12, 0.09, 1.0, 2.22, 0.06); fbox(batch, m.glassWarm, f, doorAt, sill + 1.75, 0.13, 0.4, 0.5, 0.02); fbox(batch, m.gold, f, doorAt + 0.36, sill + 1.1, 0.13, 0.06, 0.06, 0.04); }
   if (garage) { fbox(batch, m.trim, f, -0.4, 1.3, 0.05, 3.0, 2.6, 0.08); fbox(batch, m.slats, f, -0.4, 1.2, 0.09, 2.7, 2.4, 0.05); fbox(batch, m.lamp, f, -0.4, 2.75, 0.08, 0.3, 0.06, 0.08); }
   const shutters = (g, a, y, w, wh) => { if (mobile) return; for (const s of [-1, 1]) fbox(batch, accent, g, a + s * (w / 2 + 0.28), y, 0.05, 0.36, wh + 0.1, 0.05); };
   // front windows: one beside the door downstairs (none beside a garage), two upstairs
@@ -456,6 +460,14 @@ function cityHall(batch, kit, b, parent) {
   batch.box(m.stone, b.x, b.height / 2, b.z, b.width, b.height, b.depth);
   batch.box(m.concrete, b.x, base / 2, b.z, b.width + 0.4, base, b.depth + 0.4);
   course(batch, kit, b, base + 0.02, m.gold);
+  // M7.1B: front stairs from the plaza up to the plinth (entry-steps.js), between stone cheek walls with lamps
+  const flight = entrySteps(b);
+  for (const st of flight) batch.box(st.part === 'step' ? m.stone : m.concrete, (st.minX + st.maxX) / 2, st.top / 2, (st.minZ + st.maxZ) / 2, st.maxX - st.minX, st.top, st.maxZ - st.minZ);
+  for (const st of flight.filter((x) => x.part === 'cheek')) batch.box(m.trim, (st.minX + st.maxX) / 2, st.top + 0.03, (st.minZ + st.maxZ) / 2, st.maxX - st.minX + 0.1, 0.06, st.maxZ - st.minZ + 0.1); // trim caps
+  for (const s of [-1, 1]) { // a lamp at the foot of each cheek wall
+    const [x, z] = fpoint(f, s * (CIVIC_STAIRS.width + CIVIC_STAIRS.cheek) / 2, flightDepth(CIVIC_STAIRS) - 0.3);
+    batch.cyl(m.frame, x, CIVIC_STAIRS.cheekHeight + 0.5, z, 0.06, 1.0, 8); batch.box(m.lamp, x, CIVIC_STAIRS.cheekHeight + 1.1, z, 0.28, 0.32, 0.28);
+  }
   // portico: eight engaged columns, doors in the centre bay, tall windows between
   const cols = [-8.75, -6.25, -3.75, -1.25, 1.25, 3.75, 6.25, 8.75];
   for (const a of cols) {

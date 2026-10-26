@@ -1,3 +1,4 @@
+import { CIVIC_STAIRS, flightDepth } from './entry-steps.js';
 // M7.1A Nerdie Central Park and the Civic Center (approved Layout A). Pure (no Three.js): the city
 // plan, the client (city-park.js), resident navigation, the map, and the tests all read it.
 //
@@ -41,12 +42,14 @@ export const PARK_PATHS = Object.freeze([
   { id: 'park-service', axis: 'z', c: 77.5, a0: 193.5, a1: 242, kind: 'walk' },
 ].map((p) => Object.freeze(p)));
 // City Hall plaza: two walks either side of the fountain from the West Avenue sidewalk to the doors.
+// M7.1B: the walks meet at the foot of City Hall's front stairs (0.6 m clear of the bottom tread)
+const HALL_FOOT = +(CITY_HALL.x - CITY_HALL.width / 2 - flightDepth(CIVIC_STAIRS) - 0.6).toFixed(2);
 export const CIVIC_PATHS = Object.freeze([
-  { id: 'civic-walk-south', axis: 'z', c: -5, a0: -82, a1: -67.2, kind: 'walk' },
-  { id: 'civic-walk-north', axis: 'z', c: 5, a0: -82, a1: -67.2, kind: 'walk' },
-  { id: 'civic-front', axis: 'x', c: -67.2, a0: -5, a1: 5, kind: 'walk' },
+  { id: 'civic-walk-south', axis: 'z', c: -5, a0: -82, a1: HALL_FOOT, kind: 'walk' },
+  { id: 'civic-walk-north', axis: 'z', c: 5, a0: -82, a1: HALL_FOOT, kind: 'walk' },
+  { id: 'civic-front', axis: 'x', c: HALL_FOOT, a0: -5, a1: 5, kind: 'walk' },
 ].map((p) => Object.freeze(p)));
-export const CITY_HALL_ENTRY = Object.freeze({ x: -67.2, z: 0, facing: 'west' });
+export const CITY_HALL_ENTRY = Object.freeze({ x: HALL_FOOT, z: 0, facing: 'west' });
 
 // Eight chess tables in the plaza by the promenade; each seat is a future interaction point
 // (players and residents sit facing each other along x). Spectators stand within 2.5 m.
