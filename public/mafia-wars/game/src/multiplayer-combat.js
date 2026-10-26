@@ -2,6 +2,7 @@ import { isMultiplayerWeapon } from './multiplayer-equipment.js';
 import { MULTIPLAYER_SPAWNS } from './multiplayer-protocol.js';
 import { isInsideSafeZone, isProtectedSpace, MULTIPLAYER_SAFE_ZONES } from './multiplayer-spaces.js';
 import { cityStructureOccluded } from './city-structures.js';
+import { bodyHit, playerBodyOptions, playerFacing, regionDamage } from './hit-regions.js';
 
 export const COMBAT_SCHEMA_VERSION = 1;
 export const MULTIPLAYER_WEAPON_RULES = Object.freeze({
@@ -33,7 +34,12 @@ const UNDERGROUND_HOUSE_WALLS = Object.freeze(Array.from({ length: 10 }, (_, ind
   { minX: x - 5, maxX: x + 5, minY: 0.75, maxY: 10, minZ: z + 3.0, maxZ: z + 3.2 },
 ])));
 
-const FORBIDDEN = ['playerId', 'targetId', 'targetIds', 'targets', 'damage', 'hit', 'health', 'team', 'admin', 'origin', 'position', 'context', 'spaceId', 'instanceId'];
+const FORBIDDEN = ['playerId', 'targetId', 'targetIds', 'targets', 'damage', 'hit', 'health', 'team', 'admin', 'origin', 'position', 'context', 'spaceId', 'instanceId', 'region', 'hitRegion', 'headshot', 'multiplier'];
+// M6.9 dev3: how far back the server may look for where targets were when a shot was aimed
+// (the shooter saw them interpolated ~120 ms in the past, plus half their round trip).
+export const MAX_REWIND_MS = 250;
+// The shot must leave within this angle (horizontally) of where the shooter's camera faces.
+export const MAX_AIM_OFF_FACING = 1.4;
 const finiteVector = (value) => value && ['x', 'y', 'z'].every((key) => Number.isFinite(value[key]));
 const protectedPlayer = (player) => isProtectedSpace(player.context?.space?.id) || isInsideSafeZone(player.state);
 
@@ -108,6 +114,7 @@ export function validateFireIntent(message, protocolVersion) {
   if (!finiteVector(message.direction) || FORBIDDEN.some((field) => Object.hasOwn(message, field))) return { ok: false, reason: 'unauthorized_fire_field' };
   const length = Math.hypot(message.direction.x, message.direction.y, message.direction.z);
   if (length < 0.8 || length > 1.2) return { ok: false, reason: 'invalid_direction' };
+  if (message.viewAt !== undefined && !Number.isFinite(message.viewAt)) return { ok: false, reason: 'invalid_view_time' };
   return { ok: true };
 }
 
@@ -136,7 +143,9 @@ export function applyFireIntent(player, message, now, protocolVersion) {
   const length = Math.hypot(message.direction.x, message.direction.y, message.direction.z) || 1;
   const direction = { x: message.direction.x / length, y: message.direction.y / length, z: message.direction.z / length };
   const origin = { x: player.state?.x || 0, y: (player.state?.y || 0) + MULTIPLAYER_SHOT_EYE_HEIGHT, z: player.state?.z || 0 };
-  return { ok: true, shot: { playerId: player.id, weaponId: message.weaponId, origin, direction, sequence: message.seq, spaceId: player.context?.space?.id || 'city', serverTime: now }, combat: combatView(player.combat, now) };
+  // viewAt (M6.9 dev3, optional): the server time the shooter was viewing targets at; bounded, so it can only ever look back MAX_REWIND_MS
+  const rewindMs = Number.isFinite(message.viewAt) ? Math.max(0, Math.min(MAX_REWIND_MS, now - message.viewAt)) : 0;
+  return { ok: true, shot: { playerId: player.id, weaponId: message.weaponId, origin, direction, sequence: message.seq, spaceId: player.context?.space?.id || 'city', serverTime: now, rewindMs }, combat: combatView(player.combat, now) };
 }
 
 export function publicCombatView(state, now = Date.now()) {
@@ -207,7 +216,16 @@ function segmentOccluded(start, end, occluded) {
   return occluded(start, { x: dx / distance, y: dy / distance, z: dz / distance }, distance);
 }
 
-export function resolveAuthoritativeShot(shooter, shot, players, now, { occluded } = {}) {
+// M6.9 dev3: a shot from `origin` along the camera-facing direction? (horizontal angle to the yaw the shooter sends)
+export function shotWithinView(state, direction) {
+  const fx = -Math.sin(state?.yaw || 0), fz = -Math.cos(state?.yaw || 0), h = Math.hypot(direction.x, direction.z);
+  if (h < 0.05) return true; // straight up or down
+  return Math.acos(Math.max(-1, Math.min(1, (direction.x * fx + direction.z * fz) / h))) <= MAX_AIM_OFF_FACING;
+}
+
+// regions: location-based hits (M6.9 dev3, public city): the first body region the shot meets decides the
+// damage; stateAt(target, time) gives where a target was at the rewound time. Off: the original chest sphere.
+export function resolveAuthoritativeShot(shooter, shot, players, now, { occluded, regions = false, stateAt = null } = {}) {
   const spaceId = shooter.context?.space?.id || 'city';
   const underground = spaceId === 'underground';
   if ((!underground && spaceId !== 'city') || (underground && !shooter.combat?.team) || (spaceId === 'city' && protectedPlayer(shooter))) return { impacts: [], elimination: null };
@@ -217,6 +235,12 @@ export function resolveAuthoritativeShot(shooter, shot, players, now, { occluded
     if (target.id === shooter.id || !target.connected || target.context?.space?.id !== spaceId) continue;
     target.combat = normalizeCombatState(target.combat);
     if (target.combat.dead || (underground && target.combat.team === shooter.combat.team) || (spaceId === 'city' && protectedPlayer(target)) || !target.state) continue;
+    if (regions && !underground) {
+      const seen = (stateAt && shot.rewindMs ? stateAt(target, now - shot.rewindMs) : null) || target.state;
+      const hit = bodyHit(shot.origin, shot.direction, seen, playerFacing(seen), playerBodyOptions(seen, !!target.equipment?.weaponId && !target.equipment?.holstered));
+      if (hit && hit.distance <= rule.range && !blocked(shot.origin, shot.direction, hit.distance)) candidates.push({ target, distance: hit.distance, region: hit.region });
+      continue;
+    }
     const distance = targetDistance(shot.origin, shot.direction, target.state);
     if (distance !== null && distance <= rule.range && !blocked(shot.origin, shot.direction, distance)) candidates.push({ target, distance });
   }
@@ -231,13 +255,14 @@ export function resolveAuthoritativeShot(shooter, shot, players, now, { occluded
     const primaryCenter = { x: primary.target.state.x, y: primary.target.state.y + 1.05, z: primary.target.state.z };
     const targetCenter = { x: target.state.x, y: target.state.y + 1.05, z: target.state.z };
     const targetBlocked = target === primary.target
-      ? distanceFromShot !== null && (occluded === undefined ? (underground ? undergroundShotOccluded : publicCityShotOccluded) : occluded)(shot.origin, shot.direction, distanceFromShot)
+      ? primary.region ? false : distanceFromShot !== null && (occluded === undefined ? (underground ? undergroundShotOccluded : publicCityShotOccluded) : occluded)(shot.origin, shot.direction, distanceFromShot)
       : segmentOccluded(primaryCenter, targetCenter, occluded === undefined ? (underground ? undergroundShotOccluded : publicCityShotOccluded) : occluded);
     if (target.combat.protectionUntil > now || targetBlocked) continue;
-    const damage = shot.weaponId === 'rpg' ? Math.max(20, Math.round(rule.damage * (1 - Math.min(rule.splash, Math.hypot(target.state.x - primary.target.state.x, target.state.z - primary.target.state.z)) / rule.splash))) : rule.damage;
+    // firearm hits scale by body region (head 2x ...); RPG splash never does
+    const damage = shot.weaponId === 'rpg' ? Math.max(20, Math.round(rule.damage * (1 - Math.min(rule.splash, Math.hypot(target.state.x - primary.target.state.x, target.state.z - primary.target.state.z)) / rule.splash))) : primary.region ? regionDamage(rule.damage, primary.region) : rule.damage;
     target.combat.health = Math.max(0, target.combat.health - damage);
     if (target.combat.health === 0) { target.combat.dead = true; target.combat.deaths++; target.combat.respawnAt = now + MULTIPLAYER_COMBAT_RULES.respawnMs; shooter.combat.kills++; elimination = { killerId: shooter.id, victimId: target.id }; }
-    impacts.push({ targetId: target.id, damage, health: target.combat.health, dead: target.combat.dead });
+    impacts.push({ targetId: target.id, damage, health: target.combat.health, dead: target.combat.dead, ...(primary.region && shot.weaponId !== 'rpg' ? { region: primary.region } : {}) });
   }
   return { impacts, elimination };
 }

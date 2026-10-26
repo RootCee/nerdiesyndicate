@@ -18,6 +18,7 @@ import { NPC_BEHAVIOR, NPC_BEHAVIOR_RULES, greetingFor, personalityOf, reactionT
 import { NPC_COMBAT_RULES, assessThreat, strikeProfile, weaponClass } from './npc-combat.js';
 import { isInsideSafeZone } from './multiplayer-spaces.js';
 import { cityShotOccluded, publicCityShotOccluded, targetDistance } from './multiplayer-combat.js';
+import { bodyHit } from './hit-regions.js';
 
 export const NPC_SIM_RULES = Object.freeze({
   tickMs: 200,
@@ -38,6 +39,8 @@ export const NPC_SIM_RULES = Object.freeze({
 export const NPC_ANIM = Object.freeze({ idle: 0, walk: 1, notice: 2 });
 
 const hard = (obstacles) => obstacles.filter((r) => !r.soft);
+// The resident models stand 1.86 m at height factor 1 (measured from the CC0 library meshes).
+const NPC_BODY_HEIGHT = 1.86;
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 
 export class CityNpcSimulation {
@@ -229,20 +232,35 @@ export class CityNpcSimulation {
     return { health: Math.round(r.health), knockdown, defeated: r.behavior === B.defeated };
   }
 
+  // Where a resident was at `time` (M6.9 dev3): from the last second of ticks, interpolated.
+  #residentAt(r, time) {
+    const trail = r.trail; if (!trail?.length || time >= trail[trail.length - 1].t) return r;
+    let i = trail.length - 1; while (i > 0 && trail[i].t > time) i--;
+    const a = trail[i], b = trail[i + 1]; if (!b || a.t > time) return a;
+    const k = (time - a.t) / Math.max(1, b.t - a.t), dy = Math.atan2(Math.sin(b.yaw - a.yaw), Math.cos(b.yaw - a.yaw));
+    return { x: a.x + (b.x - a.x) * k, z: a.z + (b.z - a.z) * k, yaw: a.yaw + dy * k };
+  }
   // Nearest resident a shot would hit before `limit` metres. Interior walls
   // (publicCityShotOccluded) and city buildings, houses, and fences block it;
   // with structureOcclusion, the 3D city structures block it instead, exactly
   // as they block shots at players.
-  shotHit(origin, direction, limit) {
+  // regions (M6.9 dev3): judge the shot against each resident's body regions where it stood at `at`
+  // (unarmed stance, scaled to its height and build), and report the region hit.
+  shotHit(origin, direction, limit, { at = null, regions = false } = {}) {
     if (!this.combat) return null;
     this.#ensureGraph();
     let best = null;
     for (const r of this.residents) {
       if (!r.active || r.behavior === NPC_BEHAVIOR.defeated || isInsideSafeZone({ x: r.x, y: 0, z: r.z })) continue;
-      const d = targetDistance(origin, direction, { x: r.x, y: 0, z: r.z });
+      let d, region = null;
+      if (regions) {
+        const p = at === null ? r : this.#residentAt(r, at), look = r.identity.appearance;
+        const hit = bodyHit(origin, direction, { x: p.x, y: 0, z: p.z }, p.yaw || 0, { stance: 'unarmed', height: NPC_BODY_HEIGHT * (look?.height || 1), girth: look?.build || 1, moving: (r.speed || 0) > 0.3 });
+        d = hit?.distance ?? null; region = hit?.region ?? null;
+      } else d = targetDistance(origin, direction, { x: r.x, y: 0, z: r.z });
       if (d === null || d > limit) continue;
       if (this.structureOcclusion ? this.structureOcclusion(origin, direction, d) : publicCityShotOccluded(origin, direction, d) || !segmentClear(origin, r, this.shotBlockers, { pad: 0 })) continue;
-      if (!best || d < best.distance) best = { index: r.index, distance: d };
+      if (!best || d < best.distance) best = { index: r.index, distance: d, ...(region ? { region } : {}) };
     }
     return best;
   }
@@ -498,6 +516,8 @@ export class CityNpcSimulation {
       if (states.length || removed.length) out.push({ to: viewer.id, message: { v: PROTOCOL_VERSION, type: 'npc-states', serverTime: now, s: states, r: removed } });
     }
     for (const { message } of out) { this.metrics.bytes += JSON.stringify(message).length; this.metrics.messages++; }
+    // M6.9 dev3: the last second of positions, so shots are judged where residents were when aimed at
+    for (const r of this.residents) if (r.active) { (r.trail ||= []).push({ t: now, x: r.x, z: r.z, yaw: r.yaw }); if (r.trail.length > 7) r.trail.shift(); }
     return out;
   }
 

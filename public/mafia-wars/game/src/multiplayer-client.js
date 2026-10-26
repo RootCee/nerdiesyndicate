@@ -98,7 +98,8 @@ export class MultiplayerClient extends EventTarget {
     return this.send({ type: 'appearance', seq: ++this.appearanceSeq, appearance: this.appearance });
   }
   updateEquipment(weaponId, holstered = false) { return this.send({ type: 'equipment', seq: ++this.equipmentSeq, weaponId, holstered }); }
-  fireWeapon(weaponId, direction) { return this.send({ type: 'fire', seq: ++this.combatSeq, weaponId, direction: { x: rounded(direction.x), y: rounded(direction.y), z: rounded(direction.z) } }); }
+  // viewAt (M6.9 dev3): the server time of what the shooter was looking at (remote players are drawn interpolated in the past)
+  fireWeapon(weaponId, direction, viewAt = undefined) { return this.send({ type: 'fire', seq: ++this.combatSeq, weaponId, direction: { x: rounded(direction.x), y: rounded(direction.y), z: rounded(direction.z) }, ...(Number.isFinite(viewAt) ? { viewAt: Math.round(viewAt) } : {}) }); }
   reloadWeapon(weaponId) { return this.send({ type: 'reload', seq: ++this.combatSeq, weaponId }); }
   updateSpace(spaceId, action) { return this.send({ type: 'space', seq: ++this.spaceSeq, spaceId, action }); }
   ping() { const sentAt = performance.now(); this.send({ type: 'ping', nonce: Math.random().toString(36).slice(2), sentAt }); }

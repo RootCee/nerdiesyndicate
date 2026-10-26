@@ -35,7 +35,7 @@ export const hud = {
   },
   killText(t) { el.kill.textContent = t; el.kill.classList.add('on'); clearTimeout(el.killT); el.killT = setTimeout(() => el.kill.classList.remove('on'), 1800); },
   points(t = '+100') { el.pts.textContent = t; el.pts.classList.remove('on'); void el.pts.offsetWidth; el.pts.classList.add('on'); },
-  hit(kill) { el.hit.classList.remove('on', 'kill'); void el.hit.offsetWidth; el.hit.classList.add('on'); if (kill) el.hit.classList.add('kill'); },
+  hit(kill, head = false) { el.hit.classList.remove('on', 'kill', 'head'); void el.hit.offsetWidth; el.hit.classList.add('on'); if (head) el.hit.classList.add('head'); if (kill) el.hit.classList.add('kill'); },
   hurt(k) { el.hurt.style.opacity = THREE.MathUtils.clamp(k, 0, 1); },
   protection(seconds) {
     if (!el.spawnProtection) return;

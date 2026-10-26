@@ -113,7 +113,8 @@ export const sfx = {
   },
   dry() { if (!ctx) return; tone(1200, 900, 0.03, { type: 'square', gain: 0.12 }); },
   // player's bullet connects: crisp marker + body thud (the ElevenLabs thud is quiet, so a small synth thump sits under it)
-  hit() { if (!ctx) return; if (!play('hitmarker', { vol: 0.55, jitter: 0.02 })) tone(2200, 1800, 0.05, { type: 'triangle', gain: 0.22 }); play('bodyhit', { vol: 0.6, delay: 0.01 }); tone(140, 60, 0.09, { gain: 0.18 }); },
+  // head (M6.9 dev3): the same hit marker sample pitched up, with a bright second tick, so a headshot is heard as well as seen
+  hit({ head = false } = {}) { if (!ctx) return; if (!play('hitmarker', { vol: head ? 0.7 : 0.55, rate: head ? 1.5 : 1, jitter: 0.02 })) tone(2200, 1800, 0.05, { type: 'triangle', gain: 0.22 }); if (head) tone(3200, 2600, 0.06, { type: 'triangle', gain: 0.16, delay: 0.05 }); else play('bodyhit', { vol: 0.6, delay: 0.01 }); tone(140, 60, 0.09, { gain: 0.18 }); },
   kill() { if (!ctx) return; if (!play('kill', { vol: 0.7, jitter: 0 })) { tone(880, 1320, 0.12, { type: 'triangle', gain: 0.25 }); tone(1320, 1760, 0.16, { type: 'triangle', gain: 0.2, delay: 0.08 }); } },
   impactAt(pos) { if (!ctx) return; if (!playAt('impact', pos, { vol: 0.6, ref: 3, max: 50 })) noise(0.06, { f: 2400, gain: 0.08, decay: 0.05 }); },
   hurt() { if (!ctx) return; if (!play('hurt', { vol: 0.75, jitter: 0.08 })) { noise(0.25, { f: 400, q: 0.6, type: 'lowpass', gain: 0.6, decay: 0.22 }); tone(120, 60, 0.3, { gain: 0.3 }); } },

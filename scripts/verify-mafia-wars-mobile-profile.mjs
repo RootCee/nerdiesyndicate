@@ -76,10 +76,10 @@ assert.equal((index.match(/id="tFire"/g) || []).length, 1);
 assert.doesNotMatch(index, /tFire2/);
 assert.match(index, /@media \(pointer: coarse\) and \(orientation: portrait\)/);
 assert.match(index, /id="mpDiagnosticsToggle"[^>]*hidden/);
-assert.match(index, /src="src\/main\.js\?build=m6\.9-dev2"/);
+assert.match(index, /src="src\/main\.js\?build=m6\.9-dev3"/);
 assert.match(main, /multiplayer-endpoint\.js\?build=m6\.3-cross-device-diagnostics-rc1/);
-assert.match(main, /wallet-bridge\.js\?build=m6\.9-dev2/);
-assert.match(main, /const GAME_BUILD_ID = 'm6\.9-dev2'/);
+assert.match(main, /wallet-bridge\.js\?build=m6\.9-dev3/);
+assert.match(main, /const GAME_BUILD_ID = 'm6\.9-dev3'/);
 // M6.5 Underground 6v6: results panel and server match state handling.
 assert.match(index, /id="ugResults"[^>]*role="dialog"/);
 assert.match(index, /id="ugStay"/); assert.match(index, /id="ugLeave"/);
@@ -194,6 +194,13 @@ assert.match(characterRig, /const WEAPON_HANDS = Object\.freeze/);
 assert.match(characterRig, /export const LOCOMOTION_FADE = 0\.25/);
 assert.match(characterRig, /hold\.anchor === 'shoulder' && c\.pocket/);
 assert.match(remotePlayer, /LOCOMOTION_FADE\)/);
+// dev3: shared hit regions ship; the crosshair converges on them; fire carries viewAt; confirmed headshots are gold.
+const hitRegions = await readFile(path.join(root, 'hit-regions.js'), 'utf8');
+assert.match(hitRegions, /export const HIT_MULTIPLIERS = Object\.freeze\(\{ head: 2\.0, upperTorso: 1\.0, lowerTorso: 0\.9, arms: 0\.75, legs: 0\.7 \}\)/);
+assert.match(main, /bodyHit\(camera\.position, aimForward, seen/);
+assert.match(main, /multiplayer\.fireWeapon\(weaponId, crosshairAim\(rule\.range\), multiplayerViewTime\(\)\)/);
+assert.match(mpClient, /viewAt: Math\.round\(viewAt\)/);
+assert.match(index, /#hit\.head svg \{ stroke: #f5c542/);
 assert.match(remotePlayer, /\(state\.aim \|\| 0\) > 0\.5/);
 assert.match(aimModule, /export function aimRaised/);
 assert.match(mpClient, /movement\.aim = aim\.raised \? 1 : 0/);

@@ -38,7 +38,8 @@ import { MULTIPLAYER_LIMITS, MULTIPLAYER_SPAWNS, PROTOCOL_VERSION } from './mult
 import { AVATAR_PRESETS, normalizeAvatarAppearance, sameAvatarAppearance } from './avatar-schema.js';
 import { DEFAULT_EQUIPMENT, normalizeEquipment } from './multiplayer-equipment.js';
 import { MULTIPLAYER_SHOT_EYE_HEIGHT, MULTIPLAYER_WEAPON_RULES } from './multiplayer-combat.js';
-import { crosshairShotDirection, rayCapsuleDistance, aimRaised, directionToAim } from './aim.js';
+import { crosshairShotDirection, aimRaised, directionToAim } from './aim.js';
+import { bodyHit, playerBodyOptions, playerFacing } from './hit-regions.js';
 import { createCityMap } from './city-map.js';
 import { relativeBearing } from './city-map-view.js';
 import { buildNavGraph, findRoute, routeProgress } from './city-navigation.js';
@@ -50,9 +51,9 @@ import { NpcRenderer } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.9-dev2';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.9-dev3';
 
-const GAME_BUILD_ID = 'm6.9-dev2';
+const GAME_BUILD_ID = 'm6.9-dev3';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -264,14 +265,23 @@ function crosshairAim(range) {
   const worldT = raycastWorld(camera.position, aimSegment.copy(aimForward).multiplyScalar(range), 1, true);
   let hit = worldT < 1 ? worldT * range : Infinity;
   const spaceId = localContext.space?.id || 'city';
+  // M6.9 dev3: converge on the same body regions the server judges, where each player is drawn
   for (const remote of remotePlayers.values()) {
-    if (remote.combat?.dead || (remote.context?.space?.id || 'city') !== spaceId) continue;
-    hit = Math.min(hit, rayCapsuleDistance(camera.position, aimForward, remote.position));
+    if (remote.combat?.dead || (remote.context?.space?.id || 'city') !== spaceId || !remote.character?.obj.visible) continue;
+    const seen = { ...remote.renderState, x: remote.position.x, y: remote.position.y, z: remote.position.z };
+    const body = bodyHit(camera.position, aimForward, seen, playerFacing(seen), playerBodyOptions(seen, !!remote.equipment?.weaponId && !remote.equipment?.holstered));
+    if (body) hit = Math.min(hit, body.distance);
   }
   aimOrigin.set(player.pos.x, player.pos.y + MULTIPLAYER_SHOT_EYE_HEIGHT, player.pos.z);
   return crosshairShotDirection({ camera: camera.position, forward: aimForward, origin: aimOrigin, hitDistance: hit, range }, multiplayerAim);
 }
 const remotePlayers = new Map();
+// M6.9 dev3: the server time the remote players on screen are drawn at (their interpolation delay behind now)
+function multiplayerViewTime() {
+  let delay = 0, n = 0;
+  for (const remote of remotePlayers.values()) if (remote.character?.obj.visible) { delay += remote.metrics.interpolationMs; n++; }
+  return Date.now() + multiplayerServerOffset - (n ? delay / n : MULTIPLAYER_LIMITS.interpolationMs);
+}
 const networkAudioEvents = createNetworkAudioDeduper();
 const avatarContactOffset = new THREE.Vector3();
 const score = { red: 0, blue: 0 }; const MATCH = { id: '', limit: 100, time: 600, left: 600, over: false, started: false, mode: GAME_MODES.FREE_ROAM };
@@ -909,7 +919,7 @@ function configureMultiplayerClient() {
     else if (message.type === 'peer-left') { remotePlayers.get(message.playerId)?.dispose(); remotePlayers.delete(message.playerId); if (Number.isInteger(message.playerCount)) multiplayerPlayerCount = message.playerCount; if (!message.bot) setMultiplayerStatus('Connected · a player is reconnecting'); }
     else if (message.type === 'underground-roster') { if (inLocalUnderground()) for (const bot of message.players || []) { const remote = ensureRemote(bot); if (remote && bot.state) remote.push(bot.state); } }
     else if (message.type === 'npc-roster') { npcRenderer.countBytes(JSON.stringify(message).length, performance.now()); npcRenderer.applyRoster(message.npcs); }
-    else if (message.type === 'npc-hit') { if (message.shooterId === multiplayer.credentials?.playerId) { hud.hit(!!message.defeated); sfx.hit(); } }
+    else if (message.type === 'npc-hit') { if (message.shooterId === multiplayer.credentials?.playerId) { const head = message.region === 'head'; hud.hit(!!message.defeated, head); sfx.hit({ head }); } }
     else if (message.type === 'npc-strike') { if (message.targetId === multiplayer.credentials?.playerId && !message.dead) { hurtK = 1; sfx.hurt(); } }
     else if (message.type === 'npc-states') { if ((localContext.space?.id || 'city') === 'city') { npcRenderer.countBytes(JSON.stringify(message).length, performance.now()); npcRenderer.applyStates(message); } }
     else if (message.type === 'bot-states') { if (inLocalUnderground()) for (const state of message.states || []) ensureRemote({ id: state.playerId, name: state.name, bot: true, context: UNDERGROUND_REMOTE_CONTEXT })?.push(state); }
@@ -933,14 +943,16 @@ function configureMultiplayerClient() {
     }
     else if (message.type === 'combat-impact') {
       const localId = multiplayer.credentials?.playerId, localImpact = message.impacts?.find((impact) => impact.targetId === localId);
-      if (message.shooterId === localId && message.impacts?.length) hud.hit(!!message.elimination);
+      // M6.9 dev3: only server-confirmed hits; gold marker and a brighter tick for a headshot
+      const headshot = message.impacts?.some((impact) => impact.region === 'head');
+      if (message.shooterId === localId && message.impacts?.length) { hud.hit(!!message.elimination, headshot); sfx.hit({ head: headshot }); }
       if (localImpact && !localImpact.dead) { hurtK = 1; sfx.hurt(); }
       if (message.elimination && inLocalUnderground()) {
         const who = (id) => id === localId ? { name: ident.name || 'YOU', team: player.team } : { name: remotePlayers.get(id)?.name || 'PLAYER', team: remotePlayers.get(id)?.combat?.team };
         const killer = who(message.elimination.killerId), victim = who(message.elimination.victimId);
         hud.feed(killer.name, killer.team, victim.name, victim.team);
       }
-      if (message.elimination) hud.killText(message.elimination.killerId === localId ? 'ELIMINATION' : message.elimination.victimId === localId ? 'YOU WERE ELIMINATED' : 'PLAYER ELIMINATED');
+      if (message.elimination) hud.killText(message.elimination.killerId === localId ? (headshot ? 'HEADSHOT ELIMINATION' : 'ELIMINATION') : message.elimination.victimId === localId ? 'YOU WERE ELIMINATED' : 'PLAYER ELIMINATED');
     }
     else if (message.type === 'safe-zone') setLocalSafeZone(message.safeZone === true);
     else if (message.type === 'shot') playNetworkShot(message);
@@ -1373,7 +1385,7 @@ function loop(now) {
       const weaponId = localEquipment.weaponId, rule = MULTIPLAYER_WEAPON_RULES[weaponId];
       const singleShot = weaponId === 'm700' || weaponId === 'rpg';
       if (input.fire && !localSafeZone && !localEquipment.holstered && rule && now >= multiplayerNextShotAt && (!singleShot || !multiplayerTriggerHeld)) {
-        multiplayer.fireWeapon(weaponId, crosshairAim(rule.range));
+        multiplayer.fireWeapon(weaponId, crosshairAim(rule.range), multiplayerViewTime());
         multiplayerNextShotAt = now + 60_000 / rule.rpm;
       }
       if (input.reload && weaponId && !localEquipment.holstered) { multiplayer.reloadWeapon(weaponId); input.reload = false; }
