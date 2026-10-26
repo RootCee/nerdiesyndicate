@@ -31,8 +31,11 @@ export function signFacing(mesh, nx, nz) {
 }
 
 export class BankSystem {
-  constructor(parent, site, { mobile = false } = {}) {
+  constructor(parent, site, { mobile = false, visuals = true } = {}) {
     this.site = site; this.mobile = mobile; this.prompt = ''; this.readyAt = 0;
+    this.entry = new THREE.Vector3(site.entry.x, 0, site.entry.z);
+    // M7.0B1: in the North Market showcase the bank is built by city-showcase.js; only the interaction stays here
+    if (!visuals) { this.group = null; return; }
     // M7.0A: built on whichever facade faces the street (site.entry.facing: east/west/north/south).
     const [nx, nz] = FRONT_NORMALS[site.entry.facing] || FRONT_NORMALS.east, half = nx ? site.width / 2 : site.depth / 2, facadeLength = nx ? site.depth : site.width;
     this.group = new THREE.Group(); this.group.name = `city-bank-${site.id}`; parent.add(this.group);

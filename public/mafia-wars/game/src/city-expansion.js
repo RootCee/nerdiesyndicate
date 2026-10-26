@@ -9,6 +9,9 @@ import { cityGroundLayout, GROUND } from './city-ground-layout.js';
 import { mergeGeometries } from '/mafia-wars/game/vendor/three/jsm/utils/BufferGeometryUtils.js';
 import { BankSystem } from './city-bank.js';
 import { BANK_BUILDING_ID, bankSite } from './city-pois.js';
+import { createShowcaseMaterials, KitBatch, furniturePiece } from './city-showcase-kit.js';
+import { showcaseBuilding } from './city-showcase.js';
+import { SHOWCASE, inShowcase, showcaseFurniture, showcaseForecourts } from './city-showcase-layout.js';
 
 const material = (color, roughness = 0.88, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
 const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
@@ -29,7 +32,7 @@ const facadeTexture = (tint) => {
   facadeTextures.set(tint, texture); return texture;
 };
 const buildingMaterial = (tint) => {
-  if (!buildingMaterials.has(tint)) buildingMaterials.set(tint, new THREE.MeshStandardMaterial({ color: 0xffffff, map: facadeTexture(tint), roughness: 0.9 }));
+  if (!buildingMaterials.has(tint)) { const m = new THREE.MeshStandardMaterial({ color: 0xffffff, map: facadeTexture(tint), roughness: 0.9 }); m.userData.previewColor = tint; buildingMaterials.set(tint, m); }
   return buildingMaterials.get(tint);
 };
 
@@ -84,6 +87,11 @@ function addBuilding(group, spec, profile, mats) {
     if (spec.enterableHouseId && floor === 0 && i === 0) continue;
     facade(mats.window, 0.08, 0.85, 0.82, 0.03, 1.65 + floor * 2.55, i * Math.min(1.65, facadeLength / 6), `city-window-${spec.id}`);
   }
+  registerBuilding(spec);
+}
+// One collider per building, 0.5 m above its height (the server's city-structures.js uses the same box).
+function registerBuilding(spec) {
+  const { x, z, width, depth, height, kind = 'apartment' } = spec;
   addCollider(x - width / 2, z - depth / 2, x + width / 2, z + depth / 2, 0, height + 0.5, { cityChunk: spec.id });
   mapRects.push({ x: x - width / 2, z: z - depth / 2, w: width, h: depth, type: spec.id === BANK_BUILDING_ID ? 'bank' : kind === 'house' ? 'house' : 'apartment' });
 }
@@ -142,7 +150,33 @@ export function buildCityExpansion(scene, Q = {}) {
   };
   merged(ground.surfaces, mats.road, -0.03, GROUND.roadTop, 'city-roads');
   merged(ground.alleys, mats.alley, -0.03, GROUND.roadTop, 'city-alleys');
-  merged(ground.sidewalks, mats.sidewalk, 0.005, GROUND.sidewalkTop, 'city-sidewalks');
+  // M7.0B1: the North Market showcase (city-showcase*.js); ?showcase=0 shows the city without it.
+  const kit = Q.showcase === false ? null : createShowcaseMaterials({ mobile: plan.profile.key === 'mobile' });
+  kit?.setNight(1); // lit, matching the city's shipped dusk look until the clock says otherwise
+  const showcaseWalk = (w) => kit && inShowcase((w.minX + w.maxX) / 2, (w.minZ + w.maxZ) / 2);
+  merged(ground.sidewalks.filter((w) => !showcaseWalk(w)), mats.sidewalk, 0.005, GROUND.sidewalkTop, 'city-sidewalks');
+  const showcaseStats = { buildings: 0, triangles: 0, furniture: 0 };
+  if (kit) {
+    // paved sidewalks with a raised curb, paved forecourts, and street furniture
+    const walks = ground.sidewalks.filter(showcaseWalk), batch = new KitBatch();
+    for (const w of walks) {
+      batch.box(kit.m.pavers, (w.minX + w.maxX) / 2, (0.005 + GROUND.sidewalkTop) / 2, (w.minZ + w.maxZ) / 2, w.maxX - w.minX, GROUND.sidewalkTop - 0.005, w.maxZ - w.minZ);
+      const c = 0.18, edge = w.vertical ? (w.side < 0 ? w.maxX - c / 2 : w.minX + c / 2) : (w.side < 0 ? w.maxZ - c / 2 : w.minZ + c / 2);
+      if (w.vertical) batch.box(kit.m.curb, edge, 0.065, (w.minZ + w.maxZ) / 2, c, 0.13, w.maxZ - w.minZ); else batch.box(kit.m.curb, (w.minX + w.maxX) / 2, 0.065, edge, w.maxX - w.minX, 0.13, c);
+    }
+    // painted lawn over the showcase's open ground (below roads and sidewalks)
+    batch.box(kit.m.grass, (SHOWCASE.minX + SHOWCASE.maxX) / 2, -0.015, (SHOWCASE.minZ + SHOWCASE.maxZ) / 2, SHOWCASE.maxX - SHOWCASE.minX, 0.02, SHOWCASE.maxZ - SHOWCASE.minZ);
+    for (const r of showcaseForecourts(plan, ground)) batch.box(kit.m.forecourt, (r.minX + r.maxX) / 2, 0.05, (r.minZ + r.maxZ) / 2, r.maxX - r.minX, 0.1, r.maxZ - r.minZ);
+    for (const f of showcaseFurniture(plan, ground)) {
+      furniturePiece(batch, kit, f); showcaseStats.furniture++;
+      // furniture blocks walking but not bullets, like the streetlight poles (the server has no furniture)
+      const r = f.kind === 'tree' ? 0.14 : 0;
+      addCollider(f.x - (r || f.width / 2), f.z - (r || f.depth / 2), f.x + (r || f.width / 2), f.z + (r || f.depth / 2), 0, Math.min(f.height, 1.2), { fence: true, furniture: f.id });
+      mapRects.push({ x: f.x - f.width / 2, z: f.z - f.depth / 2, w: f.width, h: f.depth, type: 'pole' });
+    }
+    batch.build(infrastructure, 'showcase-ground');
+    showcaseStats.triangles += batch.triangles;
+  }
   for (const road of plan.roads) mapRects.push({ x: road.x - road.width / 2, z: road.z - road.depth / 2, w: road.width, h: road.depth, type: 'road' });
   for (const a of ground.alleys) mapRects.push({ x: a.minX, z: a.minZ, w: a.maxX - a.minX, h: a.maxZ - a.minZ, type: 'alley' });
   for (const w of ground.sidewalks) mapRects.push({ x: w.minX, z: w.minZ, w: w.maxX - w.minX, h: w.maxZ - w.minZ, type: 'walk' });
@@ -157,10 +191,16 @@ export function buildCityExpansion(scene, Q = {}) {
   let apartment = null, house = null, originalHouse = null, duplicatedHouse = null, combatVenue = null, bank = null;
   for (const district of plan.districts) {
     const group = new THREE.Group(); group.name = `city-chunk-${district.id}`; scene.add(group);
-    for (const spec of district.buildings) addBuilding(group, spec, plan.profile, mats);
+    const batch = kit ? new KitBatch() : null;
+    for (const spec of district.buildings) {
+      if (kit && inShowcase(spec.x, spec.z)) { showcaseBuilding(batch, kit, spec, group, { mobile: plan.profile.key === 'mobile' }); registerBuilding(spec); showcaseStats.buildings++; }
+      else addBuilding(group, spec, plan.profile, mats);
+    }
+    if (batch?.parts.size) { batch.build(group, `showcase-${district.id}`); showcaseStats.triangles += batch.triangles; }
     for (const vehicle of district.vehicles || []) addParkedVehicle(group, vehicle, mats);
     if (district.id === 'north') {
-      apartment = new HybridApartmentSystem(scene, plan.apartment, { addCollider, mobile: plan.profile.key === 'mobile' });
+      apartment = new HybridApartmentSystem(scene, plan.apartment, { addCollider, mobile: plan.profile.key === 'mobile', kit });
+      if (kit) { showcaseStats.buildings++; showcaseStats.triangles += apartment.exteriorTriangles || 0; }
       group.add(apartment.exterior);
       mapRects.push({ x: plan.apartment.x - plan.apartment.width / 2, z: plan.apartment.z - plan.apartment.depth / 2, w: plan.apartment.width, h: plan.apartment.depth, type: 'apartment' });
       const originalSite = plan.originalExpansionHouses.find((site) => site.enterable);
@@ -177,7 +217,7 @@ export function buildCityExpansion(scene, Q = {}) {
       duplicatedHouse = new HybridHouseSystem(scene, plan.duplicatedEnterableHouse, { addCollider, mobile: plan.profile.key === 'mobile' });
       group.add(duplicatedHouse.exterior);
     }
-    if (district.buildings.some((b) => b.id === BANK_BUILDING_ID)) bank = new BankSystem(group, bankSite(plan), { mobile: plan.profile.key === 'mobile' });
+    if (district.buildings.some((b) => b.id === BANK_BUILDING_ID)) bank = new BankSystem(group, bankSite(plan), { mobile: plan.profile.key === 'mobile', visuals: !kit || !inShowcase(bankSite(plan).x, bankSite(plan).z) });
     if (district.id === 'west-industrial-south') {
       addBox(group, mats.sidewalk, 42, 0.08, 34, -112, 0.02, -72, 'underground-parking-lot');
       combatVenue = new CombatVenueSystem(scene, plan.combatVenue, { addCollider, mobile: plan.profile.key === 'mobile' });
@@ -200,6 +240,9 @@ export function buildCityExpansion(scene, Q = {}) {
   // The pooled lights follow the lamps nearest the player. Re-picked only after the player moves a
   // metre (or on a mode/level change), without allocating, so walking makes no per-frame garbage.
   const lightFocus = { x: 0, z: 28, picked: false }, nearest = [];
+  const lightSites = ground.streetlights.map((l) => ({ x: l.x, z: l.z, lx: l.x + l.armX * 1.35, ly: 4.4, lz: l.z + l.armZ * 1.35, color: 0xffc57a, intensity: 28 }));
+  // M7.0B1: the showcase's entrances (bank, Nerdie Threads, The Blaq Note, North Court) join the pool at night
+  if (kit) for (const [x, y, z] of [[-65, 3.6, 85.2], [-65, 3.2, 107.2], [-65, 2.9, 54.6], [18.2, 2.7, 112]]) lightSites.push({ x, z, lx: x, ly: y, lz: z, color: 0xffd2a0, intensity: 22 });
   function updateCityLights(focus = null) {
     if (focus) {
       if (lightFocus.picked && (focus.x - lightFocus.x) ** 2 + (focus.z - lightFocus.z) ** 2 < 1) return;
@@ -207,7 +250,7 @@ export function buildCityExpansion(scene, Q = {}) {
     }
     lightFocus.picked = true;
     nearest.length = 0;
-    if (cityLightPool.length && city?.mode !== 'combat') for (const l of ground.streetlights) {
+    if (cityLightPool.length && city?.mode !== 'combat') for (const l of lightSites) {
       const d = (l.x - lightFocus.x) ** 2 + (l.z - lightFocus.z) ** 2;
       if (nearest.length < cityLightPool.length) nearest.push([d, l]);
       else if (d < nearest[nearest.length - 1][0]) { nearest[nearest.length - 1][0] = d; nearest[nearest.length - 1][1] = l; }
@@ -216,7 +259,7 @@ export function buildCityExpansion(scene, Q = {}) {
     }
     cityLightPool.forEach((light, index) => {
       const site = nearest[index]?.[1];
-      if (site) { light.position.set(site.x + site.armX * 1.35, 4.4, site.z + site.armZ * 1.35); light.intensity = 28 * streetlights.level; }
+      if (site) { light.position.set(site.lx, site.ly, site.lz); light.color.setHex(site.color); light.intensity = site.intensity * streetlights.level; }
       else light.intensity = 0;
     });
   }
@@ -230,8 +273,14 @@ export function buildCityExpansion(scene, Q = {}) {
 
   const city = {
     plan, ground, chunks, apartment, house, originalHouse, duplicatedHouse, combatVenue, bank, infrastructure, mode: 'free-roam',
-    // M7.0A2 will drive this from the shared clock; 1 = lit (the current dusk look), 0 = off
+    // M7.0A2: the shared clock's night level (1 = lit, the original dusk look; 0 = daylight, all off)
+    nightLevel: 1,
     setStreetlightLevel(level) { streetlights.setLevel(level); updateCityLights(); },
+    setNightLevel(level) {
+      const l = Math.max(0, Math.min(1, level)); if (Math.abs(l - city.nightLevel) < 0.002) return;
+      city.nightLevel = l; streetlights.setLevel(l); kit?.setNight(l); updateCityLights();
+    },
+    showcase: kit ? { zone: SHOWCASE, ...showcaseStats } : null,
     beginPrewarm() {
       const state = chunks.map((chunk) => chunk.group.visible);
       const culling = [];
@@ -278,6 +327,7 @@ export function buildCityExpansion(scene, Q = {}) {
         duplicatedOriginalHouses: plan.duplicatedOriginalNeighborhood.houseCount,
         activeCityLights: cityLightPool.filter((light) => light.intensity > 0).length,
         streetlights: ground.streetlights.length,
+        showcase: kit ? { zone: SHOWCASE.id, ...showcaseStats } : null,
         roadPaintQuads: roadPaint?.quads || 0,
         roadPaintTriangles: roadPaint?.triangles || 0,
         combatVenue: combatVenue?.site.id || null,

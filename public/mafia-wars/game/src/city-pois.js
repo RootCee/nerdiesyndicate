@@ -4,6 +4,7 @@
 // records, and the city plan's buildings) so the map cannot drift from the
 // world. Pure data: no Three.js or DOM, so Node tests and future tools (AI
 // agents, new neighbourhoods, player-owned businesses) can read it directly.
+import { SHOWCASE_BUSINESSES } from './city-showcase-layout.js';
 import {
   APARTMENT_SITE, COMBAT_VENUE_SITE, DUPLICATED_ENTERABLE_HOUSE_SITE, ENTERABLE_HOUSE_SITE, FRONT_NORMALS, ORIGINAL_EXPANSION_HOUSES, createCityPlan,
 } from './city-layout.js';
@@ -13,9 +14,10 @@ import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 // 'coming-soon' means nothing can be bought or used there yet. To add or rename
 // a business, edit this table only; ownership and NFT supply are not modelled.
 export const STOREFRONT_BUSINESSES = Object.freeze({
-  'west-mixed-north-0': Object.freeze({ id: 'corner-store', name: 'Corner Store', category: 'Corner Store', status: 'coming-soon' }),
+  // M7.0B1 North Market showcase: provisional identities from the Business NFT playable types
+  'west-mixed-north-0': SHOWCASE_BUSINESSES['west-mixed-north-0'],
   'west-mixed-north-1': Object.freeze({ id: 'nerdie-city-bank', name: 'Nerdie City Bank', category: 'Bank', status: 'wallet' }),
-  'west-mixed-north-2': Object.freeze({ id: 'barbershop', name: 'Barbershop', category: 'Barbershop', status: 'coming-soon' }),
+  'west-mixed-north-2': SHOWCASE_BUSINESSES['west-mixed-north-2'],
   'west-mixed-north-3': Object.freeze({ id: 'diner', name: 'Diner', category: 'Diner', status: 'coming-soon' }),
   'west-industrial-south-0': Object.freeze({ id: 'hardware-store', name: 'Hardware Store', category: 'Hardware Store', status: 'coming-soon' }),
   'west-industrial-south-1': Object.freeze({ id: 'auto-shop', name: 'Auto Shop', category: 'Auto Shop', status: 'coming-soon' }),

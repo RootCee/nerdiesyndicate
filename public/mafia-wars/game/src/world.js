@@ -249,6 +249,10 @@ function wire(scene, a, b, mat, sag = 0.9) {
   const m = new THREE.Mesh(g, mat); scene.add(m); return m;
 }
 
+// M7.0A2: the Hood houses' lit windows follow the city clock (1 = lit, as shipped; 0 = daylight)
+let glassLitMaterial = null;
+export function setWorldNightLevel(level) { if (glassLitMaterial) glassLitMaterial.emissiveIntensity = 3.2 * Math.max(0, Math.min(1, level)); }
+
 // ---------- main build ----------
 export async function buildWorld(scene, Q, progress = () => {}) {
   seed = 1337;
@@ -266,6 +270,7 @@ export async function buildWorld(scene, Q, progress = () => {}) {
     concrete: pbr('concrete_pavement', { color: 0xbdbdb8 }),
     roll: pbr('corrugated_iron', { color: 0xa9a9a9, normalScale: 0.5 }),
   };
+  glassLitMaterial = materials.glassLit;
   materials.siding.map.repeat.set(1, 1);
   const b = new Bucket();
   const duplicateWorldGroup = new THREE.Group(); duplicateWorldGroup.name = 'hood-duplicate-world'; scene.add(duplicateWorldGroup);

@@ -7,6 +7,7 @@
 // world.js (houses, backyard and alley fences, lamps). Pure math, no Three.js,
 // so Node tests can check every route against the same obstacles.
 import { cityGroundLayout } from './city-ground-layout.js';
+import { showcaseFurniture } from './city-showcase-layout.js';
 import { createCityPlan } from './city-layout.js';
 
 // Mirrors world.js: ROAD_HALF 4.5, SIDEWALK 2, LOT 8, HOUSE_FRONT 14,
@@ -57,7 +58,10 @@ export function buildNavObstacles(plan = createCityPlan()) {
     for (const v of district.vehicles || []) out.push(around(v.x, v.z, 1.9, 4.2));
   }
   // M7.0A: the streetlight poles city-expansion.js draws (and collides with), from the shared ground layout
-  for (const l of cityGroundLayout(plan).streetlights) out.push(around(l.x, l.z, 0.3, 0.3, { id: l.id }));
+  const ground = cityGroundLayout(plan);
+  for (const l of ground.streetlights) out.push(around(l.x, l.z, 0.3, 0.3, { id: l.id }));
+  // M7.0B1: the North Market showcase's street furniture (trees at the curb, forecourt planters and benches)
+  for (const f of showcaseFurniture(plan, ground)) out.push(around(f.x, f.z, f.width, f.depth, { id: f.id }));
   const { apartment, combatVenue, enterableHouse, duplicatedEnterableHouse } = plan;
   out.push(around(apartment.x, apartment.z, apartment.width, apartment.depth, { id: apartment.id }));
   out.push(around(combatVenue.x, combatVenue.z, combatVenue.width, combatVenue.depth, { id: combatVenue.id }));

@@ -1,5 +1,6 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { ceilingIntersection, insideInteractionRange, interactionCooldownReady, shouldTransitionApartment } from './city-layout.js';
+import { northCourtExterior } from './city-showcase.js';
 
 const TRANSITION_COOLDOWN = 0.65;
 
@@ -29,7 +30,8 @@ export function addInteriorIsolationShell(parent, center, size, name) {
 }
 
 export class HybridApartmentSystem {
-  constructor(scene, site, { addCollider, mobile = false } = {}) {
+  constructor(scene, site, { addCollider, mobile = false, kit = null } = {}) {
+    this.kit = kit;
     this.scene = scene;
     this.site = site;
     this.addCollider = addCollider;
@@ -56,10 +58,18 @@ export class HybridApartmentSystem {
     const brick = makeMaterial(0x715042), trim = makeMaterial(0xc7b998), glass = makeMaterial(0x182331, { roughness: 0.2, metalness: 0.35 });
     const doorMat = makeMaterial(0x35241d, { roughness: 0.68 }), brass = makeMaterial(0xc49a42, { roughness: 0.3, metalness: 0.75 });
     const frontX = s.x - s.width / 2, backX = s.x + s.width / 2, wall = 0.35, door = 2.2;
+    const wing = (s.depth - door) / 2;
+    if (this.kit) {
+      // M7.0B1: the North Market showcase exterior (city-showcase.js); the door, colliders, and interior are unchanged
+      this.exteriorTriangles = northCourtExterior(g, s, this.kit, { mobile: this.mobile }).triangles;
+      box(g, doorMat, [0.18, 2.42, door - 0.16], [frontX - 0.12, 1.21, s.z], 'north-court-exterior-door');
+      box(g, brass, [0.11, 0.11, 0.11], [frontX - 0.24, 1.05, s.z - 0.68], 'north-court-exterior-handle');
+      this.addExteriorColliders(frontX, backX, wall, door, wing);
+      return;
+    }
     box(g, brick, [s.width, s.height, wall], [s.x, s.height / 2, s.z - s.depth / 2], 'apartment-side-south');
     box(g, brick, [s.width, s.height, wall], [s.x, s.height / 2, s.z + s.depth / 2], 'apartment-side-north');
     box(g, brick, [wall, s.height, s.depth], [backX, s.height / 2, s.z], 'apartment-back');
-    const wing = (s.depth - door) / 2;
     box(g, brick, [wall, s.height, wing], [frontX, s.height / 2, s.z - door / 2 - wing / 2], 'apartment-front-south');
     box(g, brick, [wall, s.height, wing], [frontX, s.height / 2, s.z + door / 2 + wing / 2], 'apartment-front-north');
     box(g, brick, [wall, s.height - 2.7, door], [frontX, 2.7 + (s.height - 2.7) / 2, s.z], 'apartment-front-header');
@@ -74,6 +84,11 @@ export class HybridApartmentSystem {
       if (floor === 0 && i === 0) continue;
       box(g, glass, [0.08, 1.15, 1.15], [frontX - 0.23, 2 + floor * 3.1, s.z + i * 2.25], 'apartment-window');
     }
+    this.addExteriorColliders(frontX, backX, wall, door, wing);
+  }
+
+  addExteriorColliders(frontX, backX, wall, door, wing) {
+    const s = this.site;
     wallCollider(this.addCollider, s.x, s.height / 2, s.z - s.depth / 2, s.width, s.height, wall);
     wallCollider(this.addCollider, s.x, s.height / 2, s.z + s.depth / 2, s.width, s.height, wall);
     wallCollider(this.addCollider, backX, s.height / 2, s.z, wall, s.height, s.depth);

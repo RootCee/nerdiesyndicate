@@ -9,13 +9,15 @@ import { OutputPass } from '/mafia-wars/game/vendor/three/jsm/postprocessing/Out
 import { manager, loadHDR, loadGLB, setAniso, setLowMemoryAssets } from './assets.js';
 import { buildWorld, colliders, collisionBroadphaseStats, lamps, windowsLit, resolve, MAP, groundAt, lineClear, raycastWorld, mapRects } from './world.js';
 import { createNaturalSkyTexture } from './natural-sky.js';
+import { createDayNight } from './day-night.js';
+import { cityClockConfig, devTimeAllowed, parseDevTime, readClock, DEV_TIMES } from './city-clock.js';
 import { Player } from './player.js';
 import { FX, Weapon, GUN_SPECS } from './weapon.js';
 import { Bot, buildNav, rayVsBots, freeCellNear } from './bots.js';
 import { Character, LOCOMOTION_FADE, loadCharacters, ensureCharacterModel, characterAssetStats, registerCharacterWeaponTemplate } from './characters.js';
 import { Launcher } from './rocket.js';
 import { addWall, wallSpec, initDestruction, updateDestruction, updateDestructionStreaming, beginDestructionPrewarm, destruction, blast, applyStructureState, destructibleStructure } from './destruction.js';
-import { WALL_LOTS, GEO, houseDescs } from './world.js';
+import { WALL_LOTS, GEO, houseDescs, setWorldNightLevel } from './world.js';
 import { addHouse } from './destruction.js';
 import { initHud, hud } from './hud.js';
 import { renderLadder } from './ladder.js';
@@ -51,9 +53,9 @@ import { NpcRenderer, NPC_RENDER_RULES } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m7.0a-dev2';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m7.0b-dev1';
 
-const GAME_BUILD_ID = 'm7.0a-dev2';
+const GAME_BUILD_ID = 'm7.0b-dev1';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -95,6 +97,8 @@ async function submitMatch() {
 const Q = { mobile: TOUCH || qs.get('mobile') === '1', silent: qs.get('silent') === '1', fps: 0, houses: qs.get('houses') !== '0' };
 Q.lowMemory = Q.mobile && qs.get('full') !== '1' && qs.get('dev') !== 'combat';
 Q.cityExpansion = qs.get('city') !== '0';
+Q.showcase = qs.get('showcase') !== '0'; // M7.0B1 North Market showcase (?showcase=0: the city without it)
+Q.dayNight = qs.get('daynight') !== '0'; // M7.0A2 solo day/night (?daynight=0: the fixed dusk look)
 Q.roadPaint = qs.get('roadPaint') !== '0';
 setLowMemoryAssets(Q.lowMemory);
 const $ = (id) => document.getElementById(id);
@@ -305,6 +309,30 @@ let modeCalloutTimer = 0;
 let destructionStreamingStats = { activeStructures: 0, activeHouses: 0, activePanels: 0 };
 const neighborhoodLightPool = [];
 let neighborhoodLightSpecs = [], neighborhoodLightBlock = null;
+// M7.0A2: the Hood lamps (bulbs, glows, pooled lights) follow the city clock's night level
+let lampLevel = 1, lampBulbMat = null, dayNight = null, nightApplied = -1;
+const lampGlows = [];
+function updateDayNight() {
+  if (!dayNight) return;
+  const state = dayNight.update(Date.now() + multiplayerServerOffset, { interior: interiorSceneState.active, seconds: time });
+  if (Math.abs(state.night - nightApplied) < 0.004) return;
+  nightApplied = state.night; lampLevel = state.night;
+  city?.setNightLevel(state.night); setWorldNightLevel(state.night);
+  if (lampBulbMat) lampBulbMat.color.setRGB(0.42 + 0.58 * lampLevel, 0.4 + 0.45 * lampLevel, 0.36 + 0.27 * lampLevel);
+  for (const glow of lampGlows) glow.material.opacity = 0.55 * lampLevel;
+  const block = neighborhoodLightBlock; neighborhoodLightBlock = undefined; updateNeighborhoodLights(block);
+}
+// Development-only time buttons (local and preview hosts with ?devtime=1); production players never get them.
+function mountDevTimePanel() {
+  const panel = document.createElement('div'); panel.id = 'devTimePanel';
+  panel.style.cssText = 'position:fixed;left:calc(8px + var(--sal));top:calc(56px + var(--sat));z-index:60;display:flex;gap:4px;font:600 11px Barlow,sans-serif';
+  for (const [label, hour] of [...Object.entries(DEV_TIMES), ['live', null]]) {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = label.toUpperCase();
+    b.style.cssText = 'padding:6px 8px;border:1px solid #c19a49;background:rgba(23,25,29,.82);color:#f2d28b;border-radius:6px';
+    b.addEventListener('click', () => dayNight?.setDevHour(hour)); panel.append(b);
+  }
+  document.body.append(panel);
+}
 function updateNeighborhoodLights(blockId) {
   if (blockId === neighborhoodLightBlock) return;
   neighborhoodLightBlock = blockId;
@@ -312,7 +340,7 @@ function updateNeighborhoodLights(blockId) {
   neighborhoodLightPool.forEach((light, index) => {
     const spec = neighborhoodLightSpecs[index];
     light.position.set(spec.x + offsetX, spec.y, spec.z);
-    light.intensity = blockId ? (spec.alley ? 90 : 150) : 0;
+    light.intensity = blockId ? (spec.alley ? 90 : 150) * lampLevel : 0;
   });
 }
 // Free Roam now loads only the selected local preset. The complete actor roster
@@ -913,6 +941,7 @@ function configureMultiplayerClient() {
   multiplayer.addEventListener('message', ({ detail: message }) => {
     if (message.type === 'welcome') {
       multiplayerServerOffset = message.serverTime - Date.now();
+      dayNight?.setClock(readClock(message)); // the shared city clock (none: the fixed dusk look)
       if (Number.isInteger(message.playerCount)) multiplayerPlayerCount = message.playerCount;
       if (Number.isInteger(message.spawnIndex)) multiplayer.credentials.spawnIndex = message.spawnIndex;
       if (Number.isInteger(message.capacity)) multiplayer.credentials.capacity = message.capacity;
@@ -1092,15 +1121,24 @@ async function boot() {
   scene.background = createNaturalSkyTexture({ mobile: Q.lowMemory });
   scene.backgroundIntensity = 1; scene.backgroundBlurriness = 0; scene.backgroundRotation = new THREE.Euler(0, SKY.rot, 0);
   window.__sky = { ...SKY, background: 'procedural-natural' };
+  // M7.0A2 day/night: the server's clock arrives in `welcome`; solo play uses the default 60-minute day.
+  // ?tod=sunrise|noon|sunset|midnight|<hour> (and ?devtime=1 for buttons) preview a time on local and preview hosts only.
+  dayNight = createDayNight({ scene, renderer, camera, key, rim, hemi, keyDir, mobile: Q.lowMemory });
+  dayNight.setBloom(bloom);
+  if (!multiplayerDev) dayNight.setClock(cityClockConfig({ enabled: Q.dayNight !== false }));
+  if (devTimeAllowed(location.hostname)) {
+    const preview = parseDevTime(qs.get('tod')); if (preview !== null) dayNight.setDevHour(preview);
+    if (qs.get('devtime') === '1') mountDevTimePanel();
+  }
   pmsg.textContent = 'Building the block…';
   await buildWorld(scene, Q, (f) => { loadedFrac = f; pbar.style.width = Math.round(f * 100) + '%'; });
   if (Q.cityExpansion) { city = buildCityExpansion(scene, Q); console.log('city expansion:', JSON.stringify(city.stats())); }
   // street lamp lights (real point lights) + emissive bulbs
-  const bulbGeo = new THREE.SphereGeometry(0.11, 10, 8), bulbMat = new THREE.MeshBasicMaterial({ color: 0xffd9a0, toneMapped: false });
+  const bulbGeo = new THREE.SphereGeometry(0.11, 10, 8), bulbMat = new THREE.MeshBasicMaterial({ color: 0xffd9a0, toneMapped: false }); lampBulbMat = bulbMat;
   for (const l of lamps) {
     const parent = l.cityChunk ? scene.getObjectByName(`city-chunk-${l.cityChunk}`) || scene : scene;
     const bulb = new THREE.Mesh(bulbGeo, bulbMat); bulb.position.set(l.x, l.y + 0.05, l.z); bulb.scale.set(1, 1.3, 1); parent.add(bulb);
-    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: fx.flashMat.map, color: 0xffb060, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.55, toneMapped: false })); glow.position.copy(bulb.position); glow.scale.setScalar(1.6); parent.add(glow);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: fx.flashMat.map, color: 0xffb060, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.55, toneMapped: false })); glow.position.copy(bulb.position); glow.scale.setScalar(1.6); parent.add(glow); lampGlows.push(glow);
   }
   // Original and copied neighborhood lamps share a fixed light pool. Moving
   // the pool when the nearest destructible block changes keeps the Three.js
@@ -1424,6 +1462,7 @@ function loop(now) {
   if (fx.shake > 0.001) { const a = fx.shake * fx.shake; camera.position.x += (Math.random() - 0.5) * 0.16 * a; camera.position.y += (Math.random() - 0.5) * 0.12 * a; camera.rotation.z += (Math.random() - 0.5) * 0.03 * a; }
   hurtK = Math.max(0, hurtK - dt * 1.6); grade.uniforms.hurt.value = player.dead ? 0.9 : hurtK * 0.8 + (1 - player.hp / player.maxHp) * 0.35; hud.hurt(player.dead ? 0.8 : hurtK * 0.7);
   grade.uniforms.time.value = time;
+  updateDayNight();
   snapShadow(player.pos);
   setListener(camera.position, player.yaw);
   performanceProfile.end('effects-destruction-shadow-audio', systemStarted); systemStarted = performanceProfile.start();
