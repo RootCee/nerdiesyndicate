@@ -197,13 +197,25 @@ export function buildCityExpansion(scene, Q = {}) {
     const light = new THREE.PointLight(0xffc57a, 0, 13, 2);
     light.name = `city-stream-light-${i}`; infrastructure.add(light); cityLightPool.push(light);
   }
-  // the pooled lights follow the lamps nearest the player
-  let lightFocus = { x: 0, z: 28 };
-  function updateCityLights(focus = lightFocus) {
-    lightFocus = focus;
-    const near = cityLightPool.length && city?.mode !== 'combat' ? ground.streetlights.map((l) => [l, (l.x - focus.x) ** 2 + (l.z - focus.z) ** 2]).sort((a, b) => a[1] - b[1]).slice(0, cityLightPool.length) : [];
+  // The pooled lights follow the lamps nearest the player. Re-picked only after the player moves a
+  // metre (or on a mode/level change), without allocating, so walking makes no per-frame garbage.
+  const lightFocus = { x: 0, z: 28, picked: false }, nearest = [];
+  function updateCityLights(focus = null) {
+    if (focus) {
+      if (lightFocus.picked && (focus.x - lightFocus.x) ** 2 + (focus.z - lightFocus.z) ** 2 < 1) return;
+      lightFocus.x = focus.x; lightFocus.z = focus.z;
+    }
+    lightFocus.picked = true;
+    nearest.length = 0;
+    if (cityLightPool.length && city?.mode !== 'combat') for (const l of ground.streetlights) {
+      const d = (l.x - lightFocus.x) ** 2 + (l.z - lightFocus.z) ** 2;
+      if (nearest.length < cityLightPool.length) nearest.push([d, l]);
+      else if (d < nearest[nearest.length - 1][0]) { nearest[nearest.length - 1][0] = d; nearest[nearest.length - 1][1] = l; }
+      else continue;
+      for (let i = nearest.length - 1; i > 0 && nearest[i][0] < nearest[i - 1][0]; i--) [nearest[i], nearest[i - 1]] = [nearest[i - 1], nearest[i]];
+    }
     cityLightPool.forEach((light, index) => {
-      const site = near[index]?.[0];
+      const site = nearest[index]?.[1];
       if (site) { light.position.set(site.x + site.armX * 1.35, 4.4, site.z + site.armZ * 1.35); light.intensity = 28 * streetlights.level; }
       else light.intensity = 0;
     });
@@ -237,7 +249,8 @@ export function buildCityExpansion(scene, Q = {}) {
     },
     setMode(mode) {
       this.mode = mode;
-      if (mode === 'combat') { for (const chunk of chunks) { chunk.visible = false; chunk.group.visible = false; } updateCityLights(); }
+      if (mode === 'combat') { for (const chunk of chunks) { chunk.visible = false; chunk.group.visible = false; } }
+      updateCityLights(); // off in combat; re-picked at once on return
     },
     update(player) {
       if (this.mode === 'combat') return;

@@ -11,7 +11,7 @@ if (!sourceRoot) {
   throw new Error('Usage: node scripts/sync-mafia-wars-preview.mjs /absolute/path/to/game/source');
 }
 
-const expectedCommit = 'd49f661493493ae7be2b95d86d2bdbaeda16b1f5';
+const expectedCommit = '6ea5ffef569f965bd378a356fa8303bfe17ca982';
 // M7.0A previews use their own server (the apartment's server space moved with the city layout); production is unaffected.
 const previewMultiplayerService = 'https://nerdie-city-m7-0a-preview.buddieroots.workers.dev';
 const runtimeFiles = ['index.html', 'version.txt'];

@@ -233,6 +233,7 @@ const CONTACT_GAP = 0.02;       // weapon contact points sit this far off the me
 const SHOULDER_TOP_OUT = 0.02;  // the RPG rests this far outboard of the shoulder joint
 const SPINE_SHARE = Object.freeze([['spine0', 0.3, 0.2], ['spine1', 0.3, 0.2], ['spine', 0.25, 0.2], ['neck', 0.15, 0.25]]);
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+const LOCOMOTION = new Set(['walk', 'run']);
 export class Character {
   constructor(scene, modelName, ghostMat, { presenceOnly = false, weaponId = presenceOnly ? null : 'ak', holstered = false } = {}) {
     const src = lib.models[modelName]; if (!src) throw new Error(`Character preset not loaded: ${modelName}`);
@@ -271,8 +272,12 @@ export class Character {
   play(name, fade = 0.15, once = false) {
     const key = CLIP_MAP[name] || name; if (this.cur === key && !once) return;
     const a = this.actions[key]; if (!a) return;
-    if (this.curA && this.curA !== a) this.curA.fadeOut(fade);
-    a.reset().fadeIn(fade).play(); a.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat); a.clampWhenFinished = once;
+    const prev = this.curA;
+    if (prev && prev !== a) prev.fadeOut(fade);
+    a.reset().fadeIn(fade).play();
+    // walk <-> run keep the stride's phase instead of restarting it (the restart read as a stutter)
+    if (prev && prev !== a && LOCOMOTION.has(key) && LOCOMOTION.has(this.cur)) a.time = (prev.time / prev.getClip().duration) * a.getClip().duration;
+    a.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat); a.clampWhenFinished = once;
     if (key === 'run') a.timeScale = 1.05; if (key === 'walk') a.timeScale = 1.2;
     this.cur = key; this.curA = a;
   }

@@ -34,6 +34,7 @@ export class ThirdPersonCamera {
     this.yaw = player.yaw;
     this.pitch = player.pitch;
     this.currentPosition = new THREE.Vector3();
+    this.currentOffset = new THREE.Vector3(); // camera relative to the follow target (smoothed)
     this.currentDistance = this.distance;
     this.initialized = false;
     this.collision = { hit: false, fraction: 1, distance: this.distance };
@@ -84,8 +85,13 @@ export class ThirdPersonCamera {
     // ground is visual geometry (not a raycast collider), so constrain the
     // camera to the player's current walking floor without changing the orbit.
     DESIRED.y = clampCameraHeight(DESIRED.y, player.pos.y);
-    if (snap || !this.initialized) this.currentPosition.copy(DESIRED);
-    else this.currentPosition.lerp(DESIRED, dampFactor(this.smoothing, dt));
+    // Smooth the camera's offset from the player, not its world position: the camera then moves
+    // with the player exactly, so frame-time hitches no longer jerk the character on screen while
+    // walking or running. Orbit and collision changes stay smoothed.
+    DESIRED.sub(TARGET);
+    if (snap || !this.initialized) this.currentOffset.copy(DESIRED);
+    else this.currentOffset.lerp(DESIRED, dampFactor(this.smoothing, dt));
+    this.currentPosition.copy(TARGET).add(this.currentOffset);
     // Also clamp the smoothed position so a prior below-floor frame cannot ease
     // upward through visible terrain on slower mobile frame rates.
     this.currentPosition.y = clampCameraHeight(this.currentPosition.y, player.pos.y);

@@ -53,7 +53,7 @@ function initTouch() {
   }, { passive: false });
   canvas.addEventListener('touchmove', (e) => {
     for (const t of e.changedTouches) {
-      if (t.identifier === stick.id) { let dx = t.clientX - stick.x0, dy = t.clientY - stick.y0; const d = Math.hypot(dx, dy); if (d > 48) { dx *= 48 / d; dy *= 48 / d; } input.moveX = dx / 48; input.moveY = -dy / 48; input.sprint = d > 44; knob.style.transform = `translate(${dx}px,${dy}px)`; }
+      if (t.identifier === stick.id) { let dx = t.clientX - stick.x0, dy = t.clientY - stick.y0; const d = Math.hypot(dx, dy); if (d > 48) { dx *= 48 / d; dy *= 48 / d; } input.moveX = dx / 48; input.moveY = -dy / 48; input.sprint = input.sprint ? d > 36 : d > 44; /* hysteresis: a thumb resting near the rim no longer flips walk/run every frame */ knob.style.transform = `translate(${dx}px,${dy}px)`; }
       else if (t.identifier === look.id) {
         // Small thumb movements turn more finely for aiming; fast swipes keep full speed.
         const dx = t.clientX - look.x, dy = t.clientY - look.y, gain = 2.2 * Math.min(1.15, 0.65 + Math.hypot(dx, dy) / 20);
