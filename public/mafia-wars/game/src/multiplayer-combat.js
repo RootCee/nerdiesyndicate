@@ -38,6 +38,8 @@ const FORBIDDEN = ['playerId', 'targetId', 'targetIds', 'targets', 'damage', 'hi
 // M6.9 dev3: how far back the server may look for where targets were when a shot was aimed
 // (the shooter saw them interpolated ~120 ms in the past, plus half their round trip).
 export const MAX_REWIND_MS = 250;
+// Residents are drawn further behind (200 ms ticks, 350 ms interpolation), so shots at them may look back further.
+export const MAX_NPC_REWIND_MS = 500;
 // The shot must leave within this angle (horizontally) of where the shooter's camera faces.
 export const MAX_AIM_OFF_FACING = 1.4;
 const finiteVector = (value) => value && ['x', 'y', 'z'].every((key) => Number.isFinite(value[key]));
@@ -144,8 +146,8 @@ export function applyFireIntent(player, message, now, protocolVersion) {
   const direction = { x: message.direction.x / length, y: message.direction.y / length, z: message.direction.z / length };
   const origin = { x: player.state?.x || 0, y: (player.state?.y || 0) + MULTIPLAYER_SHOT_EYE_HEIGHT, z: player.state?.z || 0 };
   // viewAt (M6.9 dev3, optional): the server time the shooter was viewing targets at; bounded, so it can only ever look back MAX_REWIND_MS
-  const rewindMs = Number.isFinite(message.viewAt) ? Math.max(0, Math.min(MAX_REWIND_MS, now - message.viewAt)) : 0;
-  return { ok: true, shot: { playerId: player.id, weaponId: message.weaponId, origin, direction, sequence: message.seq, spaceId: player.context?.space?.id || 'city', serverTime: now, rewindMs }, combat: combatView(player.combat, now) };
+  const lookBack = Number.isFinite(message.viewAt) ? Math.max(0, now - message.viewAt) : 0, rewindMs = Math.min(MAX_REWIND_MS, lookBack), npcRewindMs = Math.min(MAX_NPC_REWIND_MS, lookBack);
+  return { ok: true, shot: { playerId: player.id, weaponId: message.weaponId, origin, direction, sequence: message.seq, spaceId: player.context?.space?.id || 'city', serverTime: now, rewindMs, npcRewindMs }, combat: combatView(player.combat, now) };
 }
 
 export function publicCombatView(state, now = Date.now()) {
@@ -259,7 +261,7 @@ export function resolveAuthoritativeShot(shooter, shot, players, now, { occluded
       : segmentOccluded(primaryCenter, targetCenter, occluded === undefined ? (underground ? undergroundShotOccluded : publicCityShotOccluded) : occluded);
     if (target.combat.protectionUntil > now || targetBlocked) continue;
     // firearm hits scale by body region (head 2x ...); RPG splash never does
-    const damage = shot.weaponId === 'rpg' ? Math.max(20, Math.round(rule.damage * (1 - Math.min(rule.splash, Math.hypot(target.state.x - primary.target.state.x, target.state.z - primary.target.state.z)) / rule.splash))) : primary.region ? regionDamage(rule.damage, primary.region) : rule.damage;
+    const damage = shot.weaponId === 'rpg' ? Math.max(20, Math.round(rule.damage * (1 - Math.min(rule.splash, Math.hypot(target.state.x - primary.target.state.x, target.state.z - primary.target.state.z)) / rule.splash))) : primary.region ? regionDamage(rule.damage, primary.region, target.combat.health) : rule.damage;
     target.combat.health = Math.max(0, target.combat.health - damage);
     if (target.combat.health === 0) { target.combat.dead = true; target.combat.deaths++; target.combat.respawnAt = now + MULTIPLAYER_COMBAT_RULES.respawnMs; shooter.combat.kills++; elimination = { killerId: shooter.id, victimId: target.id }; }
     impacts.push({ targetId: target.id, damage, health: target.combat.health, dead: target.combat.dead, ...(primary.region && shot.weaponId !== 'rpg' ? { region: primary.region } : {}) });

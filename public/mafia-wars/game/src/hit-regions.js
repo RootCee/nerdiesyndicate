@@ -9,7 +9,14 @@
 // resident melee are unaffected).
 export const HIT_MULTIPLIERS = Object.freeze({ head: 2.0, upperTorso: 1.0, lowerTorso: 0.9, arms: 0.75, legs: 0.7 });
 export const HIT_REGIONS = Object.freeze(Object.keys(HIT_MULTIPLIERS));
-export const regionDamage = (base, region) => Math.round(base * (HIT_MULTIPLIERS[region] ?? 1));
+// Founder request (dev3.1): a firearm headshot kills outright, players and residents alike. Set false
+// to fall back to the head multiplier above.
+export const HEADSHOT_KILLS = true;
+// Damage for a firearm hit on `region` against a target with `health` left.
+export const regionDamage = (base, region, health = Infinity) => (region === 'head' && HEADSHOT_KILLS && Number.isFinite(health) ? Math.max(health, Math.round(base * HIT_MULTIPLIERS.head)) : Math.round(base * (HIT_MULTIPLIERS[region] ?? 1)));
+// Residents: the CC0 library models stand 1.86 m at height factor 1; unarmed, scaled to height and build.
+export const NPC_BODY_HEIGHT = 1.86;
+export const residentBodyOptions = (appearance, moving = false) => ({ stance: 'unarmed', height: NPC_BODY_HEIGHT * (appearance?.height || 1), girth: appearance?.build || 1, moving });
 
 const cap = (region, a, b, r) => Object.freeze({ region, a: Object.freeze(a), b: Object.freeze(b), r });
 // Head, torso and legs are the same in every pose; the arms depend on the stance.

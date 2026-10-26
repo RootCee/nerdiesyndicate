@@ -39,7 +39,7 @@ import { AVATAR_PRESETS, normalizeAvatarAppearance, sameAvatarAppearance } from 
 import { DEFAULT_EQUIPMENT, normalizeEquipment } from './multiplayer-equipment.js';
 import { MULTIPLAYER_SHOT_EYE_HEIGHT, MULTIPLAYER_WEAPON_RULES } from './multiplayer-combat.js';
 import { crosshairShotDirection, aimRaised, directionToAim } from './aim.js';
-import { bodyHit, playerBodyOptions, playerFacing } from './hit-regions.js';
+import { bodyHit, playerBodyOptions, playerFacing, residentBodyOptions } from './hit-regions.js';
 import { createCityMap } from './city-map.js';
 import { relativeBearing } from './city-map-view.js';
 import { buildNavGraph, findRoute, routeProgress } from './city-navigation.js';
@@ -47,13 +47,13 @@ import { cityPois } from './city-pois.js';
 import { UNDERGROUND_HOUSES } from './underground-match.js';
 import { UNDERGROUND_SPAWNS } from './multiplayer-combat.js';
 import * as npcLibrary from './npc-library.js';
-import { NpcRenderer } from './npc-renderer.js';
+import { NpcRenderer, NPC_RENDER_RULES } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.9-dev3';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.9-dev4';
 
-const GAME_BUILD_ID = 'm6.9-dev3';
+const GAME_BUILD_ID = 'm6.9-dev4';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -272,12 +272,21 @@ function crosshairAim(range) {
     const body = bodyHit(camera.position, aimForward, seen, playerFacing(seen), playerBodyOptions(seen, !!remote.equipment?.weaponId && !remote.equipment?.holstered));
     if (body) hit = Math.min(hit, body.distance);
   }
+  // ...and on residents where they are drawn (they lag further behind: 350 ms), remembered for viewAt
+  aimedAtResident = false;
+  if (spaceId === 'city') for (const r of npcRenderer.aimTargets()) {
+    const body = bodyHit(camera.position, aimForward, r, r.yaw, residentBodyOptions(r.appearance, r.speed > 0.3));
+    if (body && body.distance < hit) { hit = body.distance; aimedAtResident = true; }
+  }
   aimOrigin.set(player.pos.x, player.pos.y + MULTIPLAYER_SHOT_EYE_HEIGHT, player.pos.z);
   return crosshairShotDirection({ camera: camera.position, forward: aimForward, origin: aimOrigin, hitDistance: hit, range }, multiplayerAim);
 }
 const remotePlayers = new Map();
-// M6.9 dev3: the server time the remote players on screen are drawn at (their interpolation delay behind now)
+// M6.9 dev3: the server time the remote players on screen are drawn at (their interpolation delay behind now);
+// for a resident under the crosshair, the residents' own (longer) delay
+let aimedAtResident = false;
 function multiplayerViewTime() {
+  if (aimedAtResident) return Date.now() + multiplayerServerOffset - NPC_RENDER_RULES.interpolationMs;
   let delay = 0, n = 0;
   for (const remote of remotePlayers.values()) if (remote.character?.obj.visible) { delay += remote.metrics.interpolationMs; n++; }
   return Date.now() + multiplayerServerOffset - (n ? delay / n : MULTIPLAYER_LIMITS.interpolationMs);

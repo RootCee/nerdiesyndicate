@@ -18,7 +18,7 @@ import { NPC_BEHAVIOR, NPC_BEHAVIOR_RULES, greetingFor, personalityOf, reactionT
 import { NPC_COMBAT_RULES, assessThreat, strikeProfile, weaponClass } from './npc-combat.js';
 import { isInsideSafeZone } from './multiplayer-spaces.js';
 import { cityShotOccluded, publicCityShotOccluded, targetDistance } from './multiplayer-combat.js';
-import { bodyHit } from './hit-regions.js';
+import { bodyHit, residentBodyOptions } from './hit-regions.js';
 
 export const NPC_SIM_RULES = Object.freeze({
   tickMs: 200,
@@ -39,8 +39,6 @@ export const NPC_SIM_RULES = Object.freeze({
 export const NPC_ANIM = Object.freeze({ idle: 0, walk: 1, notice: 2 });
 
 const hard = (obstacles) => obstacles.filter((r) => !r.soft);
-// The resident models stand 1.86 m at height factor 1 (measured from the CC0 library meshes).
-const NPC_BODY_HEIGHT = 1.86;
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 
 export class CityNpcSimulation {
@@ -254,8 +252,8 @@ export class CityNpcSimulation {
       if (!r.active || r.behavior === NPC_BEHAVIOR.defeated || isInsideSafeZone({ x: r.x, y: 0, z: r.z })) continue;
       let d, region = null;
       if (regions) {
-        const p = at === null ? r : this.#residentAt(r, at), look = r.identity.appearance;
-        const hit = bodyHit(origin, direction, { x: p.x, y: 0, z: p.z }, p.yaw || 0, { stance: 'unarmed', height: NPC_BODY_HEIGHT * (look?.height || 1), girth: look?.build || 1, moving: (r.speed || 0) > 0.3 });
+        const p = at === null ? r : this.#residentAt(r, at);
+        const hit = bodyHit(origin, direction, { x: p.x, y: 0, z: p.z }, p.yaw || 0, residentBodyOptions(r.identity.appearance, (r.speed || 0) > 0.3));
         d = hit?.distance ?? null; region = hit?.region ?? null;
       } else d = targetDistance(origin, direction, { x: r.x, y: 0, z: r.z });
       if (d === null || d > limit) continue;

@@ -76,10 +76,10 @@ assert.equal((index.match(/id="tFire"/g) || []).length, 1);
 assert.doesNotMatch(index, /tFire2/);
 assert.match(index, /@media \(pointer: coarse\) and \(orientation: portrait\)/);
 assert.match(index, /id="mpDiagnosticsToggle"[^>]*hidden/);
-assert.match(index, /src="src\/main\.js\?build=m6\.9-dev3"/);
+assert.match(index, /src="src\/main\.js\?build=m6\.9-dev4"/);
 assert.match(main, /multiplayer-endpoint\.js\?build=m6\.3-cross-device-diagnostics-rc1/);
-assert.match(main, /wallet-bridge\.js\?build=m6\.9-dev3/);
-assert.match(main, /const GAME_BUILD_ID = 'm6\.9-dev3'/);
+assert.match(main, /wallet-bridge\.js\?build=m6\.9-dev4/);
+assert.match(main, /const GAME_BUILD_ID = 'm6\.9-dev4'/);
 // M6.5 Underground 6v6: results panel and server match state handling.
 assert.match(index, /id="ugResults"[^>]*role="dialog"/);
 assert.match(index, /id="ugStay"/); assert.match(index, /id="ugLeave"/);
@@ -201,6 +201,10 @@ assert.match(main, /bodyHit\(camera\.position, aimForward, seen/);
 assert.match(main, /multiplayer\.fireWeapon\(weaponId, crosshairAim\(rule\.range\), multiplayerViewTime\(\)\)/);
 assert.match(mpClient, /viewAt: Math\.round\(viewAt\)/);
 assert.match(index, /#hit\.head svg \{ stroke: #f5c542/);
+// dev4: one-shot headshots; the crosshair converges on residents too, with their render delay on fire.
+assert.match(hitRegions, /export const HEADSHOT_KILLS = true/);
+assert.match(main, /for \(const r of npcRenderer\.aimTargets\(\)\)/);
+assert.match(main, /NPC_RENDER_RULES\.interpolationMs/);
 assert.match(remotePlayer, /\(state\.aim \|\| 0\) > 0\.5/);
 assert.match(aimModule, /export function aimRaised/);
 assert.match(mpClient, /movement\.aim = aim\.raised \? 1 : 0/);

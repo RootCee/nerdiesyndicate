@@ -75,6 +75,12 @@ export class NpcRenderer {
     }
     for (const index of message.r || []) this.#remove(index);
   }
+  // M6.9 dev3.1: residents as drawn right now, for the crosshair to converge on
+  aimTargets() {
+    const out = [];
+    for (const e of this.entries.values()) if (e.visual?.root.visible && e.render && e.render.behavior !== NPC_BEHAVIOR.defeated) out.push({ x: e.render.x, y: e.visual.root.position.y, z: e.render.z, yaw: e.render.yaw, speed: e.render.speed || 0, appearance: e.identity.appearance });
+    return out;
+  }
   #remove(index) { const e = this.entries.get(index); if (e?.visual) e.visual.dispose(); this.entries.delete(index); }
   clear() { for (const index of [...this.entries.keys()]) this.#remove(index); this.stats.drawn = 0; this.stats.visuals = 0; }
 
