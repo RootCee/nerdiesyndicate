@@ -6,6 +6,8 @@
 import { interpolateSnapshots } from './multiplayer-protocol.js';
 import { isNpcId, npcIdentityValid } from './npc-schema.js';
 import { NPC_BEHAVIOR, personalityOf } from './npc-behavior.js';
+import { applySeatedPose, findSeatBones } from './seated-pose.js';
+const NPC_ANIM_SIT = 3; // npc-sim.js NPC_ANIM.sit (not imported: the simulation module is server-side)
 
 export const NPC_RENDER_RULES = Object.freeze({
   drawRadius: 70, maxDrawnMobile: 10, maxDrawnDesktop: 16,
@@ -152,6 +154,8 @@ export class NpcRenderer {
       const every = e.distance < NPC_RENDER_RULES.fullRateRadius ? 1 : e.distance < NPC_RENDER_RULES.halfRateRadius ? 2 : 4;
       e.animAccum = (e.animAccum || 0) + dt;
       if (this.frame % every === 0) { v.mixer.update(e.animAccum); e.animAccum = 0; mixerUpdates++; }
+      // M7.1D: a resident playing chess (anim 3, npc-sim's NPC_ANIM.sit) sits on the stool facing the board
+      if (r.state === NPC_ANIM_SIT && (v.seatBones ||= findSeatBones(v.root))) applySeatedPose(v.root, v.seatBones, { x: r.x, z: r.z, yaw: r.yaw });
     }
     const ms = performance.now() - started;
     Object.assign(this.stats, { known: this.entries.size, drawn: drawn.size, visuals, mixerUpdates, alert, fleeing, fighting, down, updateMs: this.stats.updateMs * 0.9 + ms * 0.1 });

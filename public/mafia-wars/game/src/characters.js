@@ -14,6 +14,7 @@ import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import * as SkeletonUtils from '/mafia-wars/game/vendor/three/jsm/utils/SkeletonUtils.js';
 import { loadGLB, prep } from './assets.js';
 import { AVATAR_PRESETS, isAvatarPreset } from './avatar-schema.js';
+import { applySeatedPose, findSeatBones } from './seated-pose.js';
 
 export const ROSTER = {
   blue: ['blue_zip', 'navy'],
@@ -269,6 +270,12 @@ export class Character {
     this.scene.add(this.gun); this.gun.visible = this.obj.visible && !this.holstered && !this.dead; return true;
   }
   setHolstered(holstered) { this.holstered = !!holstered || !this.weaponId; if (this.gun) this.gun.visible = this.obj.visible && !this.holstered && !this.dead; }
+  // M7.1D: seated at a chess table ({ x, z, yaw } on the stool, facing the board) or null. While seated
+  // the character sits on the stool whatever position it is given, with its weapon put away.
+  setSeated(seat) {
+    if (seat && !this.seatBones) this.seatBones = findSeatBones(this.inner);
+    this.seat = seat && this.seatBones ? seat : null;
+  }
   play(name, fade = 0.15, once = false) {
     const key = CLIP_MAP[name] || name; if (this.cur === key && !once) return;
     const a = this.actions[key]; if (!a) return;
@@ -285,6 +292,13 @@ export class Character {
   // `moving`: the feet follow the aim at once (default, as bots and older callers expect);
   // standing, the upper body twists first and the feet turn only past AIM_RULES.turnStart.
   update(dt, pos, yaw, aiming, dead, contactOffset = null, { moving = true } = {}) {
+    if (this.seat && !dead) {
+      this.bodyYaw = this.seat.yaw; this.visualOffset.set(0, 0, 0); this.raise = this.ready = 0;
+      this.play('Idle_Gun', 0.25); this.mixer.update(dt);
+      applySeatedPose(this.obj, this.seatBones, this.seat);
+      if (this.gun) this.gun.visible = false;
+      return;
+    }
     const targetOffset = contactOffset || _t.set(0, 0, 0);
     this.visualOffset.lerp(targetOffset, 1 - Math.exp(-18 * Math.max(0, dt)));
     let aimYaw = yaw, aimPitch = this.aimPitch;

@@ -36,7 +36,7 @@ export const NPC_SIM_RULES = Object.freeze({
   idleMinMs: 2500, idleMaxMs: 9000, visitIdleMs: 7000,
   noticeRadius: 10, hearingRadius: 45, memoryMs: 60_000,
 });
-export const NPC_ANIM = Object.freeze({ idle: 0, walk: 1, notice: 2 });
+export const NPC_ANIM = Object.freeze({ idle: 0, walk: 1, notice: 2, sit: 3 }); // sit: M7.1D chess (seated on a stool)
 
 const hard = (obstacles) => obstacles.filter((r) => !r.soft);
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -266,15 +266,20 @@ export class CityNpcSimulation {
 
   drainStrikes() { const strikes = this.strikes; this.strikes = []; return strikes; }
 
-  // M7.1D: a resident playing chess holds its seat (stand point, facing the board) until released;
-  // it stays active and visible, skips its routine and reactions, and resumes them afterwards.
-  holdSeat(index, { x, z, yaw }) {
+  // M7.1D: a resident playing chess sits at its seat (on the stool, facing the board; anim `sit`) until
+  // released; it stays active and visible, skips its routine and reactions, and resumes them afterwards,
+  // stepping off the stool to the seat's stand point (open ground, so its next route can start there).
+  holdSeat(index, { x, z, yaw, stand = null }) {
     const r = this.residents[index]; if (!r) return false;
-    r.held = { x, z, yaw };
-    Object.assign(r, { x, z, yaw, route: null, lastRoute: null, step: 0, speed: 0, anim: NPC_ANIM.idle, placed: true, behavior: NPC_BEHAVIOR.calm, fleeing: false, fight: null, threat: null, pending: null, aware: null, trail: null });
+    r.held = { x, z, yaw, stand };
+    Object.assign(r, { x, z, yaw, route: null, lastRoute: null, step: 0, speed: 0, anim: NPC_ANIM.sit, placed: true, behavior: NPC_BEHAVIOR.calm, fleeing: false, fight: null, threat: null, pending: null, aware: null, trail: null });
     return true;
   }
-  releaseSeat(index) { const r = this.residents[index]; if (!r?.held) return false; r.held = null; r.route = null; r.waitUntil = 0; return true; }
+  releaseSeat(index) {
+    const r = this.residents[index]; if (!r?.held) return false;
+    if (r.held.stand) { r.x = r.held.stand.x; r.z = r.held.stand.z; }
+    r.held = null; r.route = null; r.waitUntil = 0; r.anim = NPC_ANIM.idle; return true;
+  }
 
   #targetable(p) { return p && !p.dead && !p.safe && !p.protected; }
   // Reach, line of sight through the city (buildings, walls, fences), and target state.
@@ -477,7 +482,7 @@ export class CityNpcSimulation {
     for (const r of this.residents) {
       r.memory = r.memory.filter((m) => now - m.at < rules.memoryMs);
       if (r.threats.length) r.threats = r.threats.filter((t) => now - t.at < NPC_BEHAVIOR_RULES.threatMemoryMs); // forget on time, active or not
-      if (r.held) { Object.assign(r, { x: r.held.x, z: r.held.z, yaw: r.held.yaw, speed: 0, anim: NPC_ANIM.idle, route: null, behavior: NPC_BEHAVIOR.calm, fleeing: false, fight: null, aware: null, pending: null }); r.lastDormantAt = now; continue; }
+      if (r.held) { Object.assign(r, { x: r.held.x, z: r.held.z, yaw: r.held.yaw, speed: 0, anim: NPC_ANIM.sit, route: null, behavior: NPC_BEHAVIOR.calm, fleeing: false, fight: null, aware: null, pending: null }); r.lastDormantAt = now; continue; }
       if (!r.active) {
         // A defeated resident stays down until it can respawn out of sight.
         if (r.behavior === NPC_BEHAVIOR.defeated && !this.#outOfSight(r, players)) { r.speed = 0; continue; }

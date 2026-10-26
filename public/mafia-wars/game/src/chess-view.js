@@ -92,6 +92,19 @@ export function tablePrompt(summary, mobile = false) {
   if (summary.s === 'over' && !summary.x && (!summary.w || !summary.b)) return { text: `${key}PLAY CHESS`, label: 'PLAY CHESS', action: 'sit' };
   return { text: `${key}WATCH CHESS`, label: 'WATCH CHESS', action: 'watch' };
 }
+// Where each seated player sits, from the occupancy summary: playerId -> { x, z, yaw } on the stool,
+// facing the board (seated-pose.js draws them; the same convention as the server's resident seats).
+export function seatedPlayers(summaries = [], tables = []) {
+  const out = new Map();
+  for (const s of summaries) {
+    const t = tables.find((x) => x.id === s.id); if (!t) continue;
+    for (const [side, i] of [['w', 0], ['b', 1]]) {
+      const o = s[side]; if (o?.kind !== 'player' || !o.id) continue;
+      const seat = t.seats[i]; out.set(o.id, { x: seat.x, z: seat.z, yaw: Math.atan2(t.x - seat.x, t.z - seat.z), tableId: t.id });
+    }
+  }
+  return out;
+}
 // Numbered move list: [['1.', 'e4', 'e5'], ['2.', 'Nf3', '']]
 export function moveRows(san = []) { const rows = []; for (let i = 0; i < san.length; i += 2) rows.push([`${i / 2 + 1}.`, san[i], san[i + 1] || '']); return rows; }
 // Captured pieces from the server's capture list: white's haul is black pieces (lower case).

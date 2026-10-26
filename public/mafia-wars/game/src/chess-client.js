@@ -3,7 +3,7 @@
 // from the room server, and the board shows only what the server last sent.
 import { CHESS_TABLES } from './city-park-layout.js';
 import { CHESS_LEVELS } from './chess-residents.js';
-import { BoardModel, GLYPHS, PIECE_NAMES, capturedBy, colorOf, isLight, kingInCheck, moveRows, occupantLabel, orderedSquares, parseFen, statusLine, tablePrompt, targetsFrom } from './chess-view.js';
+import { BoardModel, GLYPHS, PIECE_NAMES, capturedBy, colorOf, isLight, kingInCheck, moveRows, occupantLabel, orderedSquares, parseFen, seatedPlayers, statusLine, tablePrompt, targetsFrom } from './chess-view.js';
 
 const PROMPT_REACH = 2.6; // matches the server's seat reach (3 m) with a margin
 const STYLE = `
@@ -61,6 +61,8 @@ export class ChessClient {
     this.nearest = null;
   }
   get open() { return this.isOpen; }
+  // Where a player sits (the game draws them seated there), or null: from the occupancy every client receives.
+  seatOf(playerId) { return (playerId && this.seats?.get(playerId)) || null; }
   // ---- world: the prompt beside a table (returns { prompt, mobileLabel })
   update(player, interact, online = true) {
     if (this.isOpen) return { prompt: '', mobileLabel: '' };
@@ -82,7 +84,7 @@ export class ChessClient {
   }
   // ---- server messages
   onMessage(message) {
-    if (message.type === 'chess-tables') { this.summary = new Map((message.tables || []).map((t) => [t.id, t])); if (this.isOpen && !this.view) this.render(); return; }
+    if (message.type === 'chess-tables') { this.summary = new Map((message.tables || []).map((t) => [t.id, t])); this.seats = seatedPlayers(message.tables, CHESS_TABLES); if (this.isOpen && !this.view) this.render(); return; }
     if (message.type !== 'chess' || message.tableId !== this.tableId) return;
     const wasSeated = !!this.view?.you;
     if (this.view?.matchId !== message.matchId || this.view?.ply !== message.ply) this.board.reset();
@@ -105,7 +107,7 @@ export class ChessClient {
     } else if (this.tableId) this.send({ action: 'unwatch', tableId: this.tableId });
     this.#setOpen(false);
   }
-  reset() { if (this.isOpen) this.#setOpen(false); this.view = null; this.summary.clear(); }
+  reset() { if (this.isOpen) this.#setOpen(false); this.view = null; this.summary.clear(); this.seats = new Map(); }
   #setOpen(open) {
     this.isOpen = open; this.confirming = null; this.levels = false; this.board.reset();
     this.#ensureDom(); this.root?.classList.toggle('on', open); // (headless without a document: the tests)

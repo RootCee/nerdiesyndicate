@@ -56,9 +56,9 @@ import { NpcRenderer, NPC_RENDER_RULES } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m7.1d-dev1';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m7.1d-dev2';
 
-const GAME_BUILD_ID = 'm7.1d-dev1';
+const GAME_BUILD_ID = 'm7.1d-dev2';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -1437,14 +1437,16 @@ function loop(now) {
       // through the surface. This does not alter doorway or physics dimensions.
       avatarContactOffset.set(0, 0, 0);
       if (player.collisionHit && player.planar > 0.25) avatarContactOffset.copy(player.collisionNormal).multiplyScalar(0.14);
+      // M7.1D: seated at a chess table, the avatar sits on the stool (the server's seat list says where)
+      localAvatar.setSeated(multiplayerActive && (localContext.space?.id || 'city') === 'city' ? chessClient.seatOf(multiplayer?.credentials?.playerId) : null);
       updateLocalAim(); localAvatar.aimPitch = localAim.pitch; localAvatar.update(dt, player.pos, localAim.yaw, localAim.raised, player.dead, avatarContactOffset, { moving: player.planar > 0.25 });
-      localAvatar.obj.visible = show; if (localAvatar.gun) localAvatar.gun.visible = show && !localAvatar.holstered;
+      localAvatar.obj.visible = show; if (localAvatar.gun) localAvatar.gun.visible = show && !localAvatar.holstered && !localAvatar.seat;
     }
     if (multiplayerActive && multiplayer?.state === 'connected') {
       if (now >= multiplayerSendAt) { multiplayer.sendMovement(player, now, { raised: !!input.ads && localAim.raised, pitch: localAim.pitch }); multiplayerSendAt = now + 1000 / MULTIPLAYER_LIMITS.updateHz; }
       if (now >= multiplayerPingAt) { multiplayer.ping(); multiplayerPingAt = now + 5000; }
       const serverNow = Date.now() + multiplayerServerOffset;
-      for (const remote of remotePlayers.values()) remote.update(dt, serverNow, player.pos, localContext.space?.id || 'city');
+      for (const remote of remotePlayers.values()) { remote.character?.setSeated(chessClient.seatOf(remote.id)); remote.update(dt, serverNow, player.pos, localContext.space?.id || 'city'); }
       if ((localContext.space?.id || 'city') === 'city') { npcRenderer.update(dt, serverNow, player.pos, now); npcRenderer.pushOut(player.pos); }
       if (now >= multiplayerStatusAt) {
         const capacity = multiplayer.credentials?.capacity || MULTIPLAYER_LIMITS.maxPlayers;
