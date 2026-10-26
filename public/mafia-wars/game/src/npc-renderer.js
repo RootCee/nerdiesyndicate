@@ -10,6 +10,9 @@ import { NPC_BEHAVIOR, personalityOf } from './npc-behavior.js';
 export const NPC_RENDER_RULES = Object.freeze({
   drawRadius: 70, maxDrawnMobile: 10, maxDrawnDesktop: 16,
   interpolationMs: 350,          // 200 ms ticks + jitter
+  combatDelayMs: 120,            // M6.9 sync: residents in a fight are drawn this far behind instead (extrapolating up to a tick)
+  combatLiveMs: 2500,            // ...for this long after their last strike or hit
+  strikeShowMs: 520, hurtShowMs: 450, knockdownShowMs: 2200, defeatShowMs: 1500,
   fullRateRadius: 25, halfRateRadius: 50, // animation updates: every frame / every 2nd / every 4th
   hiddenDisposeMs: 8000, walkClipSpeed: 1.3, playerRadius: 0.75,
   fleeClipSpeed: 3.4,
@@ -81,15 +84,39 @@ export class NpcRenderer {
     for (const e of this.entries.values()) if (e.visual?.root.visible && e.render && e.render.behavior !== NPC_BEHAVIOR.defeated) out.push({ x: e.render.x, y: e.visual.root.position.y, z: e.render.z, yaw: e.render.yaw, speed: e.render.speed || 0, appearance: e.identity.appearance });
     return out;
   }
+  // M6.9 sync: a strike or hit is shown the moment its message arrives (every client gets it at the same
+  // time), at the resident's real position (the event's pose), instead of 350-900 ms later from states.
+  onEvent(message, now = performance.now()) {
+    if (message?.type !== 'npc-strike' && message?.type !== 'npc-hit') return false;
+    const e = this.entries.get(message.npc); if (!e) return false;
+    const B = NPC_BEHAVIOR, R = NPC_RENDER_RULES, strike = message.type === 'npc-strike';
+    const behavior = strike ? B.strike : message.defeated ? B.defeated : message.knockdown ? B.knockdown : B.hurt;
+    e.action = { behavior, until: now + (strike ? R.strikeShowMs : message.defeated ? R.defeatShowMs : message.knockdown ? R.knockdownShowMs : R.hurtShowMs) };
+    if (strike) e.strikeSide = (e.strikeSide || 0) ^ 1; // alternate hands
+    const pose = Array.isArray(message.pose) && message.pose.length === 3 ? decodeNpcState([message.npc, ...message.pose, 1, 0, behavior], message.serverTime) : null;
+    if (pose) { e.snapshots = e.snapshots.filter((s) => s.at !== pose.at).concat(pose).sort((a, b) => a.at - b.at).slice(-8); }
+    e.liveUntil = now + R.combatLiveMs;
+    return true;
+  }
   #remove(index) { const e = this.entries.get(index); if (e?.visual) e.visual.dispose(); this.entries.delete(index); }
   clear() { for (const index of [...this.entries.keys()]) this.#remove(index); this.stats.drawn = 0; this.stats.visuals = 0; }
 
   update(dt, serverNow, viewer, now = performance.now()) {
     const started = performance.now(); this.frame++;
-    const renderAt = serverNow - NPC_RENDER_RULES.interpolationMs;
+    const R = NPC_RENDER_RULES, renderAt = serverNow - R.interpolationMs;
     for (const e of this.entries.values()) if (e.snapshots.length) {
+      // a resident in a fight blends to a near-live position (copy: the slow path still needs the older states)
+      const liveTarget = (e.liveUntil || 0) > now ? 1 : 0;
+      e.liveBlend = Math.max(0, Math.min(1, (e.liveBlend || 0) + Math.sign(liveTarget - (e.liveBlend || 0)) * Math.min(Math.abs(liveTarget - (e.liveBlend || 0)), dt * (liveTarget ? 10 : 2.5))));
+      const live = e.liveBlend > 0 ? interpolateSnapshots(e.snapshots.slice(), serverNow - R.combatDelayMs, e.live || (e.live = {}), 200) : null;
       e.render = interpolateSnapshots(e.snapshots, renderAt, e.render || {}, 0);
       const [a, b] = e.snapshots, latest = b && b.at <= renderAt ? b : a; e.render.behavior = latest.behavior; e.render.health = latest.health; // discrete: no blending
+      if (live) {
+        const k = e.liveBlend, dy = Math.atan2(Math.sin(live.yaw - e.render.yaw), Math.cos(live.yaw - e.render.yaw));
+        e.render.x += (live.x - e.render.x) * k; e.render.z += (live.z - e.render.z) * k; e.render.yaw += dy * k;
+        if (k > 0.5) { const recent = e.snapshots.filter((s) => s.at <= serverNow - R.combatDelayMs).pop(); if (recent) { e.render.behavior = recent.behavior; e.render.health = recent.health; } }
+      }
+      e.render.forcedBehavior = e.action && now < e.action.until ? e.action.behavior : undefined;
     }
     const drawn = new Set(selectDrawn([...this.entries.values()], viewer, this.maxDrawn));
     let visuals = 0, mixerUpdates = 0, builds = 0, alert = 0, fleeing = 0, fighting = 0, down = 0;
@@ -110,16 +137,17 @@ export class NpcRenderer {
       const v = e.visual, r = e.render;
       v.root.visible = true;
       v.root.position.set(r.x, this.groundAt(r.x, r.z), r.z); v.root.rotation.y = r.yaw;
-      if (r.behavior === NPC_BEHAVIOR.strike && e.lastBehavior !== NPC_BEHAVIOR.strike) e.strikeSide = (e.strikeSide || 0) ^ 1; // alternate hands
-      const clip = npcClipFor(r.behavior, r.state === 1 && r.speed > 0.2, r.speed, e.identity, { side: e.strikeSide || 0 });
+      const behavior = r.forcedBehavior ?? r.behavior; // a strike/hit event wins over the (delayed) state
+      if (behavior === NPC_BEHAVIOR.strike && e.lastBehavior !== NPC_BEHAVIOR.strike && r.forcedBehavior === undefined) e.strikeSide = (e.strikeSide || 0) ^ 1; // alternate hands
+      const clip = npcClipFor(behavior, r.state === 1 && r.speed > 0.2, r.speed, e.identity, { side: e.strikeSide || 0 });
       const gettingUp = (e.lastBehavior === NPC_BEHAVIOR.knockdown || e.lastBehavior === NPC_BEHAVIOR.defeated) && clip.name !== 'Death';
       v.play(clip.name, gettingUp ? 0.7 : clip.once ? 0.1 : 0.25, clip.once); // slow blend from the fall pose = getting up
-      e.lastBehavior = r.behavior;
+      e.lastBehavior = behavior;
       if (clip.timeScale && v.current) v.current.timeScale = clip.timeScale;
-      if (r.behavior === NPC_BEHAVIOR.flee) fleeing++;
-      else if (r.behavior === NPC_BEHAVIOR.fight || r.behavior === NPC_BEHAVIOR.strike) fighting++;
-      else if (r.behavior === NPC_BEHAVIOR.knockdown || r.behavior === NPC_BEHAVIOR.defeated) down++;
-      else if (r.behavior !== NPC_BEHAVIOR.calm) alert++;
+      if (behavior === NPC_BEHAVIOR.flee) fleeing++;
+      else if (behavior === NPC_BEHAVIOR.fight || behavior === NPC_BEHAVIOR.strike) fighting++;
+      else if (behavior === NPC_BEHAVIOR.knockdown || behavior === NPC_BEHAVIOR.defeated) down++;
+      else if (behavior !== NPC_BEHAVIOR.calm) alert++;
       // Distance-based animation rate.
       const every = e.distance < NPC_RENDER_RULES.fullRateRadius ? 1 : e.distance < NPC_RENDER_RULES.halfRateRadius ? 2 : 4;
       e.animAccum = (e.animAccum || 0) + dt;

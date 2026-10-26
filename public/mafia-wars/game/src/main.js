@@ -51,9 +51,9 @@ import { NpcRenderer, NPC_RENDER_RULES } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.9-dev4';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m6.9-dev5';
 
-const GAME_BUILD_ID = 'm6.9-dev4';
+const GAME_BUILD_ID = 'm6.9-dev5';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -282,6 +282,7 @@ function crosshairAim(range) {
   return crosshairShotDirection({ camera: camera.position, forward: aimForward, origin: aimOrigin, hitDistance: hit, range }, multiplayerAim);
 }
 const remotePlayers = new Map();
+const NPC_STRIKE_CONTACT_MS = 180; // punch clips connect ~0.18 s in
 // M6.9 dev3: the server time the remote players on screen are drawn at (their interpolation delay behind now);
 // for a resident under the crosshair, the residents' own (longer) delay
 let aimedAtResident = false;
@@ -928,8 +929,9 @@ function configureMultiplayerClient() {
     else if (message.type === 'peer-left') { remotePlayers.get(message.playerId)?.dispose(); remotePlayers.delete(message.playerId); if (Number.isInteger(message.playerCount)) multiplayerPlayerCount = message.playerCount; if (!message.bot) setMultiplayerStatus('Connected · a player is reconnecting'); }
     else if (message.type === 'underground-roster') { if (inLocalUnderground()) for (const bot of message.players || []) { const remote = ensureRemote(bot); if (remote && bot.state) remote.push(bot.state); } }
     else if (message.type === 'npc-roster') { npcRenderer.countBytes(JSON.stringify(message).length, performance.now()); npcRenderer.applyRoster(message.npcs); }
-    else if (message.type === 'npc-hit') { if (message.shooterId === multiplayer.credentials?.playerId) { const head = message.region === 'head'; hud.hit(!!message.defeated, head); sfx.hit({ head }); } }
-    else if (message.type === 'npc-strike') { if (message.targetId === multiplayer.credentials?.playerId && !message.dead) { hurtK = 1; sfx.hurt(); } }
+    else if (message.type === 'npc-hit') { npcRenderer.onEvent(message); if (message.shooterId === multiplayer.credentials?.playerId) { const head = message.region === 'head'; hud.hit(!!message.defeated, head); sfx.hit({ head }); } }
+    // M6.9 sync: everyone sees the punch now; the victim's flinch and sound land on the punch's contact frame
+    else if (message.type === 'npc-strike') { npcRenderer.onEvent(message); if (message.targetId === multiplayer.credentials?.playerId && !message.dead) setTimeout(() => { hurtK = 1; sfx.hurt(); }, NPC_STRIKE_CONTACT_MS); }
     else if (message.type === 'npc-states') { if ((localContext.space?.id || 'city') === 'city') { npcRenderer.countBytes(JSON.stringify(message).length, performance.now()); npcRenderer.applyStates(message); } }
     else if (message.type === 'bot-states') { if (inLocalUnderground()) for (const state of message.states || []) ensureRemote({ id: state.playerId, name: state.name, bot: true, context: UNDERGROUND_REMOTE_CONTEXT })?.push(state); }
     else if (message.type === 'underground-match') applyUndergroundMatch(message);
