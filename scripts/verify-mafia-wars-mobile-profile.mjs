@@ -87,7 +87,7 @@ assert.match(main, /message\.type === 'underground-match'/);
 assert.match(main, /message\.type === 'bot-states'/);
 // M6.5.1 camera choice and crosshair-true multiplayer aim.
 assert.match(index, /id="tCam"[^>]*aria-label="Switch first or third person camera"/);
-assert.match(main, /multiplayer\.fireWeapon\(weaponId, crosshairAim\(rule\.range\)\)/);
+assert.match(main, /multiplayer\.fireWeapon\(weaponId, crosshairAim\(rule\.range\)(?:, multiplayerViewTime\(\))?\)/);
 assert.match(main, /nerdie-city-mafia-wars\.camera\.v1/);
 // M6.6 city map, waypoints, and bank (client-only).
 const [pois, mapView] = await Promise.all(['city-pois.js', 'city-map-view.js'].map((file) => readFile(path.join(root, file), 'utf8')));
