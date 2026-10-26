@@ -12,6 +12,8 @@ import { BANK_BUILDING_ID, bankSite } from './city-pois.js';
 import { createShowcaseMaterials, KitBatch, furniturePiece } from './city-showcase-kit.js';
 import { showcaseBuilding } from './city-showcase.js';
 import { SHOWCASE, inShowcase, showcaseFurniture, showcaseForecourts } from './city-showcase-layout.js';
+import { GunShopSystem } from './gun-shop.js';
+import { GUN_SHOP_BUILDING_ID, gunShopSite } from './gun-shop-layout.js';
 
 const material = (color, roughness = 0.88, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
 const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
@@ -188,7 +190,7 @@ export function buildCityExpansion(scene, Q = {}) {
   const streetlights = buildStreetlights(infrastructure, ground.streetlights, mats);
 
   const chunks = [];
-  let apartment = null, house = null, originalHouse = null, duplicatedHouse = null, combatVenue = null, bank = null;
+  let apartment = null, house = null, originalHouse = null, duplicatedHouse = null, combatVenue = null, bank = null, gunShop = null;
   for (const district of plan.districts) {
     const group = new THREE.Group(); group.name = `city-chunk-${district.id}`; scene.add(group);
     const batch = kit ? new KitBatch() : null;
@@ -217,6 +219,7 @@ export function buildCityExpansion(scene, Q = {}) {
       duplicatedHouse = new HybridHouseSystem(scene, plan.duplicatedEnterableHouse, { addCollider, mobile: plan.profile.key === 'mobile' });
       group.add(duplicatedHouse.exterior);
     }
+    if (district.buildings.some((b) => b.id === GUN_SHOP_BUILDING_ID)) gunShop = new GunShopSystem(scene, gunShopSite(plan), { addCollider, mobile: plan.profile.key === 'mobile', kit });
     if (district.buildings.some((b) => b.id === BANK_BUILDING_ID)) bank = new BankSystem(group, bankSite(plan), { mobile: plan.profile.key === 'mobile', visuals: !kit || !inShowcase(bankSite(plan).x, bankSite(plan).z) });
     if (district.id === 'west-industrial-south') {
       addBox(group, mats.sidewalk, 42, 0.08, 34, -112, 0.02, -72, 'underground-parking-lot');
@@ -272,7 +275,7 @@ export function buildCityExpansion(scene, Q = {}) {
   addCollider(MAP.minX - 2, MAP.maxZ, MAP.maxX + 2, MAP.maxZ + 2, 0, 12, { boundary: true });
 
   const city = {
-    plan, ground, chunks, apartment, house, originalHouse, duplicatedHouse, combatVenue, bank, infrastructure, mode: 'free-roam',
+    plan, ground, chunks, apartment, house, originalHouse, duplicatedHouse, combatVenue, bank, gunShop, infrastructure, mode: 'free-roam',
     // M7.0A2: the shared clock's night level (1 = lit, the original dusk look; 0 = daylight, all off)
     nightLevel: 1,
     setStreetlightLevel(level) { streetlights.setLevel(level); updateCityLights(); },

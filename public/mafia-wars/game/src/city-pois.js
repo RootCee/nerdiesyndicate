@@ -18,7 +18,8 @@ export const STOREFRONT_BUSINESSES = Object.freeze({
   'west-mixed-north-0': SHOWCASE_BUSINESSES['west-mixed-north-0'],
   'west-mixed-north-1': Object.freeze({ id: 'nerdie-city-bank', name: 'Nerdie City Bank', category: 'Bank', status: 'wallet' }),
   'west-mixed-north-2': SHOWCASE_BUSINESSES['west-mixed-north-2'],
-  'west-mixed-north-3': Object.freeze({ id: 'diner', name: 'Diner', category: 'Diner', status: 'coming-soon' }),
+  // Nerdie Arms: an enterable gun and ammo shop (gun-shop-layout.js); open, restocking is free for now
+  'west-mixed-north-3': Object.freeze({ id: 'nerdie-arms', name: 'Nerdie Arms', category: 'Gun & Ammo Shop', status: 'open', spaceId: 'nerdie-arms', kind: 'shop' }),
   'west-industrial-south-0': Object.freeze({ id: 'hardware-store', name: 'Hardware Store', category: 'Hardware Store', status: 'coming-soon' }),
   'west-industrial-south-1': Object.freeze({ id: 'auto-shop', name: 'Auto Shop', category: 'Auto Shop', status: 'coming-soon' }),
   'west-industrial-south-2': Object.freeze({ id: 'laundromat', name: 'Laundromat', category: 'Laundromat', status: 'coming-soon' }),
@@ -73,13 +74,13 @@ export function cityPois(plan = createCityPlan()) {
   for (const district of plan.districts) for (const building of district.buildings) {
     const business = STOREFRONT_BUSINESSES[building.id];
     if (!business || building.kind !== 'storefront') continue;
-    const entry = storefrontEntry(building);
+    const door = storefrontEntry(building), entry = business.spaceId ? { ...fromSpace(business.spaceId), facing: door.facing } : door;
     pois.push({
-      id: business.id, name: business.name, kind: business.id === STOREFRONT_BUSINESSES[BANK_BUILDING_ID].id ? 'bank' : 'business',
+      id: business.id, name: business.name, kind: business.kind || (business.id === STOREFRONT_BUSINESSES[BANK_BUILDING_ID].id ? 'bank' : 'business'), ...(business.spaceId ? { spaceId: business.spaceId } : {}),
       category: business.category, status: business.status, x: building.x, z: building.z, entry: { x: entry.x, z: entry.z }, buildingId: building.id,
       // Step straight out of the door before turning, clear of wider neighbours.
       approach: [{ x: entry.x + FRONT_NORMALS[entry.facing][0] * STEP_OUT, z: entry.z + FRONT_NORMALS[entry.facing][1] * STEP_OUT }],
-      description: business.status === 'wallet' ? BANK_COPY.description : `${business.category}. Coming soon.`,
+      description: business.status === 'wallet' ? BANK_COPY.description : business.status === 'open' ? `${business.category}. Restock ammo at the counter. Safe zone.` : `${business.category}. Coming soon.`,
     });
   }
   return pois.map((poi) => Object.freeze({ ...poi, entry: Object.freeze(poi.entry), approach: Object.freeze(poi.approach || []) }));

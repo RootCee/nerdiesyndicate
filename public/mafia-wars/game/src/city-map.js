@@ -12,6 +12,7 @@ const KIND_STYLE = Object.freeze({
   apartment: { color: '#d6a35a', glyph: 'A', label: 'Apartments' },
   house: { color: '#e8e1d2', glyph: 'H', label: 'House' },
   business: { color: '#9aa6b2', glyph: 'S', label: 'Business' },
+  shop: { color: '#b98cff', glyph: 'G', label: 'Gun & Ammo' },
 });
 const STATUS_LABEL = Object.freeze({ open: 'OPEN', wallet: 'WALLET ONLY', 'coming-soon': 'COMING SOON' });
 const ROUTE_FAILURE = Object.freeze({
@@ -128,7 +129,7 @@ export function createCityMap({ root, rects, bounds, plan, pois, getGraph, arena
   addEventListener('resize', () => { if (open) resize(); });
 
   // Quick list of places (handy on a phone): select and centre.
-  const order = ['bank', 'arena', 'apartment', 'house', 'business'];
+  const order = ['bank', 'shop', 'arena', 'apartment', 'house', 'business'];
   for (const poi of [...pois].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind))) {
     const button = document.createElement('button');
     button.type = 'button'; button.textContent = poi.name; button.dataset.poi = poi.id;

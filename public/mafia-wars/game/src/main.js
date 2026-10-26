@@ -10,6 +10,8 @@ import { manager, loadHDR, loadGLB, setAniso, setLowMemoryAssets } from './asset
 import { buildWorld, colliders, collisionBroadphaseStats, lamps, windowsLit, resolve, MAP, groundAt, lineClear, raycastWorld, mapRects } from './world.js';
 import { createNaturalSkyTexture } from './natural-sky.js';
 import { createDayNight } from './day-night.js';
+import { GUN_SHOP_RULES } from './gun-shop-layout.js';
+import { WEAPON_LABELS } from './gun-shop.js';
 import { cityClockConfig, devTimeAllowed, parseDevTime, readClock, DEV_TIMES } from './city-clock.js';
 import { Player } from './player.js';
 import { FX, Weapon, GUN_SPECS } from './weapon.js';
@@ -53,9 +55,9 @@ import { NpcRenderer, NPC_RENDER_RULES } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m7.0b-dev1';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m7.0b-dev2';
 
-const GAME_BUILD_ID = 'm7.0b-dev1';
+const GAME_BUILD_ID = 'm7.0b-dev2';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -312,6 +314,24 @@ let neighborhoodLightSpecs = [], neighborhoodLightBlock = null;
 // M7.0A2: the Hood lamps (bulbs, glows, pooled lights) follow the city clock's night level
 let lampLevel = 1, lampBulbMat = null, dayNight = null, nightApplied = -1;
 const lampGlows = [];
+// Nerdie Arms: equip from a display case, or restock at the counter (the server decides in multiplayer).
+let soloShopReadyAt = 0;
+function handleGunShopAction(state) {
+  if (state.action === 'equip') { if (multiplayerActive) requestMultiplayerEquipment(state.weaponId); else { selectWeapon(state.weaponId); hud.callout(`${WEAPON_LABELS[state.weaponId]} EQUIPPED`, 'NERDIE ARMS'); } return; }
+  if (state.action !== 'restock') return;
+  if (multiplayerActive) { if (!multiplayer?.shopRestock()) hud.callout('SHOP UNAVAILABLE', 'RECONNECTING'); return; }
+  if (time < soloShopReadyAt) { hud.callout('RESTOCK COOLING DOWN', `READY IN ${Math.ceil(soloShopReadyAt - time)} S`); return; }
+  let added = 0;
+  for (const g of Object.values(guns)) { const cap = MULTIPLAYER_WEAPON_RULES[g.spec?.id]?.reserve ?? g.spec?.reserve ?? g.reserve; added += Math.max(0, cap - g.reserve); g.reserve = Math.max(g.reserve, cap); }
+  const rpgCap = MULTIPLAYER_WEAPON_RULES.rpg.reserve; added += Math.max(0, rpgCap - launcher.reserve); launcher.reserve = Math.max(launcher.reserve, rpgCap);
+  if (!added) { hud.callout('AMMO FULL', 'NOTHING TO RESTOCK'); return; }
+  soloShopReadyAt = time + GUN_SHOP_RULES.restockCooldownMs / 1000; hud.callout('AMMO RESTOCKED', 'ALL RESERVES FULL · FREE'); sfx.ding();
+}
+function showShopReject(message) {
+  if (message.reason === 'shop_cooldown') hud.callout('RESTOCK COOLING DOWN', Number.isFinite(message.readyAt) ? `READY IN ${Math.max(1, Math.ceil((message.readyAt - (Date.now() + multiplayerServerOffset)) / 1000))} S` : 'TRY AGAIN SOON');
+  else if (message.reason === 'ammo_full') hud.callout('AMMO FULL', 'NOTHING TO RESTOCK');
+  else if (message.reason === 'not_at_counter' || message.reason === 'not_in_shop') hud.callout('STEP UP TO THE COUNTER', 'NERDIE ARMS');
+}
 function updateDayNight() {
   if (!dayNight) return;
   const state = dayNight.update(Date.now() + multiplayerServerOffset, { interior: interiorSceneState.active, seconds: time });
@@ -670,7 +690,7 @@ function startGame(mode = selectedMode, options = {}) {
   practiceResupply.setEnabled(practiceCombat);
   setCombatLobby(false);
   score.red = score.blue = 0; MATCH.left = MATCH.time; MATCH.over = false; MATCH.started = true; for (const n in ab) ab[n].have = 0; snitchUntil = 0;
-  for (const interior of [city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = false; interior.interior.visible = false; }
+  for (const interior of [city?.gunShop, city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = false; interior.interior.visible = false; }
   setInteriorRenderLayer(false);
   while (bots.length) ctx.remove(bots[bots.length - 1]);
   player.team = combat ? 'blue' : null;
@@ -805,7 +825,7 @@ function setLocalSafeZone(active) {
 }
 function interiorForSpace(spaceId) {
   if (!city) return null;
-  return spaceId === 'north-court' ? city.apartment : spaceId === 'east-73' ? city.house : spaceId === 'hood-cross-west' ? city.originalHouse : spaceId === 'hood-duplicate-west-5' ? city.duplicatedHouse : null;
+  return spaceId === 'nerdie-arms' ? city.gunShop : spaceId === 'north-court' ? city.apartment : spaceId === 'east-73' ? city.house : spaceId === 'hood-cross-west' ? city.originalHouse : spaceId === 'hood-duplicate-west-5' ? city.duplicatedHouse : null;
 }
 function applyLocalContext(context, revision = localContextRevision + 1, state = null, safeZone = null) {
   if (!context || revision < localContextRevision) return;
@@ -815,7 +835,7 @@ function applyLocalContext(context, revision = localContextRevision + 1, state =
   if (spaceId !== 'city') npcRenderer.clear(); // residents are city-only
   if ((spaceId === 'underground') !== (priorSpace === 'underground')) syncStructures();
   setLocalSafeZone(typeof safeZone === 'boolean' ? safeZone : MULTIPLAYER_SPACES[spaceId]?.safeZone === true);
-  for (const interior of [city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = interior === target; interior.interior.visible = interior === target; }
+  for (const interior of [city?.gunShop, city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = interior === target; interior.interior.visible = interior === target; }
   setInteriorRenderLayer(!!target);
   if (state && ['x', 'y', 'z'].every((key) => Number.isFinite(state[key]))) {
     if (spaceId === 'underground' || priorSpace === 'underground') {
@@ -1004,7 +1024,8 @@ function configureMultiplayerClient() {
       if (message.playerId === multiplayer.credentials?.playerId) { applyLocalContext(message.context, message.contextRevision, message.state, message.safeZone); if (message.combat) applyLocalCombat(message.combat); }
       else { const remote = ensureRemote({ id: message.playerId, name: 'PLAYER', context: message.context, contextRevision: message.contextRevision, combat: message.combat }); remote?.setContext(message.context, message.contextRevision); remote?.setCombat(message.combat); if (remote && message.state) remote.teleport(message.state); }
     }
-    else if (message.type === 'reject') { if (message.context) applyLocalContext(message.context, message.contextRevision || localContextRevision, message.state, message.safeZone); if (message.combat) applyLocalCombat(message.combat); }
+    else if (message.type === 'shop') { hud.callout('AMMO RESTOCKED', 'ALL RESERVES FULL · FREE'); sfx.ding(); }
+    else if (message.type === 'reject') { showShopReject(message); if (message.context) applyLocalContext(message.context, message.contextRevision || localContextRevision, message.state, message.safeZone); if (message.combat) applyLocalCombat(message.combat); }
     else if (message.type === 'correction' && message.state) player.pos.lerp(new THREE.Vector3(message.state.x, message.state.y, message.state.z), 0.35);
   });
   const connectWith = async (credentials, label) => {
@@ -1331,7 +1352,9 @@ function loop(now) {
       destructionStreamingStats = updateDestructionStreaming(player.pos, Q.lowMemory ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.mobile : DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.desktop, ORIGINAL_NEIGHBORHOOD_LAYOUT.id);
       updateNeighborhoodLights(destructionStreamingStats.activeStreamingId);
     } else if (city && MATCH.mode === GAME_MODES.FREE_ROAM) {
-      const apartmentState = city.apartment.update(player, input, time);
+      // Nerdie Arms first: while inside it (or stepping through its door) the other interiors stand still
+      const gunShopState = city.gunShop ? city.gunShop.update(player, input, time) : { active: false, transitioned: false, prompt: '' };
+      const apartmentState = gunShopState.active || gunShopState.transitioned ? { active: false, transitioned: false, prompt: '' } : city.apartment.update(player, input, time);
       const originalHouseState = apartmentState.active || apartmentState.transitioned
         ? { active: false, transitioned: false, prompt: '' }
         : city.originalHouse.update(player, input, time);
@@ -1341,8 +1364,8 @@ function loop(now) {
       const houseState = apartmentState.active || apartmentState.transitioned || originalHouseState.active || originalHouseState.transitioned || duplicatedHouseState.active || duplicatedHouseState.transitioned
         ? { active: false, transitioned: false, prompt: '' }
         : city.house.update(player, input, time);
-      const interiorActive = apartmentState.active || originalHouseState.active || duplicatedHouseState.active || houseState.active;
-      const interiorSite = apartmentState.active ? city.apartment.site : originalHouseState.active ? city.originalHouse.site : duplicatedHouseState.active ? city.duplicatedHouse.site : houseState.active ? city.house.site : null;
+      const interiorActive = gunShopState.active || apartmentState.active || originalHouseState.active || duplicatedHouseState.active || houseState.active;
+      const interiorSite = gunShopState.active ? city.gunShop.site : apartmentState.active ? city.apartment.site : originalHouseState.active ? city.originalHouse.site : duplicatedHouseState.active ? city.duplicatedHouse.site : houseState.active ? city.house.site : null;
       cityInteriorName = interiorSite?.name || ''; cityInteriorId = interiorSite?.id || '';
       const venueState = interiorActive || apartmentState.transitioned || originalHouseState.transitioned || duplicatedHouseState.transitioned || houseState.transitioned
         ? { prompt: '', requestedLobby: false }
@@ -1356,17 +1379,18 @@ function loop(now) {
         ? { prompt: '', opened: false, mobileLabel: '' }
         : city.bank.update(player, !!input.interact, time);
       if (bankState.opened) { walletBridge.openBank(); hud.callout('NERDIE CITY BANK', 'WALLET ONLY · BANKING SERVICES COMING SOON'); }
-      const prompt = apartmentState.prompt || originalHouseState.prompt || duplicatedHouseState.prompt || houseState.prompt || venueState.prompt || bankState.prompt;
+      const prompt = gunShopState.prompt || apartmentState.prompt || originalHouseState.prompt || duplicatedHouseState.prompt || houseState.prompt || venueState.prompt || bankState.prompt;
       const activeHouseState = [originalHouseState, duplicatedHouseState, houseState].find((state) => state.prompt) || houseState;
-      const mobileLabel = venueState.prompt ? 'ENTER COMBAT' : bankState.prompt ? bankState.mobileLabel : activeHouseState.prompt && !activeHouseState.blocked ? (activeHouseState.active ? 'EXIT HOUSE' : 'ENTER HOUSE') : '';
+      const mobileLabel = gunShopState.mobileLabel ? gunShopState.mobileLabel : venueState.prompt ? 'ENTER COMBAT' : bankState.prompt ? bankState.mobileLabel : activeHouseState.prompt && !activeHouseState.blocked ? (activeHouseState.active ? 'EXIT HOUSE' : 'ENTER HOUSE') : '';
       hud.prompt(prompt, interiorActive, mobileLabel);
       input.interact = false;
-      const transition = apartmentState.transitioned ? { type: 'apartment', spaceId: 'north-court', state: apartmentState } : originalHouseState.transitioned ? { type: 'house', spaceId: 'hood-cross-west', state: originalHouseState } : duplicatedHouseState.transitioned ? { type: 'house', spaceId: 'hood-duplicate-west-5', state: duplicatedHouseState } : houseState.transitioned ? { type: 'house', spaceId: 'east-73', state: houseState } : null;
+      if (gunShopState.action) handleGunShopAction(gunShopState);
+      const transition = gunShopState.transitioned ? { type: 'shop', spaceId: 'nerdie-arms', state: gunShopState } : apartmentState.transitioned ? { type: 'apartment', spaceId: 'north-court', state: apartmentState } : originalHouseState.transitioned ? { type: 'house', spaceId: 'hood-cross-west', state: originalHouseState } : duplicatedHouseState.transitioned ? { type: 'house', spaceId: 'hood-duplicate-west-5', state: duplicatedHouseState } : houseState.transitioned ? { type: 'house', spaceId: 'east-73', state: houseState } : null;
       if (transition) {
         setInteriorRenderLayer(transition.state.active);
         setCameraMode(thirdCamera.enabled); // re-snap after the teleport, keeping the player's view
         console.log(`${transition.type} transition:`, transition.state.active ? 'inside' : 'outside');
-        hud.callout(transition.state.active ? transition.state.name.toUpperCase() : 'BACK ON THE BLOCK', transition.state.active ? (transition.type === 'house' ? 'PRIVATE HOUSE INTERIOR' : 'APARTMENT INTERIOR PROTOTYPE') : 'EXPLORE THE CITY');
+        hud.callout(transition.state.active ? transition.state.name.toUpperCase() : 'BACK ON THE BLOCK', transition.state.active ? (transition.type === 'shop' ? 'GUNS · AMMO · SAFE ZONE' : transition.type === 'house' ? 'PRIVATE HOUSE INTERIOR' : 'APARTMENT INTERIOR PROTOTYPE') : 'EXPLORE THE CITY');
         if (multiplayerActive) multiplayer?.updateSpace(transition.spaceId, transition.state.active ? 'enter' : 'exit');
       }
       city.update(player);

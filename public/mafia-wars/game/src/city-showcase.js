@@ -2,6 +2,7 @@ import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { KitBatch, facade, fbox, fpoint, windowUnit, waterTank, roofUnits, signMaterial, PALETTE } from './city-showcase-kit.js';
 import { SHOWCASE_HEROES, SHOWCASE_BUSINESSES } from './city-showcase-layout.js';
 import { STOREFRONT_BUSINESSES } from './city-pois.js';
+import { GUN_SHOP_BUILDING_ID } from './gun-shop-layout.js';
 
 // M7.0B1 North Market showcase buildings. Every design keeps its building's footprint, height,
 // and collider (city-expansion adds the same box as before; the server registry is unchanged);
@@ -60,6 +61,26 @@ const SIGN_ART = {
     ctx.fillStyle = '#efd08a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '600 122px Barlow, sans-serif'; ctx.fillText('NORTH COURT', w / 2, h * 0.42);
     ctx.font = '500 40px Barlow, sans-serif'; ctx.fillStyle = '#d8c79c'; ctx.fillText('RESIDENCES · 112', w / 2, h * 0.82);
   },
+  arms: (ctx, w, h) => {
+    ctx.fillStyle = hexCss(PALETTE.charcoal); ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = hexCss(PALETTE.gold); ctx.lineWidth = 6; ctx.strokeRect(10, 10, w - 20, h - 20);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#efcf86'; ctx.font = '700 132px Barlow, sans-serif'; ctx.fillText('NERDIE ARMS', w / 2, h * 0.42);
+    ctx.shadowColor = '#a35cff'; ctx.shadowBlur = 18; ctx.fillStyle = '#e2ccff'; ctx.font = '600 44px Barlow, sans-serif'; ctx.fillText('GUNS  ·  AMMO  ·  GEAR', w / 2, h * 0.82);
+  },
+  armsBlade: (ctx, w, h) => { // crosshair logo
+    ctx.fillStyle = hexCss(PALETTE.green); ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = hexCss(PALETTE.gold); ctx.lineWidth = 10; ctx.strokeRect(12, 12, w - 24, h - 24);
+    const cx = w / 2, cy = h * 0.4, r = w * 0.3; ctx.lineWidth = 12; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx - r * 1.3, cy); ctx.lineTo(cx + r * 1.3, cy); ctx.moveTo(cx, cy - r * 1.3); ctx.lineTo(cx, cy + r * 1.3); ctx.stroke();
+    ctx.fillStyle = '#f0d28a'; ctx.textAlign = 'center'; ctx.font = '700 64px Barlow, sans-serif'; ctx.fillText('ARMS', cx, h * 0.84);
+  },
+  interiorArms: (ctx, w, h) => { // a lit wall of rifles behind the counter
+    const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#6b5a44'); g.addColorStop(0.75, '#2a241d'); g.addColorStop(1, '#17140f'); ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(255,226,170,.6)'; for (let i = 0; i < 5; i++) ctx.fillRect(60 + i * 200, 14, 90, 8);
+    ctx.fillStyle = '#4a3f33'; ctx.fillRect(0, 40, w, 150);
+    for (let i = 0; i < 9; i++) { const x = 40 + i * 110, y = 70 + (i % 2) * 50; ctx.fillStyle = '#16161a'; ctx.fillRect(x, y, 90, 10); ctx.fillRect(x + 10, y + 10, 14, 18); ctx.fillStyle = '#6a4a2c'; ctx.fillRect(x - 18, y - 2, 22, 14); }
+    ctx.fillStyle = hexCss(PALETTE.gold); ctx.fillRect(0, 210, w, 6); ctx.fillStyle = '#1d1a16'; ctx.fillRect(0, 216, w, h - 216);
+  },
   diner: (ctx, w, h) => {
     ctx.fillStyle = '#f2e6cf'; ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = hexCss(PALETTE.green); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '600 140px Barlow, sans-serif'; ctx.fillText('DINER', w / 2, h * 0.5);
@@ -95,7 +116,7 @@ const SIGN_ART = {
   },
 };
 
-for (const [k, c] of Object.entries({ bank: PALETTE.green, emblem: PALETTE.purple, threads: PALETTE.charcoal, threadsBlade: PALETTE.purple, marquee: 0xf4ead8, noteVertical: PALETTE.charcoal, northCourt: PALETTE.green, diner: 0xf2e6cf, poster: 0x3a2a6a, mural: 0x5a3f8a, interiorThreads: 0x4a3c58, interiorLounge: 0x3a2850, interiorDiner: 0xc89a6a })) PREVIEW.set(SIGN_ART[k], c);
+for (const [k, c] of Object.entries({ arms: PALETTE.charcoal, armsBlade: PALETTE.green, interiorArms: 0x4a3d2e, bank: PALETTE.green, emblem: PALETTE.purple, threads: PALETTE.charcoal, threadsBlade: PALETTE.purple, marquee: 0xf4ead8, noteVertical: PALETTE.charcoal, northCourt: PALETTE.green, diner: 0xf2e6cf, poster: 0x3a2a6a, mural: 0x5a3f8a, interiorThreads: 0x4a3c58, interiorLounge: 0x3a2850, interiorDiner: 0xc89a6a })) PREVIEW.set(SIGN_ART[k], c);
 
 // A sign plane on a facade, facing out of it.
 function signPlane(parent, mat, f, a, y, out, w, h, name) {
@@ -274,6 +295,46 @@ function lounge(batch, kit, b, parent) {
   roofUnits(batch, kit, b.x + 3, b.height, b.z + 2.5, 3, r);
 }
 
+// ------------------------------------------------- Nerdie Arms (gun and ammo shop)
+function arms(batch, kit, b, parent) {
+  const m = kit.m, f = facade(b, b.front), half = f.length / 2, base = 4.4;
+  batch.box(m.darkBrick, b.x, b.height / 2, b.z, b.width, b.height, b.depth);
+  batch.box(m.charcoal, b.x, 0.3, b.z, b.width + 0.16, 0.6, b.depth + 0.16);
+  // steel-clad ground floor: pilasters, barred display windows showing the gun wall, the steel door
+  fbox(batch, m.green, f, 0, base / 2, 0.05, f.length + 0.06, base, 0.1); // forest-green cladding
+  for (const a of [-half + 0.35, -1.6, 1.6, half - 0.35]) { fbox(batch, m.charcoal, f, a, base / 2, 0.14, 0.5, base, 0.18); fbox(batch, m.gold, f, a, base - 0.1, 0.24, 0.54, 0.05, 0.02); }
+  const interior = interiorMaterial(kit, 'interiorArms');
+  for (const s of [-1, 1]) {
+    const a = s * (half / 2 + 0.6), w = half - 2.6;
+    signPlane(parent, interior, f, a, 1.75, 0.12, w, 2.1, `showcase-arms-window-${s < 0 ? 'l' : 'r'}`);
+    for (let i = 0; i <= Math.round(w / 0.32); i++) fbox(batch, m.frame, f, a - w / 2 + i * (w / Math.round(w / 0.32)), 1.75, 0.16, 0.04, 2.1, 0.04); // security bars
+    fbox(batch, m.gold, f, a, 2.86, 0.16, w + 0.12, 0.06, 0.06); fbox(batch, m.trim, f, a, 0.62, 0.18, w + 0.3, 0.12, 0.2);
+    fbox(batch, m.charcoal, f, a, 3.25, 0.32, w + 0.3, 0.42, 0.42); // roll-down shutter housing
+    for (let k = 0; k < 3; k++) fbox(batch, m.frame, f, a, 3.1 + k * 0.12, 0.54, w + 0.3, 0.02, 0.02);
+  }
+  fbox(batch, m.frame, f, 0, 1.25, 0.12, 2.0, 2.5, 0.08); fbox(batch, m.charcoal, f, 0, 1.2, 0.16, 1.6, 2.36, 0.06);
+  fbox(batch, m.glassWarm, f, 0, 1.75, 0.2, 0.5, 0.35, 0.02); fbox(batch, m.gold, f, 0.55, 1.15, 0.2, 0.06, 0.4, 0.06);
+  fbox(batch, m.neonGreen, f, -1.2, 2.1, 0.2, 0.12, 0.12, 0.05); // the door buzzer light
+  // fascia sign with a purple neon underline, lamps over the door
+  fbox(batch, m.charcoal, f, 0, base + 0.55, 0.16, f.length - 0.6, 1.1, 0.3);
+  signPlane(parent, drawn(kit, SIGN_ART.arms, { w: 1024, h: 230, day: 0.22, night: 1.2 }), f, 0, base + 0.58, 0.32, Math.min(10, f.length - 1.4), 1.0, 'showcase-arms-sign');
+  fbox(batch, m.neonPurple, f, 0, base + 0.02, 0.32, Math.min(10, f.length - 1.4), 0.05, 0.04);
+  for (const s of [-1, 1]) { fbox(batch, m.frame, f, s * 0.75, 2.75, 0.3, 0.06, 0.06, 0.5); fbox(batch, m.lamp, f, s * 0.75, 2.68, 0.52, 0.22, 0.08, 0.22); }
+  // upper floor: barred windows, a gold target emblem, a crosshair blade sign at the corner
+  const r = rng(hashId(b.id));
+  for (const a of [-half + 2.2, -half + 4.6, half - 4.6, half - 2.2]) {
+    windowUnit(batch, kit, f, a, 6.3, 1.2, 1.6, { glass: litGlass(kit, r, 0.4), surround: m.charcoal, mullion: false });
+    for (let i = -2; i <= 2; i++) fbox(batch, m.frame, f, a + i * 0.24, 6.3, 0.1, 0.03, 1.6, 0.03);
+  }
+  disc(batch, m.gold, f, 0, 6.35, 0.06, 0.95, 0.06); disc(batch, m.charcoal, f, 0, 6.35, 0.07, 0.75, 0.06); disc(batch, m.gold, f, 0, 6.35, 0.08, 0.5, 0.06); disc(batch, m.purple, f, 0, 6.35, 0.09, 0.22, 0.06);
+  bladeSign(parent, batch, kit, drawn(kit, SIGN_ART.armsBlade, { w: 320, h: 420, day: 0.2, night: 1.1 }), f, half - 0.8, 6.2, 0.8, 1.1, 1.45, 'showcase-arms-blade');
+  cornice(batch, kit, b, b.height - 0.22, m.charcoal, 0.28, 0.32);
+  for (const side of ['north', 'south', 'east', 'west']) { const g = facade(b, side); fbox(batch, m.gold, g, 0, b.height - 0.4, 0.29, g.length + 0.56, 0.04, 0.02); }
+  parapet(batch, kit, b, m.darkBrick, 0.5, 0.3);
+  for (const side of ['north', 'south', 'east']) { const g = facade(b, side), n = Math.max(2, Math.floor(g.length / 3.2)); for (let i = 0; i < n; i++) { const a = (i - (n - 1) / 2) * (g.length / n); windowUnit(batch, kit, g, a, 6.2, 1.1, 1.4, { glass: litGlass(kit, r, 0.3), surround: m.charcoal, mullion: false }); for (let k = -1; k <= 1; k++) fbox(batch, m.frame, g, a + k * 0.3, 6.2, 0.1, 0.03, 1.4, 0.03); } }
+  roofUnits(batch, kit, b.x + 2, b.height, b.z - 2, 2, r);
+}
+
 // ----------------------------------------- the rest of North Market: mid-rise kit
 function midrise(batch, kit, b, parent, { mobile = false } = {}) {
   const m = kit.m, r = rng(hashId(b.id));
@@ -315,7 +376,7 @@ function midrise(batch, kit, b, parent, { mobile = false } = {}) {
   if (r() < 0.5) batch.box(m.concrete, b.x - b.width * 0.25, b.height + 1.2, b.z + b.depth * 0.2, 2.6, 2.4, 2.6);
 }
 
-export const SHOWCASE_DESIGNS = Object.freeze({ [SHOWCASE_HEROES.bank]: bank, [SHOWCASE_HEROES.boutique]: threads, [SHOWCASE_HEROES.lounge]: lounge });
+export const SHOWCASE_DESIGNS = Object.freeze({ [SHOWCASE_HEROES.bank]: bank, [SHOWCASE_HEROES.boutique]: threads, [SHOWCASE_HEROES.lounge]: lounge, [GUN_SHOP_BUILDING_ID]: arms });
 export function showcaseBuilding(batch, kit, b, parent, opts = {}) { (SHOWCASE_DESIGNS[b.id] || midrise)(batch, kit, b, parent, opts); }
 
 // ------------------------------------------------------------- North Court

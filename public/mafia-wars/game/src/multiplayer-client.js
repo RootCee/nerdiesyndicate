@@ -102,6 +102,8 @@ export class MultiplayerClient extends EventTarget {
   fireWeapon(weaponId, direction, viewAt = undefined) { return this.send({ type: 'fire', seq: ++this.combatSeq, weaponId, direction: { x: rounded(direction.x), y: rounded(direction.y), z: rounded(direction.z) }, ...(Number.isFinite(viewAt) ? { viewAt: Math.round(viewAt) } : {}) }); }
   reloadWeapon(weaponId) { return this.send({ type: 'reload', seq: ++this.combatSeq, weaponId }); }
   updateSpace(spaceId, action) { return this.send({ type: 'space', seq: ++this.spaceSeq, spaceId, action }); }
+  // Nerdie Arms: ask the server to restock every reserve (it checks the shop, the counter, and the cooldown)
+  shopRestock(shopId = 'nerdie-arms') { this.shopSeq = (this.shopSeq || 0) + 1; return this.send({ type: 'shop', seq: this.shopSeq, shopId, action: 'restock' }); }
   ping() { const sentAt = performance.now(); this.send({ type: 'ping', nonce: Math.random().toString(36).slice(2), sentAt }); }
   diagnostics(now = performance.now()) {
     const seconds = Math.max(1, (now - this.connectedAt) / 1000);
