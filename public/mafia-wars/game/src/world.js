@@ -333,16 +333,20 @@ export async function buildWorld(scene, Q, progress = () => {}) {
   };
   const ground = new Bucket();
   ground.add('grass', planeGeo(120, 140, 3).translate(0, 0, 0));
-  ground.add('road', planeGeo(ROAD_HALF * 2, 140, 4).translate(0, 0.02, 0));
-  for (const s of [-1, 1]) {
-    ground.add('road', planeGeo(100, 9, 4).translate(0, 0.02, s * 48.5));
-    ground.add('alley', planeGeo(4, 90, 3).translate(s * ALLEY_X, 0.02, 0));
-    ground.add('walk', planeGeo(SIDEWALK, 92, 2).translate(s * (ROAD_HALF + SIDEWALK / 2), 0.03, 0));
-    mapRects.push({ x: s * ALLEY_X - 2, z: -45, w: 4, h: 90, type: 'alley' });
-    mapRects.push({ x: s * (ROAD_HALF) - (s < 0 ? SIDEWALK : 0), z: -46, w: SIDEWALK, h: 92, type: 'walk' });
+  // M7.0A: with the city on, its shared ground layout (city-ground-layout.js) draws these roads,
+  // alleys, and sidewalks; the old gray Hood Warfare planes underneath are no longer built.
+  if (!Q.cityExpansion) {
+    ground.add('road', planeGeo(ROAD_HALF * 2, 140, 4).translate(0, 0.02, 0));
+    for (const s of [-1, 1]) {
+      ground.add('road', planeGeo(100, 9, 4).translate(0, 0.02, s * 48.5));
+      ground.add('alley', planeGeo(4, 90, 3).translate(s * ALLEY_X, 0.02, 0));
+      ground.add('walk', planeGeo(SIDEWALK, 92, 2).translate(s * (ROAD_HALF + SIDEWALK / 2), 0.03, 0));
+      mapRects.push({ x: s * ALLEY_X - 2, z: -45, w: 4, h: 90, type: 'alley' });
+      mapRects.push({ x: s * (ROAD_HALF) - (s < 0 ? SIDEWALK : 0), z: -46, w: SIDEWALK, h: 92, type: 'walk' });
+    }
+    mapRects.push({ x: -ROAD_HALF, z: -70, w: ROAD_HALF * 2, h: 140, type: 'road' });
+    for (const s of [-1, 1]) mapRects.push({ x: -50, z: s * 48.5 - 4.5, w: 100, h: 9, type: 'road' });
   }
-  mapRects.push({ x: -ROAD_HALF, z: -70, w: ROAD_HALF * 2, h: 140, type: 'road' });
-  for (const s of [-1, 1]) mapRects.push({ x: -50, z: s * 48.5 - 4.5, w: 100, h: 9, type: 'road' });
   for (const l of [...lots, ...duplicatedLots]) {
     const fx = l.centerX + l.side * (HOUSE_FRONT - 0.2);
     ground.add('walk', planeGeo(1.2, 6.4, 2).translate(l.centerX + l.side * (ROAD_HALF + SIDEWALK + 3.2), 0.035, l.zc + (l.side < 0 ? HOUSE_W / 4 : -HOUSE_W / 4)));

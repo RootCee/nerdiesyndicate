@@ -6,6 +6,7 @@
 // lights, venue/apartment/house shells, and the neighbourhood blocks from
 // world.js (houses, backyard and alley fences, lamps). Pure math, no Three.js,
 // so Node tests can check every route against the same obstacles.
+import { cityGroundLayout } from './city-ground-layout.js';
 import { createCityPlan } from './city-layout.js';
 
 // Mirrors world.js: ROAD_HALF 4.5, SIDEWALK 2, LOT 8, HOUSE_FRONT 14,
@@ -54,9 +55,9 @@ export function buildNavObstacles(plan = createCityPlan()) {
   for (const district of plan.districts) {
     for (const b of district.buildings) out.push(around(b.x, b.z, b.width, b.depth, { id: b.id }));
     for (const v of district.vehicles || []) out.push(around(v.x, v.z, 1.9, 4.2));
-    const lightX = district.center.x + (district.center.x > 0 ? -14 : district.center.x < 0 ? 14 : 0);
-    for (const dz of [-20, 20]) out.push(around(lightX, district.center.z + dz, 0.3, 0.3));
   }
+  // M7.0A: the streetlight poles city-expansion.js draws (and collides with), from the shared ground layout
+  for (const l of cityGroundLayout(plan).streetlights) out.push(around(l.x, l.z, 0.3, 0.3, { id: l.id }));
   const { apartment, combatVenue, enterableHouse, duplicatedEnterableHouse } = plan;
   out.push(around(apartment.x, apartment.z, apartment.width, apartment.depth, { id: apartment.id }));
   out.push(around(combatVenue.x, combatVenue.z, combatVenue.width, combatVenue.depth, { id: combatVenue.id }));
@@ -199,7 +200,9 @@ function connect(graph, p, { maxDistance = MAX_CONNECTOR, limit = 4 } = {}) {
     // Approaches meet a walk line square-on; only short diagonals are allowed,
     // so a route never cuts across open ground to reach a line's far end.
     if (distance > SHORT_DIAGONAL && (q.t <= 1e-6 || q.t >= 1 - 1e-6)) continue;
-    if (distance > 0.05 && !segmentClear(p, q, graph.obstacles, { ignore })) continue;
+    // A step of under a metre back onto the line (a resident that sidestepped beside a curb pole)
+    // only needs to miss the obstacle itself, not its full clearance.
+    if (distance > 0.05 && !segmentClear(p, q, graph.obstacles, { ignore, pad: distance < 1 ? 0.05 : PAD })) continue;
     out.push({ ia, ib, cost, point: { x: q.x, z: q.z }, distance });
   }
   out.sort((a, b) => a.distance - b.distance);

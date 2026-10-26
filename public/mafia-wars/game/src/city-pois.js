@@ -5,7 +5,7 @@
 // world. Pure data: no Three.js or DOM, so Node tests and future tools (AI
 // agents, new neighbourhoods, player-owned businesses) can read it directly.
 import {
-  APARTMENT_SITE, COMBAT_VENUE_SITE, DUPLICATED_ENTERABLE_HOUSE_SITE, ENTERABLE_HOUSE_SITE, ORIGINAL_EXPANSION_HOUSES, createCityPlan,
+  APARTMENT_SITE, COMBAT_VENUE_SITE, DUPLICATED_ENTERABLE_HOUSE_SITE, ENTERABLE_HOUSE_SITE, FRONT_NORMALS, ORIGINAL_EXPANSION_HOUSES, createCityPlan,
 } from './city-layout.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 
@@ -43,9 +43,11 @@ export const DISTRICT_NAMES = Object.freeze({
 
 // Storefront doors sit on the facade facing the street side of the building.
 const ENTRY_CLEARANCE = 0.9, STEP_OUT = 2.5;
+// M7.0A: on the street-facing side the plan assigns (building.front), any of the four directions.
 export function storefrontEntry(building) {
-  const direction = building.facing === 'east' ? 1 : building.facing === 'west' ? -1 : building.x > 0 ? -1 : 1;
-  return { x: building.x + direction * (building.width / 2 + ENTRY_CLEARANCE), z: building.z, facing: direction > 0 ? 'east' : 'west' };
+  const facing = building.front || (building.facing === 'east' ? 'east' : building.facing === 'west' ? 'west' : building.x > 0 ? 'west' : 'east');
+  const [nx, nz] = FRONT_NORMALS[facing], half = nx ? building.width / 2 : building.depth / 2;
+  return { x: building.x + nx * (half + ENTRY_CLEARANCE), z: building.z + nz * (half + ENTRY_CLEARANCE), facing };
 }
 
 const fromSpace = (spaceId) => {
@@ -74,7 +76,7 @@ export function cityPois(plan = createCityPlan()) {
       id: business.id, name: business.name, kind: business.id === STOREFRONT_BUSINESSES[BANK_BUILDING_ID].id ? 'bank' : 'business',
       category: business.category, status: business.status, x: building.x, z: building.z, entry: { x: entry.x, z: entry.z }, buildingId: building.id,
       // Step straight out of the door before turning, clear of wider neighbours.
-      approach: [{ x: entry.x + (entry.facing === 'east' ? STEP_OUT : -STEP_OUT), z: entry.z }],
+      approach: [{ x: entry.x + FRONT_NORMALS[entry.facing][0] * STEP_OUT, z: entry.z + FRONT_NORMALS[entry.facing][1] * STEP_OUT }],
       description: business.status === 'wallet' ? BANK_COPY.description : `${business.category}. Coming soon.`,
     });
   }

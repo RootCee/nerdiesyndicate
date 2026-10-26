@@ -36,11 +36,13 @@ export const CITY_PROFILES = Object.freeze({
   mobile: Object.freeze({ key: 'mobile', activeRadius: 60, windowStride: 2, roofDetails: false, streetLights: false }),
 });
 
+// M7.0A: moved north 12 m. At z 100 the building stood on the north-market road (126 m2) and its
+// entrance was in the traffic lane. Its interior, doors, and safe zone are derived from this site.
 export const APARTMENT_SITE = Object.freeze({
   id: 'north-court',
   name: 'North Court Apartments',
   x: 29,
-  z: 100,
+  z: 112,
   width: 18,
   depth: 13,
   height: 15,
@@ -93,12 +95,18 @@ const BUILDING_TINTS = [0x8d654c, 0x6d7884, 0x75604e, 0x7f7467, 0x665f58, 0x7351
 
 function district(id, centerZ, seedOffset) {
   const buildings = [];
-  const slots = [-28, -14, 0, 14, 28];
+  // M7.0A: slots between the streets. The old evenly spaced slots (centre +/- 0, 14, 28) put
+  // the middle building on the market road and others on its sidewalks. Two buildings sit
+  // between the cross street and the market street, three beyond the market street; on the
+  // north block's east side North Court takes the first of those three. The nearest pair stays
+  // beyond |z| 64 so the district still streams in more than 40 m before it can be reached (mobile).
+  const north = centerZ > 0, abs = (zs) => zs.map((z) => (north ? z : -z));
   for (const side of [-1, 1]) {
+    const apartmentColumn = id === 'north' && side === 1;
+    const slots = abs(apartmentColumn ? [71, 83, null, 127, 141] : [71, 83, 110, 124, 138]);
     for (let i = 0; i < slots.length; i++) {
-      const z = centerZ + slots[i];
-      const apartment = id === 'north' && side === 1 && i === 2;
-      if (apartment) continue;
+      if (slots[i] === null) continue; // North Court Apartments
+      const z = slots[i];
       const hash = (seedOffset + i * 17 + (side > 0 ? 31 : 0)) >>> 0;
       buildings.push({
         id: `${id}-${side < 0 ? 'west' : 'east'}-${i}`,
@@ -116,7 +124,8 @@ function district(id, centerZ, seedOffset) {
 
 function eastResidential(id, centerZ, seedOffset) {
   const buildings = [];
-  const zSlots = centerZ > 0 ? [60, 73, 86, 108, 121, 134] : [-60, -73, -86, -108, -121, -134];
+  // M7.0A: the third slot moved in 1 m (86 -> 85) so those houses clear the market street's sidewalk.
+  const zSlots = centerZ > 0 ? [60, 73, 85, 108, 121, 134] : [-60, -73, -85, -108, -121, -134];
   // Two parallel rows face the existing east avenue. The cross and market
   // streets already span the full city, so both rows connect without changing
   // Neighborhood One's approved 280 x 296 metre boundary.
@@ -141,13 +150,15 @@ function eastResidential(id, centerZ, seedOffset) {
       tint: BUILDING_TINTS[hash % BUILDING_TINTS.length],
     });
   }
-  const vehicles = zSlots.slice(0, 3).map((z, i) => ({ id: `${id}-car-${i}`, x: 82, z: z + (i % 2 ? 3 : -3), yaw: 0 }));
+  // parked in the avenue's curb lane (they used to stand on the sidewalk at x = 82)
+  const vehicles = zSlots.slice(0, 3).map((z, i) => ({ id: `${id}-car-${i}`, x: 84.2, z: z + (i % 2 ? 3 : -3), yaw: 0 }));
   return { id, kind: 'residential', center: { x: 98, z: centerZ }, radius: 62, buildings, vehicles };
 }
 
 function westMixedUse(id, centerZ, seedOffset, industrial = false) {
   const buildings = [];
-  const zSlots = centerZ > 0 ? [62, 78, 114, 132] : [-58, -88, -114, -132];
+  // M7.0A: the south slots mirror the north (-58 and -88 put storefronts on the south-cross sidewalk and the south-market road)
+  const zSlots = centerZ > 0 ? [62, 78, 114, 132] : [-62, -78, -114, -132];
   const xSlots = [-65, -112, -128];
   let index = 0;
   for (const x of xSlots) for (const z of zSlots) {
@@ -157,22 +168,52 @@ function westMixedUse(id, centerZ, seedOffset, industrial = false) {
     buildings.push({
       id: `${id}-${index++}`,
       kind,
-      x, z,
+      // M7.0A: 19 m warehouses 16 m apart overlapped by 3 m; they now stand 20 m apart (-106, -126)
+      x: kind === 'warehouse' ? (x === -112 ? -106 : -126) : x, z,
       width: kind === 'warehouse' ? 19 : 13 + (hash % 4),
       depth: kind === 'warehouse' ? 14 : 10 + ((hash >> 2) % 4),
       height: kind === 'mixed' ? 14 + ((hash >> 4) % 3) * 2.4 : kind === 'warehouse' ? 8.5 : 8 + ((hash >> 4) % 2) * 1.8,
       tint: BUILDING_TINTS[(hash + 2) % BUILDING_TINTS.length],
     });
   }
-  const vehicles = zSlots.slice(0, 3).map((z, i) => ({ id: `${id}-car-${i}`, x: -82, z: z + (i % 2 ? -3 : 3), yaw: 0 }));
+  const vehicles = zSlots.slice(0, 3).map((z, i) => ({ id: `${id}-car-${i}`, x: -84.2, z: z + (i % 2 ? -3 : 3), yaw: 0 }));
   return { id, kind: industrial ? 'industrial' : 'mixed', center: { x: -98, z: centerZ }, radius: 64, buildings, vehicles };
+}
+
+function centralCrossSegments() {
+  const blocks = [ORIGINAL_NEIGHBORHOOD_LAYOUT.footprint, DUPLICATED_ORIGINAL_NEIGHBORHOOD.footprint].sort((a, b) => a.minX - b.minX);
+  const spans = []; let cursor = CITY_BOUNDS.minX;
+  for (const b of blocks) { if (b.minX > cursor) spans.push([cursor, b.minX]); cursor = b.maxX; }
+  if (cursor < CITY_BOUNDS.maxX) spans.push([cursor, CITY_BOUNDS.maxX]);
+  return spans.map(([a, b], i) => ({ id: i === 0 ? 'central-cross' : `central-cross-${i}`, x: (a + b) / 2, z: 0, width: b - a, depth: 10 }));
+}
+
+// M7.0A: each city building faces a street. A building keeps its side if a street lies within
+// 18 m of it there (the legacy blocks face the main road, the east rows their avenue); otherwise
+// it turns to its nearest street (the bank and the west storefronts faced empty lots).
+export const FRONT_NORMALS = Object.freeze({ east: Object.freeze([1, 0]), west: Object.freeze([-1, 0]), north: Object.freeze([0, 1]), south: Object.freeze([0, -1]) });
+export function streetGaps(building, roads) {
+  const minX = building.x - building.width / 2, maxX = building.x + building.width / 2, minZ = building.z - building.depth / 2, maxZ = building.z + building.depth / 2;
+  const gaps = { east: Infinity, west: Infinity, north: Infinity, south: Infinity };
+  for (const r of roads) {
+    const rx0 = r.x - r.width / 2, rx1 = r.x + r.width / 2, rz0 = r.z - r.depth / 2, rz1 = r.z + r.depth / 2;
+    if (r.depth > r.width && building.z >= rz0 && building.z <= rz1) { if (rx0 >= maxX) gaps.east = Math.min(gaps.east, rx0 - maxX); if (rx1 <= minX) gaps.west = Math.min(gaps.west, minX - rx1); }
+    if (r.width > r.depth && building.x >= rx0 && building.x <= rx1) { if (rz0 >= maxZ) gaps.north = Math.min(gaps.north, rz0 - maxZ); if (rz1 <= minZ) gaps.south = Math.min(gaps.south, minZ - rz1); }
+  }
+  return gaps;
+}
+export function buildingFront(building, roads) {
+  const legacy = building.facing === 'east' || building.facing === 'west' ? building.facing : building.x > 0 ? 'west' : 'east';
+  const gaps = streetGaps(building, roads);
+  if (gaps[legacy] <= 18) return legacy;
+  return Object.entries(gaps).sort((a, b) => a[1] - b[1])[0][0];
 }
 
 export function createCityPlan(profileName = 'desktop') {
   const profile = CITY_PROFILES[profileName] || CITY_PROFILES.desktop;
   const horizontalCenter = (CITY_BOUNDS.minX + CITY_BOUNDS.maxX) / 2;
   const horizontalWidth = CITY_BOUNDS.maxX - CITY_BOUNDS.minX;
-  return {
+  const plan = {
     bounds: { ...CITY_BOUNDS },
     profile,
     roads: [
@@ -182,7 +223,9 @@ export function createCityPlan(profileName = 'desktop') {
       { id: 'hood-duplicate-main', x: DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX, z: 0, width: 9, depth: 140 },
       { id: 'hood-duplicate-west-alley', x: DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX - 35.5, z: 0, width: 4, depth: 90 },
       { id: 'hood-duplicate-east-alley', x: DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX + 35.5, z: 0, width: 4, depth: 90 },
-      { id: 'central-cross', x: horizontalCenter, z: 0, width: horizontalWidth, depth: 10 },
+      // M7.0A: the central cross street stops at both Hood Warfare blocks instead of running
+      // under the houses either side of it (their lots 4 and 5 meet at z = 0).
+      ...centralCrossSegments(),
       { id: 'north-cross', x: horizontalCenter, z: 48.5, width: horizontalWidth, depth: 9 },
       { id: 'north-market', x: horizontalCenter, z: 96, width: horizontalWidth, depth: 9 },
       { id: 'south-cross', x: horizontalCenter, z: -48.5, width: horizontalWidth, depth: 9 },
@@ -203,6 +246,8 @@ export function createCityPlan(profileName = 'desktop') {
     duplicatedEnterableHouse: { ...DUPLICATED_ENTERABLE_HOUSE_SITE, entry: { ...DUPLICATED_ENTERABLE_HOUSE_SITE.entry }, outsideSpawn: { ...DUPLICATED_ENTERABLE_HOUSE_SITE.outsideSpawn } },
     combatVenue: { ...COMBAT_VENUE_SITE },
   };
+  for (const district of plan.districts) for (const building of district.buildings) building.front = buildingFront(building, plan.roads);
+  return plan;
 }
 
 export function chunkVisible(chunkCenter, playerPosition, radius) {

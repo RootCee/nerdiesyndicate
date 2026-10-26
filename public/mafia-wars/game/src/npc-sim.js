@@ -88,7 +88,7 @@ export class CityNpcSimulation {
     }
     return false;
   }
-  #reset(r, p) { Object.assign(r, { x: p.x, z: p.z, route: null, step: 0, speed: 0, anim: NPC_ANIM.idle, waitUntil: 0, stuckFor: 0, placed: true, behavior: NPC_BEHAVIOR.calm, threat: null, pending: null, fleeing: false, health: NPC_COMBAT_RULES.maxHealth, downUntil: 0, defeatedAt: 0, fight: null, lastAttack: null, allyAttack: null }); }
+  #reset(r, p) { Object.assign(r, { x: p.x, z: p.z, route: null, lastRoute: null, step: 0, speed: 0, anim: NPC_ANIM.idle, waitUntil: 0, stuckFor: 0, placed: true, behavior: NPC_BEHAVIOR.calm, threat: null, pending: null, fleeing: false, health: NPC_COMBAT_RULES.maxHealth, downUntil: 0, defeatedAt: 0, fight: null, lastAttack: null, allyAttack: null }); }
 
   // Next destination: a business, bank, or apartment door for 'visit'
   // residents sometimes, otherwise a sidewalk point 30-120 m away.
@@ -110,7 +110,8 @@ export class CityNpcSimulation {
       this.metrics.routeFailures++; this.metrics.failureReasons[route.reason] = (this.metrics.failureReasons[route.reason] || 0) + 1;
       // A door (storefront, apartment) may have no square-on way back to the
       // street; leave the way the resident came, which is known to be valid.
-      if (r.lastRoute?.length > 1) { r.route = [...r.lastRoute].reverse(); r.step = 1; r.visit = false; r.lastRoute = null; this.metrics.walkBacks++; return; }
+      // Only while the resident still stands where that walk ended (not after a relocation or a detour).
+      if (r.lastRoute?.length > 1 && dist(r.lastRoute[r.lastRoute.length - 1], r) < 1) { r.route = [...r.lastRoute].reverse(); r.step = 1; r.visit = false; r.lastRoute = null; this.metrics.walkBacks++; return; }
       r.waitUntil = now + 1000; return;
     }
     r.route = route.points; r.step = 1; r.visit = visit;

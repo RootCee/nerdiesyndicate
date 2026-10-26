@@ -1,4 +1,6 @@
 const PAINT = Object.freeze({ lane: 'lane', crosswalk: 'crosswalk' });
+// M7.0A: lane dashes stop this far past a cross street, clear of its crosswalk (stripes reach ~4.1 m)
+const CROSSWALK_CLEAR = 4.6;
 
 function overlap(a0, a1, b0, b1) {
   return Math.max(a0, b0) <= Math.min(a1, b1);
@@ -56,7 +58,7 @@ export function createRoadPaintLayout(roads) {
     const end = road.z + road.depth / 2;
     const blockers = horizontal
       .filter((cross) => overlap(road.x, road.x, cross.x - cross.width / 2, cross.x + cross.width / 2))
-      .map((cross) => [cross.z - cross.depth / 2 - 0.45, cross.z + cross.depth / 2 + 0.45]);
+      .map((cross) => [cross.z - cross.depth / 2 - CROSSWALK_CLEAR, cross.z + cross.depth / 2 + CROSSWALK_CLEAR]);
     for (const [a, b] of subtractIntervals(start, end, blockers)) addDashes(rects, a, b, road.x, true, 0.14);
   }
 
@@ -65,7 +67,7 @@ export function createRoadPaintLayout(roads) {
     const end = road.x + road.width / 2;
     const blockers = vertical
       .filter((cross) => overlap(road.z, road.z, cross.z - cross.depth / 2, cross.z + cross.depth / 2))
-      .map((cross) => [cross.x - cross.width / 2 - 0.45, cross.x + cross.width / 2 + 0.45]);
+      .map((cross) => [cross.x - cross.width / 2 - CROSSWALK_CLEAR, cross.x + cross.width / 2 + CROSSWALK_CLEAR]);
     for (const [a, b] of subtractIntervals(start, end, blockers)) addDashes(rects, a, b, road.z, false, 0.14);
   }
 

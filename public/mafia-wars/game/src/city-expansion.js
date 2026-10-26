@@ -1,10 +1,12 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { MAP, addCollider, mapRects } from './world.js';
-import { createCityPlan, chunkVisible } from './city-layout.js';
+import { createCityPlan, chunkVisible, FRONT_NORMALS } from './city-layout.js';
 import { HybridApartmentSystem } from './apartment-system.js';
 import { HybridHouseSystem } from './house-system.js';
 import { CombatVenueSystem } from './combat-venue.js';
 import { buildCityRoadMarkings } from './city-road-markings.js';
+import { cityGroundLayout, GROUND } from './city-ground-layout.js';
+import { mergeGeometries } from '/mafia-wars/game/vendor/three/jsm/utils/BufferGeometryUtils.js';
 import { BankSystem } from './city-bank.js';
 import { BANK_BUILDING_ID, bankSite } from './city-pois.js';
 
@@ -51,12 +53,15 @@ function addBuilding(group, spec, profile, mats) {
   const roofHeight = kind === 'house' ? 0.65 : 0.35;
   addBox(group, mats.roof, width + 0.35, roofHeight, depth + 0.35, x, height + roofHeight / 2, z, `city-roof-${spec.id}`);
   if (profile.roofDetails) addBox(group, mats.metal, 1.6, 1.1, 1.5, x + width * 0.2, height + 0.72, z - depth * 0.18, `city-roof-unit-${spec.id}`);
-  const frontDirection = spec.facing === 'east' ? 1 : spec.facing === 'west' ? -1 : x > 0 ? -1 : 1;
-  const frontX = x + frontDirection * (width / 2 + 0.03);
-  const trimX = x + frontDirection * (width / 2 + 0.08);
-  addBox(group, mats.trim, 0.16, 0.42, depth + 0.22, trimX, 0.28, z, `city-plinth-${spec.id}`);
-  addBox(group, mats.trim, 0.19, 0.32, depth + 0.34, trimX, height - 0.22, z, `city-cornice-${spec.id}`);
-  if (kind === 'house' && spec.driveway) {
+  // M7.0A: the facade faces the street the plan assigns (spec.front: east/west/north/south).
+  // `facade(thick, h, length, out, y, along)` places a box `out` m proud of the front face and `along` m along it.
+  const front = spec.front || (spec.facing === 'east' ? 'east' : spec.facing === 'west' ? 'west' : x > 0 ? 'west' : 'east');
+  const [nx, nz] = FRONT_NORMALS[front], half = nx ? width / 2 : depth / 2, facadeLength = nx ? depth : width;
+  const facade = (mat, thick, h, length, out, y, along, name) => addBox(group, mat, nx ? thick : length, h, nx ? length : thick, x + nx * (half + out) + (nx ? 0 : along), y, z + nz * (half + out) + (nx ? along : 0), name);
+  const frontDirection = nx || 1;
+  facade(mats.trim, 0.16, 0.42, facadeLength + 0.22, 0.08, 0.28, 0, `city-plinth-${spec.id}`);
+  facade(mats.trim, 0.19, 0.32, facadeLength + 0.34, 0.08, height - 0.22, 0, `city-cornice-${spec.id}`);
+  if (kind === 'house' && spec.driveway && nx) {
     const sidewalkEdge = frontDirection > 0 ? 82 : 94;
     const buildingEdge = x + frontDirection * width / 2;
     const length = Math.abs(sidewalkEdge - buildingEdge);
@@ -65,20 +70,19 @@ function addBuilding(group, spec, profile, mats) {
     mapRects.push({ x: drivewayX - length / 2, z: z - 1.55, w: length, h: 3.1, type: 'garage' });
   }
   if (kind === 'storefront') {
-    addBox(group, mats.awning, 0.7, 0.24, depth * 0.72, frontX + (x > 0 ? -0.28 : 0.28), 2.75, z, `city-awning-${spec.id}`);
-    addBox(group, mats.window, 0.1, 1.55, depth * 0.64, frontX + (x > 0 ? -0.06 : 0.06), 1.35, z, `city-shopfront-${spec.id}`);
+    facade(mats.awning, 0.7, 0.24, facadeLength * 0.72, 0.31, 2.75, 0, `city-awning-${spec.id}`);
+    facade(mats.window, 0.1, 1.55, facadeLength * 0.64, 0.09, 1.35, 0, `city-shopfront-${spec.id}`);
   }
   if (!spec.enterableHouseId && kind !== 'storefront') {
-    addBox(group, mats.door, 0.14, 2.25, 1.12, frontX + frontDirection * 0.04, 1.13, z + depth * 0.24, `city-door-${spec.id}`);
-    addBox(group, mats.trim, 0.48, 0.16, 1.55, frontX + frontDirection * 0.2, 2.42, z + depth * 0.24, `city-door-canopy-${spec.id}`);
+    facade(mats.door, 0.14, 2.25, 1.12, 0.07, 1.13, facadeLength * 0.24, `city-door-${spec.id}`);
+    facade(mats.trim, 0.48, 0.16, 1.55, 0.23, 2.42, facadeLength * 0.24, `city-door-canopy-${spec.id}`);
   }
   const floors = Math.max(2, Math.floor(height / 2.7));
   const stride = profile.windowStride;
   for (let floor = 0; floor < floors; floor++) for (let i = -2; i <= 2; i += stride) {
     if (kind === 'storefront' && floor === 0) continue;
     if (spec.enterableHouseId && floor === 0 && i === 0) continue;
-    const window = addBox(group, mats.window, 0.08, 0.85, 0.82, frontX, 1.65 + floor * 2.55, z + i * Math.min(1.65, depth / 6), `city-window-${spec.id}`);
-    if (frontDirection > 0) window.rotation.y = Math.PI;
+    facade(mats.window, 0.08, 0.85, 0.82, 0.03, 1.65 + floor * 2.55, i * Math.min(1.65, facadeLength / 6), `city-window-${spec.id}`);
   }
   addCollider(x - width / 2, z - depth / 2, x + width / 2, z + depth / 2, 0, height + 0.5, { cityChunk: spec.id });
   mapRects.push({ x: x - width / 2, z: z - depth / 2, w: width, h: depth, type: spec.id === BANK_BUILDING_ID ? 'bank' : kind === 'house' ? 'house' : 'apartment' });
@@ -95,18 +99,31 @@ function addParkedVehicle(group, spec, mats) {
   mapRects.push({ x: spec.x - 0.95, z: spec.z - 2.1, w: 1.9, h: 4.2, type: 'garage' });
 }
 
-function addStreetlight(group, x, z, mats, lit) {
-  addCylinder(group, mats.metal, 0.1, 4.8, x, 2.4, z, 'city-streetlight');
-  const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), mats.bulb); bulb.position.set(x, 4.76, z); group.add(bulb);
-  mapRects.push({ x: x - 0.15, z: z - 0.15, w: 0.3, h: 0.3, type: 'pole' });
-  return lit ? { x, y: 4.5, z } : null;
+// M7.0A: all streetlights as three instanced meshes (pole, arm over the road, lamp head). Each pole
+// gets a slim collider marked `fence` so it blocks walking but, like the server's shot test, not bullets.
+function buildStreetlights(parent, lights, mats) {
+  const head = new THREE.MeshStandardMaterial({ color: 0x2a2c30, emissive: 0xffd39a, emissiveIntensity: 1.6, roughness: 0.5 });
+  const meshes = [[new THREE.CylinderGeometry(0.09, 0.11, 4.8, 8), mats.metal, 'city-streetlight-poles'], [new THREE.BoxGeometry(0.08, 0.08, 1.4), mats.metal, 'city-streetlight-arms'], [new THREE.BoxGeometry(0.34, 0.14, 0.52), head, 'city-streetlight-heads']]
+    .map(([geometry, material, name]) => { const m = new THREE.InstancedMesh(geometry, material, Math.max(1, lights.length)); m.name = name; m.count = lights.length; m.castShadow = name !== 'city-streetlight-heads'; m.receiveShadow = false; parent.add(m); return m; });
+  const matrix = new THREE.Matrix4(), q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
+  lights.forEach((l, i) => {
+    q.setFromAxisAngle(up, Math.atan2(l.armX, l.armZ));
+    meshes[0].setMatrixAt(i, matrix.compose(new THREE.Vector3(l.x, 2.4, l.z), q, one));
+    meshes[1].setMatrixAt(i, matrix.compose(new THREE.Vector3(l.x + l.armX * 0.7, 4.72, l.z + l.armZ * 0.7), q, one));
+    meshes[2].setMatrixAt(i, matrix.compose(new THREE.Vector3(l.x + l.armX * 1.35, 4.62, l.z + l.armZ * 1.35), q, one));
+    addCollider(l.x - 0.12, l.z - 0.12, l.x + 0.12, l.z + 0.12, 0, 4.8, { fence: true, streetlight: l.id });
+    mapRects.push({ x: l.x - 0.15, z: l.z - 0.15, w: 0.3, h: 0.3, type: 'pole' });
+  });
+  for (const m of meshes) { m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere(); }
+  const api = { meshes, level: 1, setLevel(level) { api.level = Math.max(0, Math.min(1, level)); head.emissiveIntensity = 1.6 * api.level; } };
+  return api;
 }
 
 export function buildCityExpansion(scene, Q = {}) {
   const plan = createCityPlan(Q.mobile || Q.lowMemory ? 'mobile' : 'desktop');
   Object.assign(MAP, plan.bounds);
   const mats = {
-    road: material(0x252a31), sidewalk: material(0x777a78), ground: material(0x34452e),
+    road: material(0x252a31), alley: material(0x2c3036), sidewalk: material(0x777a78), ground: material(0x34452e),
     yard: material(0x3e5033), roof: material(0x34383d), metal: material(0x555b61, 0.55, 0.35),
     window: material(0x162536, 0.2, 0.35), awning: material(0x8b5b32), car: material(0x4d5966, 0.55, 0.25),
     trim: material(0x292b2d, 0.82), door: material(0x38261d, 0.72),
@@ -115,38 +132,33 @@ export function buildCityExpansion(scene, Q = {}) {
   const infrastructure = new THREE.Group(); infrastructure.name = 'city-infrastructure'; scene.add(infrastructure);
   const cityWidth = plan.bounds.maxX - plan.bounds.minX, cityCenterX = (plan.bounds.minX + plan.bounds.maxX) / 2;
   addBox(infrastructure, mats.ground, cityWidth, 0.12, 296, cityCenterX, -0.08, 0, 'city-ground');
-  for (const road of plan.roads) {
-    addBox(infrastructure, mats.road, road.width, 0.08, road.depth, road.x, 0.01, road.z, `city-road-${road.id}`);
-    mapRects.push({ x: road.x - road.width / 2, z: road.z - road.depth / 2, w: road.width, h: road.depth, type: 'road' });
-    if (road.depth > road.width) {
-      for (const side of [-1, 1]) {
-        const x = road.x + side * (road.width / 2 + 1);
-        addBox(infrastructure, mats.sidewalk, 2, 0.1, road.depth, x, 0.055, road.z, `city-sidewalk-${road.id}-${side}`);
-        mapRects.push({ x: x - 1, z: road.z - road.depth / 2, w: 2, h: road.depth, type: 'walk' });
-      }
-    } else {
-      for (const side of [-1, 1]) {
-        const z = road.z + side * (road.depth / 2 + 1);
-        addBox(infrastructure, mats.sidewalk, road.width, 0.1, 2, road.x, 0.055, z, `city-sidewalk-${road.id}-${side}`);
-        mapRects.push({ x: road.x - road.width / 2, z: z - 1, w: road.width, h: 2, type: 'walk' });
-      }
-    }
-  }
+  // M7.0A: the shared ground layout (city-ground-layout.js): road surfaces that never overlap,
+  // sidewalks that stop at cross streets, alleys without sidewalks. One merged mesh per material.
+  const ground = cityGroundLayout(plan);
+  const merged = (rects, mat, y0, y1, name) => {
+    if (!rects.length) return null;
+    const geometry = mergeGeometries(rects.map((r) => new THREE.BoxGeometry(r.maxX - r.minX, y1 - y0, r.maxZ - r.minZ).translate((r.minX + r.maxX) / 2, (y0 + y1) / 2, (r.minZ + r.maxZ) / 2)));
+    const mesh = new THREE.Mesh(geometry, mat); mesh.name = name; mesh.receiveShadow = true; mesh.castShadow = false; infrastructure.add(mesh); return mesh;
+  };
+  merged(ground.surfaces, mats.road, -0.03, GROUND.roadTop, 'city-roads');
+  merged(ground.alleys, mats.alley, -0.03, GROUND.roadTop, 'city-alleys');
+  merged(ground.sidewalks, mats.sidewalk, 0.005, GROUND.sidewalkTop, 'city-sidewalks');
+  for (const road of plan.roads) mapRects.push({ x: road.x - road.width / 2, z: road.z - road.depth / 2, w: road.width, h: road.depth, type: 'road' });
+  for (const a of ground.alleys) mapRects.push({ x: a.minX, z: a.minZ, w: a.maxX - a.minX, h: a.maxZ - a.minZ, type: 'alley' });
+  for (const w of ground.sidewalks) mapRects.push({ x: w.minX, z: w.minZ, w: w.maxX - w.minX, h: w.maxZ - w.minZ, type: 'walk' });
   // Slop New York-inspired procedural road paint: all lane dashes and
   // crosswalks share one geometry and material, keeping the upgrade to one
   // lightweight draw call on both desktop and mobile.
-  const roadPaint = Q.roadPaint === false ? null : buildCityRoadMarkings(infrastructure, plan.roads);
+  const roadPaint = Q.roadPaint === false ? null : buildCityRoadMarkings(infrastructure, plan.roads.filter((r) => Math.min(r.width, r.depth) >= GROUND.alleyMaxWidth));
+  // M7.0A: streetlights from the shared layout, on the sidewalks at the curb (instanced: three draw calls).
+  const streetlights = buildStreetlights(infrastructure, ground.streetlights, mats);
 
-  const chunks = [], cityLightSites = [];
+  const chunks = [];
   let apartment = null, house = null, originalHouse = null, duplicatedHouse = null, combatVenue = null, bank = null;
   for (const district of plan.districts) {
     const group = new THREE.Group(); group.name = `city-chunk-${district.id}`; scene.add(group);
     for (const spec of district.buildings) addBuilding(group, spec, plan.profile, mats);
     for (const vehicle of district.vehicles || []) addParkedVehicle(group, vehicle, mats);
-    const lightX = district.center.x + (district.center.x > 0 ? -14 : district.center.x < 0 ? 14 : 0);
-    const lightSite = addStreetlight(group, lightX, district.center.z - 20, mats, plan.profile.streetLights);
-    if (lightSite) cityLightSites.push({ ...lightSite, chunkId: district.id });
-    addStreetlight(group, lightX, district.center.z + 20, mats, false);
     if (district.id === 'north') {
       apartment = new HybridApartmentSystem(scene, plan.apartment, { addCollider, mobile: plan.profile.key === 'mobile' });
       group.add(apartment.exterior);
@@ -185,12 +197,14 @@ export function buildCityExpansion(scene, Q = {}) {
     const light = new THREE.PointLight(0xffc57a, 0, 13, 2);
     light.name = `city-stream-light-${i}`; infrastructure.add(light); cityLightPool.push(light);
   }
-  function updateCityLights() {
-    const visibleIds = new Set(chunks.filter((chunk) => chunk.visible).map((chunk) => chunk.id));
-    const active = cityLightSites.filter((site) => visibleIds.has(site.chunkId));
+  // the pooled lights follow the lamps nearest the player
+  let lightFocus = { x: 0, z: 28 };
+  function updateCityLights(focus = lightFocus) {
+    lightFocus = focus;
+    const near = cityLightPool.length && city?.mode !== 'combat' ? ground.streetlights.map((l) => [l, (l.x - focus.x) ** 2 + (l.z - focus.z) ** 2]).sort((a, b) => a[1] - b[1]).slice(0, cityLightPool.length) : [];
     cityLightPool.forEach((light, index) => {
-      const site = active[index];
-      if (site) { light.position.set(site.x, site.y, site.z); light.intensity = 28; }
+      const site = near[index]?.[0];
+      if (site) { light.position.set(site.x + site.armX * 1.35, 4.4, site.z + site.armZ * 1.35); light.intensity = 28 * streetlights.level; }
       else light.intensity = 0;
     });
   }
@@ -203,7 +217,9 @@ export function buildCityExpansion(scene, Q = {}) {
   addCollider(MAP.minX - 2, MAP.maxZ, MAP.maxX + 2, MAP.maxZ + 2, 0, 12, { boundary: true });
 
   const city = {
-    plan, chunks, apartment, house, originalHouse, duplicatedHouse, combatVenue, bank, infrastructure, mode: 'free-roam',
+    plan, ground, chunks, apartment, house, originalHouse, duplicatedHouse, combatVenue, bank, infrastructure, mode: 'free-roam',
+    // M7.0A2 will drive this from the shared clock; 1 = lit (the current dusk look), 0 = off
+    setStreetlightLevel(level) { streetlights.setLevel(level); updateCityLights(); },
     beginPrewarm() {
       const state = chunks.map((chunk) => chunk.group.visible);
       const culling = [];
@@ -233,7 +249,7 @@ export function buildCityExpansion(scene, Q = {}) {
           : chunkVisible(chunk.center, player.pos, plan.profile.activeRadius + chunk.radius * 0.35);
         if (visible !== chunk.visible) { chunk.visible = visible; chunk.group.visible = visible; }
       }
-      updateCityLights();
+      updateCityLights(player.pos);
     },
     stats() {
       return {
@@ -248,6 +264,7 @@ export function buildCityExpansion(scene, Q = {}) {
         duplicatedEnterableHouse: duplicatedHouse?.site.id || null,
         duplicatedOriginalHouses: plan.duplicatedOriginalNeighborhood.houseCount,
         activeCityLights: cityLightPool.filter((light) => light.intensity > 0).length,
+        streetlights: ground.streetlights.length,
         roadPaintQuads: roadPaint?.quads || 0,
         roadPaintTriangles: roadPaint?.triangles || 0,
         combatVenue: combatVenue?.site.id || null,

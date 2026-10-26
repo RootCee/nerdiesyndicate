@@ -1,9 +1,24 @@
+import { APARTMENT_SITE } from './city-layout.js';
+
 export const SPACE_SCHEMA_VERSION = 1;
+
+// North Court's doors and interior, from its site: street door 1.4 m in front of the west facade,
+// interior at site.interiorY (the offsets the hard-coded record used at x 29, z 100).
+function apartmentSpace(site) {
+  const front = site.x - site.width / 2, round = (v) => Math.round(v * 100) / 100;
+  return {
+    id: site.id, layer: 1, safeZone: true,
+    entry: { x: round(front - 1.4), y: 0, z: site.z }, inside: { x: round(front + 3.7), y: site.interiorY, z: site.z },
+    exit: { x: round(front + 3.3), y: site.interiorY, z: site.z }, outside: { x: round(front - 1.2), y: 0, z: site.z },
+    bounds: { minX: round(front + 2.2), maxX: round(site.x + 6.8), minY: site.interiorY - 1, maxY: site.interiorY + 5, minZ: site.z - 5.5, maxZ: site.z + 5.5 },
+  };
+}
 
 export const MULTIPLAYER_SPACES = Object.freeze({
   city: Object.freeze({ id: 'city', layer: 0 }),
   underground: Object.freeze({ id: 'underground', layer: 0, entry: { x: -97, y: 0, z: -72 }, inside: { x: 0, y: 0, z: 36 }, exit: { x: 0, y: 0, z: 43 }, outside: { x: -96.2, y: 0, z: -72 }, bounds: { minX: -43, maxX: 43, minY: -4, maxY: 40, minZ: -46, maxZ: 46 } }),
-  'north-court': Object.freeze({ id: 'north-court', layer: 1, safeZone: true, entry: { x: 18.6, y: 0, z: 100 }, inside: { x: 23.7, y: 40, z: 100 }, exit: { x: 23.3, y: 40, z: 100 }, outside: { x: 18.8, y: 0, z: 100 }, bounds: { minX: 22.2, maxX: 35.8, minY: 39, maxY: 45, minZ: 94.5, maxZ: 105.5 } }),
+  // M7.0A: derived from APARTMENT_SITE (same offsets as before), so moving the building moves its doors and interior
+  'north-court': Object.freeze(apartmentSpace(APARTMENT_SITE)),
   'east-73': Object.freeze({ id: 'east-73', layer: 1, safeZone: true, entry: { x: 105.15, y: 0, z: 73 }, inside: { x: 107.3, y: 55, z: 73 }, exit: { x: 106.9, y: 55, z: 73 }, outside: { x: 105.05, y: 0, z: 73 }, bounds: { minX: 105.5, maxX: 118.5, minY: 54, maxY: 60, minZ: 67.5, maxZ: 78.5 } }),
   'hood-cross-west': Object.freeze({ id: 'hood-cross-west', layer: 1, safeZone: true, entry: { x: -48.45, y: 0, z: 53.75 }, inside: { x: -54.7, y: 70, z: 62 }, exit: { x: -55.1, y: 70, z: 62 }, outside: { x: -48.45, y: 0, z: 53.45 }, bounds: { minX: -56.5, maxX: -43.5, minY: 69, maxY: 75, minZ: 56.5, maxZ: 67.5 } }),
   'hood-duplicate-west-5': Object.freeze({ id: 'hood-duplicate-west-5', layer: 1, safeZone: true, entry: { x: 173.25, y: 0, z: 5.55 }, inside: { x: 159.7, y: 85, z: 4 }, exit: { x: 159.9, y: 85, z: 4 }, outside: { x: 173.55, y: 0, z: 5.55 }, bounds: { minX: 158.5, maxX: 171.5, minY: 84, maxY: 90, minZ: -1.5, maxZ: 9.5 } }),
