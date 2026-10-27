@@ -46,11 +46,18 @@ export class MultiplayerClient extends EventTarget {
         if (settled) return;
         settled = true; this.closedByUser = true; socket.close(); this.setState('connection-lost'); reject(new Error('Connection timed out. Please try again.'));
       }, 10000);
-      socket.addEventListener('open', () => { if (settled) return; clearTimeout(timeout); this.reconnectAttempts = 0; this.connectedAt ||= performance.now(); this.setState('connected', credentials); settled = true; resolve(credentials); });
+      socket.addEventListener('open', () => { if (settled) return; clearTimeout(timeout); this.reconnectAttempts = 0; this.connectedAt ||= performance.now(); this.#keepAlive(); this.setState('connected', credentials); settled = true; resolve(credentials); });
       socket.addEventListener('message', (event) => { this.metrics.received++; this.metrics.receivedBytes += typeof event.data === 'string' ? event.data.length : event.data?.byteLength || 0; this.#message(event.data); });
       socket.addEventListener('error', () => { if (!settled) { clearTimeout(timeout); settled = true; this.closedByUser = true; socket.close(); this.setState('connection-lost'); reject(new Error('WebSocket connection failed. Please try again.')); } });
-      socket.addEventListener('close', (event) => { if (this.socket !== socket) return; this.socket = null; if (!this.closedByUser) this.#reconnect(event.code); else this.setState('disconnected'); });
+      socket.addEventListener('close', (event) => { if (this.socket !== socket) return; this.socket = null; this.#keepAlive(false); if (!this.closedByUser) this.#reconnect(event.code); else this.setState('disconnected'); });
     });
+  }
+  // The game loop pings every 5 s but stops while the tab is hidden; this timer keeps a background tab
+  // known to the server (which drops sockets silent for MULTIPLAYER_LIMITS.staleConnectionMs).
+  #keepAlive(on = true) {
+    clearInterval(this.keepAliveTimer); this.keepAliveTimer = null; if (!on) return;
+    this.keepAliveTimer = setInterval(() => { if (performance.now() - (this.lastSentAt || 0) > 15000) this.ping(); }, 20000);
+    this.keepAliveTimer.unref?.();
   }
   #message(raw) {
     let message; try { message = JSON.parse(raw); } catch { return; }
@@ -80,7 +87,7 @@ export class MultiplayerClient extends EventTarget {
     if (this.socket?.readyState !== WebSocket.OPEN) return false;
     const raw = JSON.stringify({ v: PROTOCOL_VERSION, ...message });
     if (new TextEncoder().encode(raw).byteLength > MULTIPLAYER_LIMITS.maxPayloadBytes) return false;
-    this.socket.send(raw); this.metrics.sent++; this.metrics.sentBytes += raw.length; return true;
+    this.socket.send(raw); this.lastSentAt = performance.now(); this.metrics.sent++; this.metrics.sentBytes += raw.length; return true;
   }
   // `aim` (M6.9): { raised, pitch } so other players see the weapon up and pointed.
   sendMovement(player, now = performance.now(), aim = null) {
@@ -111,5 +118,5 @@ export class MultiplayerClient extends EventTarget {
     const seconds = Math.max(1, (now - this.connectedAt) / 1000);
     return { ...this.metrics, sentPerSecond: this.metrics.sent / seconds, receivedPerSecond: this.metrics.received / seconds, sentBytesPerSecond: this.metrics.sentBytes / seconds, receivedBytesPerSecond: this.metrics.receivedBytes / seconds };
   }
-  close() { this.closedByUser = true; this.socket?.close(1000, 'client exit'); this.socket = null; this.setState('disconnected'); }
+  close() { this.closedByUser = true; this.#keepAlive(false); this.socket?.close(1000, 'client exit'); this.socket = null; this.setState('disconnected'); }
 }

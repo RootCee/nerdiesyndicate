@@ -12,6 +12,10 @@ export const MULTIPLAYER_LIMITS = Object.freeze({
   idleUpdateMs: 1000,
   joinTicketMs: 30_000,
   reconnectGraceMs: 15_000,
+  // A socket the server has heard nothing from for this long is treated as closed (sleeping laptop,
+  // dropped phone). Clients keep pinging while hidden, and browsers throttle hidden timers to ~1/min.
+  staleConnectionMs: 3 * 60_000,
+  staleSweepMs: 60_000,
   roomIdleMs: 15 * 60_000,
   maxPayloadBytes: 1024,
   maxMessagesPerSecond: 30,
