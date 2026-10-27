@@ -239,7 +239,9 @@ export function apartmentUnit(entry, floor) {
   if (penthouse) {
     const n = stN, rise = (top - level) / n, tread = 0.28, dTop = stTop, dBottom = stBottom; // the top step clear of the back wall
     runs.push({ a: stairA0, d0: -Dh, d1: dBottom - 0.05, gaps: [], axis: 'd' }); // the stairwell's wall
-    stairs = { steps: Array.from({ length: n }, (_, i) => ({ ...rect(stairA0, A, dBottom - (i + 1) * tread, dBottom - i * tread), top: r2(level + rise * (i + 1)) })), opening: rect(stairA0, A, dTop - 0.05, dBottom), bottom: P((stairA0 + A) / 2, dBottom + 0.9), top: P((stairA0 + A) / 2, dTop + 0.15) };
+    stairs = { steps: Array.from({ length: n }, (_, i) => ({ ...rect(stairA0, A, dBottom - (i + 1) * tread, dBottom - i * tread), top: r2(level + rise * (i + 1)) })), opening: rect(stairA0, A, dTop - 0.05, dBottom), bottom: P((stairA0 + A) / 2, dBottom + 0.9), top: P((stairA0 + A) / 2, dTop + 0.15),
+      // on the roof: a railing along the opening's open side and across its far end (the stairs come up at the near end)
+      rails: [rect(stairA0 - 0.08, stairA0, dTop + 1.8, dBottom), rect(stairA0, A, dBottom, dBottom + 0.08)] }; // (the top 1.8 m is the way off the stairs)
     // the terrace: two loungers 1.8 m apart facing the street, a table for four, a hot tub at the back away from the stairs
     roof = { y: top, rect: rect(-A - 0.3, A + 0.3, -Dh - 0.3, Dh + 0.3), furniture: [box('lounger', -A + 2.0, Dh - 2.1, 0.8, 2.0, 0.4), box('lounger', -A + 4.6, Dh - 2.1, 0.8, 2.0, 0.4), box('tub', -A + 2.3, -Dh + 2.4, 2.2, 2.2, 0.8), box('plant', -A + 0.75, Dh - 0.75, 0.7, 0.7, 1.6), box('plant', A - 0.75, Dh - 0.75, 0.7, 0.7, 1.6), box('table', A - 2.6, Dh - 2.6, 1.2, 1.2, 0.74), box('rug', -A + 3.3, Dh - 2.1, 4.2, 2.6, 0.01, { collide: false })].map((o) => ({ ...o, y: 0 })) };
   }

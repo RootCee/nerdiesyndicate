@@ -565,6 +565,20 @@ function midrise(batch, kit, b, parent, { mobile = false } = {}) {
       if (k === 0 && front && shop) continue;
       for (let i = 0; i < bays; i++) {
         const a = -f.length / 2 + 0.6 + span * (i + 0.5);
+        if (k === 0 && front && i === Math.floor(bays / 2) && homes) { // Stage 2: an apartment building's street entrance
+          // a stone portal (pilasters, plinths, a lintel), glass double doors in bronze frames with a transom, a deep
+          // canopy lit from below, a lantern each side and a lit address plate: unmistakably the way in
+          const pw = Math.min(span * 0.96, 3.1), dw = Math.max(1.8, pw - 0.9), dh = 2.45, lt = dh + 0.55;
+          for (const sd of [-1, 1]) { fbox(batch, m.concrete, f, a + sd * (pw / 2 - 0.2), lt / 2, 0.12, 0.4, lt, 0.24); if (!mobile) fbox(batch, m.trim, f, a + sd * (pw / 2 - 0.2), 0.25, 0.14, 0.48, 0.5, 0.28); } // pilasters, plinths
+          fbox(batch, m.concrete, f, a, lt + 0.22, 0.13, pw + 0.2, 0.44, 0.26); fbox(batch, m.trim, f, a, lt, 0.16, pw + 0.04, 0.06, 0.3);       // lintel and its cornice
+          fbox(batch, m.charcoal, f, a, dh / 2 + 0.25, 0.04, dw + 0.16, dh + 0.5, 0.08);                                                   // the bronze door frame
+          for (const sd of [-1, 1]) { const da = a + sd * dw / 4; fplane(batch, m.glassWarm || m.glass, f, da, dh / 2, 0.09, dw / 2 - 0.12, dh - 0.12); fbox(batch, m.gold, f, a + sd * 0.12, 1.1, 0.13, 0.04, 0.9, 0.05); if (!mobile) { fbox(batch, m.charcoal, f, da, 0.12, 0.1, dw / 2 - 0.04, 0.2, 0.05); fbox(batch, m.gold, f, da, 1.05, 0.12, dw / 2 - 0.3, 0.04, 0.04); } } // two glass leaves: kick plate, pull handle, push bar
+          fbox(batch, m.charcoal, f, a, dh / 2, 0.1, 0.07, dh, 0.06); fplane(batch, m.glassWarm || m.glass, f, a, dh + 0.25, 0.09, dw - 0.1, 0.38);    // the centre stile, the transom
+          fbox(batch, m.charcoal, f, a, lt + 0.62, 0.75, pw + 0.5, 0.12, 1.5); fbox(batch, m.gold, f, a, lt + 0.62, 1.5, pw + 0.5, 0.18, 0.04); fbox(batch, m.lamp, f, a, lt + 0.55, 0.75, pw - 0.4, 0.02, 0.9); // canopy, fascia, its light
+          for (const sd of [-1, 1]) { if (!mobile) fbox(batch, m.charcoal, f, a + sd * (pw / 2 + 0.35), 2.15, 0.12, 0.14, 0.5, 0.18); fbox(batch, m.lamp, f, a + sd * (pw / 2 + 0.35), 2.15, 0.2, 0.18, 0.34, 0.14); } // lanterns
+          if (!mobile) fbox(batch, m.gold, f, a, lt + 1.1, 0.05, 0.9, 0.36, 0.06); fbox(batch, m.lamp, f, a, lt + 1.1, 0.09, 0.78, 0.26, 0.02);            // the address plate
+          continue;
+        }
         if (k === 0 && front && i === Math.floor(bays / 2)) { // entrance with a canopy
           fbox(batch, m.frame, f, a, 1.2, 0.05, 1.5, 2.4, 0.06); fbox(batch, m.glass, f, a, 1.2, 0.08, 1.3, 2.2, 0.03); fbox(batch, m.trim, f, a, 2.55, 0.1, 1.9, 0.16, 0.2);
           if (r() < 0.5) awning(batch, r() < 0.5 ? m.fabricGreen : m.fabricPurple, f, a, 2.95, 2.2, 1.1, 0.4); else fbox(batch, m.charcoal, f, a, 2.9, 0.55, 2.2, 0.1, 1.1);
@@ -586,7 +600,7 @@ function midrise(batch, kit, b, parent, { mobile = false } = {}) {
           }
           continue;
         }
-        windowUnit(batch, kit, f, a, k * fh + fh * 0.55, Math.min(1.5, span * 0.55), fh * 0.48, { glass: litGlass(kit, r), surround: body === m.brick ? m.trim : m.concrete, mullion: !mobile, sill: !mobile || front, lean: !front || (mobile && k >= 2), pane: homes && k > 0 }); // full detail faces the street (low floors only on phones)
+        windowUnit(batch, kit, f, a, k * fh + fh * 0.55, Math.min(1.5, span * 0.55), fh * 0.48, { glass: litGlass(kit, r), surround: body === m.brick ? m.trim : m.concrete, mullion: !mobile, sill: !mobile || front, lean: !front || (mobile && k >= (homes ? 1 : 2)), pane: homes && k > 0 }); // full detail faces the street (low floors only on phones)
       }
     }
     if (front && shop) {

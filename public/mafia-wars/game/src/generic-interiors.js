@@ -401,13 +401,21 @@ export class GenericInteriorSystem {
     }
     // the penthouse: stairs up through the ceiling, and the roof terrace behind the parapet
     if (U.stairs) {
-      for (const st of U.stairs.steps) { bx(M.wood, st.minX, st.maxX, st.top - y - 0.2, st.top - y, st.minZ, st.maxZ); box(st.minX, st.maxX, -0.1, st.top - y, st.minZ, st.maxZ, { step: true }); }
+      // a closed stair: each step solid (white risers) under a wooden tread with a small nosing
+      for (const st of U.stairs.steps) { bx(M.white, st.minX + 0.02, st.maxX - 0.02, 0, st.top - y - 0.05, st.minZ, st.maxZ); bx(M.wood, st.minX, st.maxX, st.top - y - 0.05, st.top - y, st.minZ - 0.02, st.maxZ + 0.02); box(st.minX, st.maxX, -0.1, st.top - y, st.minZ, st.maxZ, { step: true }); }
     }
     if (U.roof) {
       const R = U.roof, ry = R.y - y, inset = 0.35;
       for (const r of subtractRect(R.rect, [U.stairs.opening])) box(r.minX - SEAM, r.maxX + SEAM, ry - 0.2, ry, r.minZ - SEAM, r.maxZ + SEAM, { step: true }); // overlapping: no gap at a seam
       for (const [x0, x1, z0, z1] of [[R.rect.minX, R.rect.maxX, R.rect.minZ, R.rect.minZ + inset], [R.rect.minX, R.rect.maxX, R.rect.maxZ - inset, R.rect.maxZ], [R.rect.minX, R.rect.minX + inset, R.rect.minZ, R.rect.maxZ], [R.rect.maxX - inset, R.rect.maxX, R.rect.minZ, R.rect.maxZ]]) box(x0, x1, ry, ry + 1.15, z0, z1); // the parapet (kept high enough that nobody falls)
-      bx(M.floor, R.rect.minX + inset, R.rect.maxX - inset, ry, ry + 0.03, R.rect.minZ + inset, R.rect.maxZ - inset); // a deck over the roof
+      // a deck over the roof, open over the stairwell (so the stairs below see the sky), with a railing round the opening
+      for (const r of subtractRect({ minX: R.rect.minX + inset, maxX: R.rect.maxX - inset, minZ: R.rect.minZ + inset, maxZ: R.rect.maxZ - inset }, [U.stairs.opening])) bx(M.floor, r.minX, r.maxX, ry, ry + 0.03, r.minZ, r.maxZ);
+      for (const rail of U.stairs.rails || []) {
+        box(rail.minX, rail.maxX, ry, ry + 1.05, rail.minZ, rail.maxZ, { furniture: 'railing' });
+        const alongX = rail.maxX - rail.minX > rail.maxZ - rail.minZ;
+        bx(M.metal, rail.minX - 0.02, rail.maxX + 0.02, ry + 0.98, ry + 1.05, rail.minZ - 0.02, rail.maxZ + 0.02);
+        for (let a = (alongX ? rail.minX : rail.minZ) + 0.1; a < (alongX ? rail.maxX : rail.maxZ); a += 0.14) alongX ? bx(M.metal, a - 0.015, a + 0.015, ry, ry + 0.98, rail.minZ, rail.maxZ) : bx(M.metal, rail.minX, rail.maxX, ry, ry + 0.98, a - 0.015, a + 0.015);
+      }
       for (const o of R.furniture) draw(o, ry + 0.03);
       for (const [x, z] of [[R.rect.minX + 0.6, R.rect.minZ + 0.6], [R.rect.maxX - 0.6, R.rect.minZ + 0.6], [R.rect.minX + 0.6, R.rect.maxZ - 0.6], [R.rect.maxX - 0.6, R.rect.maxZ - 0.6]]) { bx(M.metal, x - 0.04, x + 0.04, ry, ry + 2.2, z - 0.04, z + 0.04); bx(M.glow, x - 0.12, x + 0.12, ry + 2.2, ry + 2.36, z - 0.12, z + 0.12); } // terrace lanterns
     }
