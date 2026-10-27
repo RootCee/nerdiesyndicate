@@ -113,6 +113,8 @@ export class MultiplayerClient extends EventTarget {
   shopRestock(shopId = 'nerdie-arms') { this.shopSeq = (this.shopSeq || 0) + 1; return this.send({ type: 'shop', seq: this.shopSeq, shopId, action: 'restock' }); }
   // M7.1D chess: sit, stand, ready, challenge, move, resign, draws, watch (the server checks the seat and the rules)
   sendChess(body) { this.chessSeq = (this.chessSeq || 0) + 1; return this.send({ type: 'chess', seq: this.chessSeq, ...body }); }
+  // Talking to a resident: the server holds them in place, facing this player, for a few seconds (resent while talking).
+  talkToResident(index) { return Number.isInteger(index) && index >= 0 ? this.send({ type: 'npc-talk', index }) : false; }
   ping() { const sentAt = performance.now(); this.send({ type: 'ping', nonce: Math.random().toString(36).slice(2), sentAt }); }
   diagnostics(now = performance.now()) {
     const seconds = Math.max(1, (now - this.connectedAt) / 1000);

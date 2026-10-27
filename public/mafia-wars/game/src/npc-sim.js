@@ -38,6 +38,7 @@ export const NPC_SIM_RULES = Object.freeze({
   idleMinMs: 2500, idleMaxMs: 9000, visitIdleMs: 7000,
   noticeRadius: 10, hearingRadius: 45, memoryMs: 60_000,
 });
+export const NPC_TALK_RULES = Object.freeze({ reachM: 4, holdMs: 12_000 });
 export const NPC_ANIM = Object.freeze({ idle: 0, walk: 1, notice: 2, sit: 3 }); // sit: M7.1D chess (seated on a stool)
 
 const hard = (obstacles) => obstacles.filter((r) => !r.soft);
@@ -305,6 +306,14 @@ export class CityNpcSimulation {
   // M7.1D: a resident playing chess sits at its seat (on the stool, facing the board; anim `sit`) until
   // released; it stays active and visible, skips its routine and reactions, and resumes them afterwards,
   // stepping off the stool to the seat's stand point (open ground, so its next route can start there).
+  // A player talking to a resident (resident-panel.js): they stop and face the player for a few seconds; the
+  // client resends while the conversation is open. Only a calm resident within reach, never a seated one.
+  talkWith(index, player, now) {
+    const r = this.residents[index];
+    if (!r || r.held || !player || dist(player, r) > NPC_TALK_RULES.reachM || r.fight || r.fleeing || r.downUntil > now || r.behavior === NPC_BEHAVIOR.defeated) return false;
+    r.talk = { playerId: player.id, until: now + NPC_TALK_RULES.holdMs }; r.route = null; r.speed = 0;
+    return true;
+  }
   holdSeat(index, { x, z, yaw, stand = null }) {
     const r = this.residents[index]; if (!r) return false;
     r.held = { x, z, yaw, stand };
@@ -526,6 +535,11 @@ export class CityNpcSimulation {
       r.memory = r.memory.filter((m) => now - m.at < rules.memoryMs);
       if (r.threats.length) r.threats = r.threats.filter((t) => now - t.at < NPC_BEHAVIOR_RULES.threatMemoryMs); // forget on time, active or not
       if (r.held) { Object.assign(r, { x: r.held.x, z: r.held.z, yaw: r.held.yaw, speed: 0, anim: NPC_ANIM.sit, route: null, behavior: NPC_BEHAVIOR.calm, fleeing: false, fight: null, aware: null, pending: null }); r.lastDormantAt = now; continue; }
+      if (r.talk) {
+        const talker = players.find((pl) => pl.id === r.talk.playerId);
+        if (!talker || now > r.talk.until || dist(talker, r) > NPC_TALK_RULES.reachM * 2 || r.fight || r.fleeing) r.talk = null;
+        else { Object.assign(r, { speed: 0, anim: NPC_ANIM.idle, route: null }); this.#face(r, talker); r.waitUntil = Math.max(r.waitUntil, r.talk.until); continue; }
+      }
       if (!r.active) {
         // A defeated resident stays down until it can respawn out of sight.
         if (r.behavior === NPC_BEHAVIOR.defeated && !this.#outOfSight(r, players)) { r.speed = 0; continue; }

@@ -3,6 +3,7 @@
 // document. It shows only what the requester may see: today every visitor is a temporary player, so tellers
 // give bank information and city-level figures, never anyone's personal account.
 import { economicMinuteOfDay, scheduledPlace } from './resident-schedule.js';
+import { residentAddress } from './city-addresses.js';
 const STYLE = `
 #bankPanel{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;background:rgba(5,3,10,.66);font-family:'Barlow Condensed',system-ui,sans-serif;color:#f3eefc;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))}
 #bankPanel.on{display:flex}
@@ -146,7 +147,7 @@ export class BankPanel {
       const job = r.job ? `${esc(r.job.title)} · ${place(r.job.workplaceId)} · ${shiftText(r.job)}` : 'No permanent job (municipal temp work rotation)';
       return `<button type="button" class="bp-res" data-founder="resident:${esc(r.residentId)}" aria-label="${esc(r.name)}, open history">
         <span class="no">${esc(r.residentNo)}</span>
-        <span class="who"><b>${esc(r.name)}${chips}</b><small>${job}</small><small>${nowText(r, minute)}</small></span>
+        <span class="who"><b>${esc(r.name)}${chips}</b><small>${job}</small><small>${nowText(r, minute)}</small><small>${esc(residentAddress(r.housing?.propertyId) || words(r.housing?.propertyId))}</small></span>
         <span class="money">${n(r.checking)} checking<small>${n(r.savings)} savings · ${n(r.lifetime?.wages)} earned</small></span>
       </button>`;
     }).join('');
@@ -170,7 +171,7 @@ export class BankPanel {
     const detail = (details) => Object.entries(details || {}).map(([k, v]) => `${words(k)} ${esc(typeof v === 'object' ? JSON.stringify(v) : v)}`).join(' · ');
     return `<div class="bp-actions"><button type="button" class="bp-b" data-founder="back">← All residents</button></div>
       <h3>${esc(r.name)} · resident ${esc(r.residentNo)}</h3>
-      <p class="bp-note">${job}<br>${nowText(r, economicMinuteOfDay(this.now()))} · home ${words(r.housing?.propertyId)} (${words(r.housing?.status)})</p>
+      <p class="bp-note">${job}<br>${nowText(r, economicMinuteOfDay(this.now()))}<br>Home: ${esc(residentAddress(r.housing?.propertyId) || words(r.housing?.propertyId))}${r.housing?.status && r.housing.status !== 'active' ? ` (${words(r.housing.status)})` : ''}</p>
       <div class="bp-grid bp-grid-2">${stats.map(([k, v]) => `<div class="bp-stat"><b>${esc(k)}</b><span>${v}</span></div>`).join('')}</div>
       <h3>Balance over time</h3>${chart}
       <h3>Daily record</h3>${dayRows ? `<div class="bp-scroll"><table class="bp-table"><thead><tr><th>Day</th><th>Checking</th><th>Savings</th><th>Earned</th><th>Spent</th><th>Shifts</th><th>Rent</th><th>Hunger</th></tr></thead><tbody>${dayRows}</tbody></table></div>` : '<p class="bp-note">No daily records yet: the first is taken at the end of today (11:59 PM Pacific).</p>'}

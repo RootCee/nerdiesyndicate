@@ -48,6 +48,12 @@ import { createCityMap } from './city-map.js';
 import { ChessClient } from './chess-client.js';
 import { LibraryPanel } from './library-panel.js';
 import { BankPanel } from './bank-panel.js';
+import { ResidentPanel } from './resident-panel.js';
+import { RESIDENT_NAMES } from './resident-names.js';
+import { PERMANENT_RESIDENT_IDENTITIES, PERMANENT_RESIDENT_SCHEDULES } from './permanent-residents.js';
+import { chessLevel, chessResident } from './chess-residents.js';
+import { NPC_BEHAVIOR, personalityOf } from './npc-behavior.js';
+import { npcIdFor } from './npc-schema.js';
 import { CityServiceClient } from './city-service-client.js';
 import { EconomyDemoService, economyDemoAllowed } from './economy-demo-service.js';
 import { relativeBearing } from './city-map-view.js';
@@ -60,9 +66,9 @@ import { NpcRenderer, NPC_RENDER_RULES } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=bank-m2.2-rel5';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=bank-m2.2-rel6';
 
-const GAME_BUILD_ID = 'bank-m2.2-rel5';
+const GAME_BUILD_ID = 'bank-m2.2-rel6';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -237,6 +243,50 @@ const founderAccess = cityService.founderSignIn ? {
 const bankPanel = new BankPanel({ cityService, founderAccess, onOpen: (open) => {
   if (open) { input.moveX = input.moveY = 0; input.fire = input.ads = input.sprint = false; document.exitPointerLock?.(); } else if (MATCH.started && !MATCH.over && !TOUCH) requestLock();
 } });
+// Talking to residents: walk up to a permanent resident and press E (TALK on touch). The card shows their job,
+// shift and where they are now; a signed-in founder also sees balances and the full address. While the panel
+// is open the server holds the resident in place, facing the player (npc-talk, refreshed every few seconds).
+const TALK_RANGE_M = 2.6, TALK_REFRESH_MS = 8000;
+const residentPanel = new ResidentPanel({
+  founder: { signedIn: () => !!cityService.founderSignedIn, resident: (id) => cityService.founderResident(id) },
+  onWaypoint: (placeId) => {
+    const poi = cityPoiList?.find((p) => p.id === placeId); if (!poi) return;
+    const route = findRoute(navGraph(), player.pos, poi.entry, poi); if (route?.ok) setWaypoint(poi, route);
+  },
+  onOpen: (open) => {
+    if (open) { input.moveX = input.moveY = 0; input.fire = input.ads = input.sprint = false; document.exitPointerLock?.(); } else if (MATCH.started && !MATCH.over && !TOUCH) requestLock();
+  },
+});
+// Only the city's permanent residents (the bank's 36) can talk: they have names, jobs and homes.
+function talkableResident(index, identity) {
+  const schedule = PERMANENT_RESIDENT_SCHEDULES[index];
+  if (!schedule || PERMANENT_RESIDENT_IDENTITIES[index]?.id !== identity?.id || !RESIDENT_NAMES[index]) return null;
+  const chess = chessResident(npcIdFor(index));
+  return { index, residentId: schedule.residentId, name: RESIDENT_NAMES[index], personality: personalityOf(identity), job: schedule.employment,
+    housing: { propertyId: schedule.propertyId }, chess: chess ? { hello: chess.hello, levelLabel: chessLevel(chess.level)?.label } : null };
+}
+const CALM_FOR_TALK = new Set([NPC_BEHAVIOR.calm, NPC_BEHAVIOR.greet, NPC_BEHAVIOR.alert]);
+let talkIndex = -1, talkRefreshAt = 0;
+const residentTalk = {
+  update(interact) {
+    const none = { prompt: '', mobileLabel: '' };
+    if (residentPanel.open) {
+      const e = npcRenderer.entries.get(talkIndex);
+      if (!e?.render || Math.hypot(e.render.x - player.pos.x, e.render.z - player.pos.z) > TALK_RANGE_M * 3) residentPanel.close();
+      else if (performance.now() >= talkRefreshAt) { multiplayer?.talkToResident?.(talkIndex); talkRefreshAt = performance.now() + TALK_REFRESH_MS; }
+      return none;
+    }
+    if (!multiplayerActive || multiplayer?.state !== 'connected' || (localContext.space?.id || 'city') !== 'city' || player.dead) return none;
+    let best = null, bestD = TALK_RANGE_M;
+    for (const [index, e] of npcRenderer.entries) {
+      if (!e.render || !e.visual?.root.visible || !CALM_FOR_TALK.has(e.render.behavior ?? NPC_BEHAVIOR.calm)) continue;
+      const d = Math.hypot(e.render.x - player.pos.x, e.render.z - player.pos.z); if (d < bestD) { bestD = d; best = [index, e]; }
+    }
+    const resident = best && talkableResident(best[0], best[1].identity); if (!resident) return none;
+    if (interact) { talkIndex = resident.index; residentPanel.show(resident); multiplayer?.talkToResident?.(resident.index); talkRefreshAt = performance.now() + TALK_REFRESH_MS; return none; }
+    return { prompt: `${Q.mobile ? '' : '[E] '}TALK TO ${resident.name.toUpperCase()}`, mobileLabel: 'TALK' };
+  },
+};
 const waypointBeacon = new THREE.Mesh(
   new THREE.CylinderGeometry(0.45, 0.45, 26, 16, 1, true),
   new THREE.MeshBasicMaterial({ color: 0xf2d28b, transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }),
@@ -728,7 +778,7 @@ function startGame(mode = selectedMode, options = {}) {
   setCombatLobby(false);
   score.red = score.blue = 0; MATCH.left = MATCH.time; MATCH.over = false; MATCH.started = true; for (const n in ab) ab[n].have = 0; snitchUntil = 0;
   for (const interior of [city?.gunShop, city?.library, city?.bankInterior, city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = false; interior.interior.visible = false; }
-  libraryPanel.close(); bankPanel.close();
+  libraryPanel.close(); bankPanel.close(); residentPanel.close();
   setInteriorRenderLayer(false);
   while (bots.length) ctx.remove(bots[bots.length - 1]);
   player.team = combat ? 'blue' : null;
@@ -876,6 +926,7 @@ function applyLocalContext(context, revision = localContextRevision + 1, state =
   for (const interior of [city?.gunShop, city?.library, city?.bankInterior, city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = interior === target; interior.interior.visible = interior === target; }
   if (target !== city?.library) libraryPanel.close();
   if (target !== city?.bankInterior) bankPanel.close();
+  residentPanel.close();
   setInteriorRenderLayer(!!target);
   if (state && ['x', 'y', 'z'].every((key) => Number.isFinite(state[key]))) {
     if (spaceId === 'underground' || priorSpace === 'underground') {
@@ -1067,6 +1118,7 @@ function configureMultiplayerClient() {
     }
     else if (message.type === 'shop') { hud.callout('AMMO RESTOCKED', 'ALL RESERVES FULL · FREE'); sfx.ding(); }
     else if (message.type === 'reject' && message.chess) chessClient.onReject(message);
+    else if (message.type === 'reject' && message.talk) { /* a busy resident just keeps walking; the card still works */ }
     else if (message.type === 'reject') { showShopReject(message); if (message.context) applyLocalContext(message.context, message.contextRevision || localContextRevision, message.state, message.safeZone); if (message.combat) applyLocalCombat(message.combat); }
     else if (message.type === 'correction' && message.state) applyServerCorrection(message.state);
   });
@@ -1351,6 +1403,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'Escape' && chessClient.open) { chessClient.close(); return; }
   if (e.code === 'Escape' && libraryPanel.open) { libraryPanel.close(); return; }
   if (e.code === 'Escape' && bankPanel.open) { bankPanel.close(); return; }
+  if (e.code === 'Escape' && residentPanel.open) { residentPanel.close(); return; }
   if (e.code === 'Escape' && combatLobbyOpen) { setCombatLobby(false); return; }
   if (e.code === 'KeyX' && practiceCombat && MATCH.started) { returnToCity(); return; }
   if (e.code === 'Escape' && cityMap?.isOpen) { setCityMap(false); return; }
@@ -1379,7 +1432,7 @@ function loop(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now; time += dt;
   fpsAcc += dt; fpsN++; if (fpsAcc > 0.5) { hud.fps(Math.round(fpsN / fpsAcc)); fpsAcc = 0; fpsN = 0; }
   const look = poll();
-  if (!MATCH.started || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || (!input.locked && !TOUCH && !MATCH.over && MATCH.started)) { look.dx = look.dy = 0; }
+  if (!MATCH.started || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || (!input.locked && !TOUCH && !MATCH.over && MATCH.started)) { look.dx = look.dy = 0; }
   if (!MATCH.started) { // idle camera drift on the title
     player.yaw += dt * 0.03; player.update(dt, { moveX: 0, moveY: 0 }, { dx: 0, dy: 0 }, time); input.camera = false;
   } else {
@@ -1393,8 +1446,8 @@ function loop(now) {
     if (input.ab) { if (isCombatMode(MATCH.mode)) useAbility(input.ab); input.ab = 0; }
     if (input.camera) { input.camera = false; if (!combatLobbyOpen) toggleCamera(); }
     if (input.map) { input.map = false; setCityMap(!cityMap?.isOpen); }
-    if (cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open) { input.fire = false; input.ads = false; input.jump = false; input.interact = false; input.reload = false; }
-    player.update(dt, MATCH.over || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
+    if (cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open) { input.fire = false; input.ads = false; input.jump = false; input.interact = false; input.reload = false; }
+    player.update(dt, MATCH.over || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
     blendServerCorrection(dt);
     if (multiplayerActive && Number.isFinite(localCombat?.health)) {
       player.hp = localCombat.health; player.dead = localCombat.dead === true;
@@ -1446,9 +1499,12 @@ function loop(now) {
       const chessState = interiorActive || venueState.prompt || bankState.prompt || libraryState.transitioned || apartmentState.transitioned || originalHouseState.transitioned || duplicatedHouseState.transitioned || houseState.transitioned
         ? { prompt: '', mobileLabel: '' }
         : chessClient.update(player, !!input.interact, multiplayerActive && multiplayer?.state === 'connected');
-      const prompt = gunShopState.prompt || libraryState.prompt || bankInteriorState.prompt || apartmentState.prompt || originalHouseState.prompt || duplicatedHouseState.prompt || houseState.prompt || venueState.prompt || bankState.prompt || chessState.prompt;
+      const otherPrompt = gunShopState.prompt || libraryState.prompt || bankInteriorState.prompt || apartmentState.prompt || originalHouseState.prompt || duplicatedHouseState.prompt || houseState.prompt || venueState.prompt || bankState.prompt || chessState.prompt;
+      // Talking to a resident is offered only when nothing else is (doors, counters and tables come first).
+      const talkState = otherPrompt || interiorActive ? { prompt: '', mobileLabel: '' } : residentTalk.update(!!input.interact);
+      const prompt = otherPrompt || talkState.prompt;
       const activeHouseState = [originalHouseState, duplicatedHouseState, houseState].find((state) => state.prompt) || houseState;
-      const mobileLabel = gunShopState.mobileLabel ? gunShopState.mobileLabel : libraryState.mobileLabel ? libraryState.mobileLabel : bankInteriorState.mobileLabel ? bankInteriorState.mobileLabel : venueState.prompt ? 'ENTER COMBAT' : bankState.prompt ? bankState.mobileLabel : chessState.prompt ? chessState.mobileLabel : activeHouseState.prompt && !activeHouseState.blocked ? (activeHouseState.active ? 'EXIT HOUSE' : 'ENTER HOUSE') : '';
+      const mobileLabel = gunShopState.mobileLabel ? gunShopState.mobileLabel : libraryState.mobileLabel ? libraryState.mobileLabel : bankInteriorState.mobileLabel ? bankInteriorState.mobileLabel : venueState.prompt ? 'ENTER COMBAT' : bankState.prompt ? bankState.mobileLabel : chessState.prompt ? chessState.mobileLabel : activeHouseState.prompt && !activeHouseState.blocked ? (activeHouseState.active ? 'EXIT HOUSE' : 'ENTER HOUSE') : talkState.prompt ? talkState.mobileLabel : '';
       hud.prompt(prompt, interiorActive, mobileLabel);
       input.interact = false;
       if (gunShopState.action) handleGunShopAction(gunShopState);
