@@ -18,7 +18,8 @@ import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 export const STOREFRONT_BUSINESSES = Object.freeze({
   // M7.0B1 North Market showcase: provisional identities from the Business NFT playable types
   'west-mixed-north-0': SHOWCASE_BUSINESSES['west-mixed-north-0'],
-  'west-mixed-north-1': Object.freeze({ id: 'nerdie-city-bank', name: 'Nerdie City Bank', category: 'Bank', status: 'wallet' }),
+  // Phase 2.1: the bank has an interior (bank-layout.js); its banking services still read as coming soon
+  'west-mixed-north-1': Object.freeze({ id: 'nerdie-city-bank', name: 'Nerdie City Bank', category: 'Bank', status: 'wallet', spaceId: 'nerdie-city-bank' }),
   'west-mixed-north-2': SHOWCASE_BUSINESSES['west-mixed-north-2'],
   // Ammo: an enterable gun and ammo shop (gun-shop-layout.js); open, restocking is free for now
   'west-mixed-north-3': Object.freeze({ id: 'nerdie-arms', name: 'Ammo', category: 'Gun & Ammo Shop', status: 'open', spaceId: 'nerdie-arms', kind: 'shop' }),
@@ -27,14 +28,15 @@ export const STOREFRONT_BUSINESSES = Object.freeze({
   'west-industrial-south-2': Object.freeze({ id: 'laundromat', name: 'Laundromat', category: 'Laundromat', status: 'coming-soon' }),
   'west-industrial-south-3': Object.freeze({ id: 'sneaker-shop', name: 'Sneaker Shop', category: 'Sneaker Shop', status: 'coming-soon' }),
 });
-export const BANK_BUILDING_ID = 'west-mixed-north-1';
+import { BANK_BUILDING_ID } from './bank-layout.js';
+export { BANK_BUILDING_ID };
 
 // The bank opens the existing wallet only. Copy must never promise deposits,
 // withdrawals, loans, or stored balances until those systems exist.
 export const BANK_COPY = Object.freeze({
   prompt: 'NERDIE CITY BANK',
-  action: 'OPEN WALLET',
-  description: 'Opens your Nerdie Cash wallet. Banking services are coming soon.',
+  action: 'ENTER BANK',
+  description: 'The financial headquarters: tellers, the City Economy Board, market intelligence, and a wallet kiosk. Banking services are coming soon. Safe zone.',
 });
 
 export const STREET_NAMES = Object.freeze({

@@ -45,13 +45,14 @@ export class CityNpcSimulation {
   // reactions: M6.7B1 awareness and reactions (off = exactly M6.7A behaviour).
   // combat: M6.7B2 self-defense (requires reactions).
   // structureOcclusion: M6.8A, shots at residents use the same city structures as player shots.
-  constructor({ seed = 'room', maxActive = NPC_POPULATION.startActive, population = NPC_POPULATION.max, plan = createCityPlan(), rules = NPC_SIM_RULES, reactions = false, combat = false, structureOcclusion = false } = {}) {
+  constructor({ seed = 'room', identities = null, maxActive = NPC_POPULATION.startActive, population = NPC_POPULATION.max, plan = createCityPlan(), rules = NPC_SIM_RULES, reactions = false, combat = false, structureOcclusion = false } = {}) {
     this.reactions = reactions === true; this.combat = this.reactions && combat === true; this.panicQueue = []; this.strikes = [];
     // true: the static structures; a function: the room's live test (M6.8B open faces included).
     this.structureOcclusion = typeof structureOcclusion === 'function' ? structureOcclusion : structureOcclusion === true ? cityShotOccluded : null;
     this.rules = rules; this.plan = plan; this.random = seededRandom(`sim:${seed}`);
     this.maxActive = Math.max(0, Math.min(NPC_POPULATION.maxActive, maxActive | 0));
-    this.identities = seedPopulation(seed, population);
+    // Bank P1.2: a room given the city's permanent identities shows those residents; otherwise it seeds its own (unchanged)
+    this.identities = Array.isArray(identities) && identities.length ? identities.slice(0, NPC_POPULATION.max) : seedPopulation(seed, population);
     this.graph = null; this.hard = null; this.pois = cityPois(plan).filter((p) => !p.spaceId || p.kind === 'apartment');
     this.residents = this.identities.map((identity, index) => ({ index, identity, x: 0, z: 0, yaw: 0, speed: 0, anim: NPC_ANIM.idle, route: null, step: 0, waitUntil: 0, stuckFor: 0, active: false, lastDormantAt: 0, placed: false, memory: [], aware: null,
       personality: personalityOf(identity), behavior: NPC_BEHAVIOR.calm, behaviorUntil: 0, threat: null, reaction: null, pending: null, threats: [], greeted: new Map(), greetTarget: null, fleeing: false,

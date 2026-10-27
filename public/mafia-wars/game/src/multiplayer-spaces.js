@@ -2,6 +2,7 @@ import { APARTMENT_SITE } from './city-layout.js';
 import { gunShopSpace } from './gun-shop-layout.js';
 import { CHESS_PLAZA } from './city-park-layout.js';
 import { librarySpace } from './academy-layout.js';
+import { bankSpace } from './bank-layout.js';
 
 export const SPACE_SCHEMA_VERSION = 1;
 
@@ -26,6 +27,8 @@ export const MULTIPLAYER_SPACES = Object.freeze({
   'nerdie-arms': Object.freeze(gunShopSpace()),
   // M7.2 the Nerdie Blaq Academy Library (academy-layout.js): two floors of reading room, a safe zone
   'academy-library': Object.freeze(librarySpace()),
+  // Phase 2.1 the Nerdie City Bank (bank-layout.js): the financial headquarters, a safe zone
+  'nerdie-city-bank': Object.freeze(bankSpace()),
   'east-73': Object.freeze({ id: 'east-73', layer: 1, safeZone: true, entry: { x: 105.15, y: 0, z: 73 }, inside: { x: 107.3, y: 55, z: 73 }, exit: { x: 106.9, y: 55, z: 73 }, outside: { x: 105.05, y: 0, z: 73 }, bounds: { minX: 105.5, maxX: 118.5, minY: 54, maxY: 60, minZ: 67.5, maxZ: 78.5 } }),
   'hood-cross-west': Object.freeze({ id: 'hood-cross-west', layer: 1, safeZone: true, entry: { x: -48.45, y: 0, z: 53.75 }, inside: { x: -54.7, y: 70, z: 62 }, exit: { x: -55.1, y: 70, z: 62 }, outside: { x: -48.45, y: 0, z: 53.45 }, bounds: { minX: -56.5, maxX: -43.5, minY: 69, maxY: 75, minZ: 56.5, maxZ: 67.5 } }),
   'hood-duplicate-west-5': Object.freeze({ id: 'hood-duplicate-west-5', layer: 1, safeZone: true, entry: { x: 173.25, y: 0, z: 5.55 }, inside: { x: 159.7, y: 85, z: 4 }, exit: { x: 159.9, y: 85, z: 4 }, outside: { x: 173.55, y: 0, z: 5.55 }, bounds: { minX: 158.5, maxX: 171.5, minY: 84, maxY: 90, minZ: -1.5, maxZ: 9.5 } }),

@@ -39,7 +39,7 @@ assert.match(world, /if \(!Q\.lowMemory\) \{[\s\S]*jacaranda_tree/);
 assert.match(characters, /loadCharacters\(gunTemplate, names =/);
 assert.match(audio, /const AudioContextClass = window\.AudioContext \|\| window\.webkitAudioContext/);
 assert.match(main, /addEventListener\('pointerdown', unlockAudio/);
-assert.match(main, /buildCityExpansion\(scene, Q\)/);
+assert.match(main, /buildCityExpansion\(scene, \{ \.\.\.Q, cityService \}\)/);
 assert.match(main, /apartmentState = [^;]*city\.apartment\.update/);
 assert.match(cityExpansion, /from '\/mafia-wars\/game\/vendor\/three\/three\.module\.js'/);
 assert.match(cityExpansion, /chunkVisible\(chunk\.center, player\.pos, plan\.profile\.activeRadius \+ chunk\.radius \* 0\.35\)/);
@@ -76,10 +76,10 @@ assert.equal((index.match(/id="tFire"/g) || []).length, 1);
 assert.doesNotMatch(index, /tFire2/);
 assert.match(index, /@media \(pointer: coarse\) and \(orientation: portrait\)/);
 assert.match(index, /id="mpDiagnosticsToggle"[^>]*hidden/);
-assert.match(index, /src="src\/main\.js\?build=m7\.2-dev1"/);
+assert.match(index, /src="src\/main\.js\?build=bank-m2\.1-dev1"/);
 assert.match(main, /multiplayer-endpoint\.js\?build=m6\.3-cross-device-diagnostics-rc1/);
-assert.match(main, /wallet-bridge\.js\?build=m7\.2-dev1/);
-assert.match(main, /const GAME_BUILD_ID = 'm7\.2-dev1'/);
+assert.match(main, /wallet-bridge\.js\?build=bank-m2\.1-dev1/);
+assert.match(main, /const GAME_BUILD_ID = 'bank-m2\.1-dev1'/);
 // M6.5 Underground 6v6: results panel and server match state handling.
 assert.match(index, /id="ugResults"[^>]*role="dialog"/);
 assert.match(index, /id="ugStay"/); assert.match(index, /id="ugLeave"/);
@@ -97,7 +97,7 @@ assert.match(index, /id="waypointChip"/);
 assert.match(main, /e\.code === 'KeyM' && e\.shiftKey\) \{ setMuted/, 'mute moved to Shift+M');
 assert.match(main, /else if \(e\.code === 'KeyM' && !e\.repeat\) setCityMap/, 'M opens the map');
 assert.match(mapView, /export const mapDotVisible = \(dot, snitch = false\) => dot\.team !== 'red' \|\| snitch \|\| !!dot\.spotted;/, 'shared minimap visibility rule');
-assert.match(pois, /BANK_BUILDING_ID = 'west-mixed-north-1'/);
+assert.match(pois, /import \{ BANK_BUILDING_ID \} from '\.\/bank-layout\.js'/);
 assert.doesNotMatch(pois.match(/BANK_COPY = Object\.freeze\(\{[\s\S]*?\}\);/)[0], /deposit|withdraw|loan|interest|savings|balance/i, 'bank copy implies no banking services');
 // M6.7A city residents: opt-in client, diagnostics row, CC0 library shipped with its manifest.
 const [npcClient, npcSchema] = await Promise.all(['multiplayer-client.js', 'npc-schema.js'].map((file) => readFile(path.join(root, file), 'utf8')));
@@ -127,7 +127,7 @@ assert.match(walletPage, /src=\{GAME_URL\}/);
 assert.match(walletPage, /setWalletOpen\(true\)/);
 assert.match(walletPage, /formatTokenAmount\(tokenBalance\.data, 18\)/);
 assert.match(endpoint, /nerdie-city-multiplayer-v4\.buddieroots\.workers\.dev/);
-assert.match(endpoint, /AVATAR_PREVIEW_MULTIPLAYER_SERVICE = 'https:\/\/nerdie-city-(?:m6-(?:3|7|7b|7b2|8a|8b|9)|m7-0a|m7-0b|m7-1a|m7-1d|m7-2)-preview\.buddieroots\.workers\.dev'/);
+assert.match(endpoint, /AVATAR_PREVIEW_MULTIPLAYER_SERVICE = 'https:\/\/nerdie-city-(?:m6-(?:3|7|7b|7b2|8a|8b|9)|m7-0a|m7-0b|m7-1a|m7-1d|m7-2|bank-m2-1)-preview\.buddieroots\.workers\.dev'/);
 assert.match(endpoint, /override && \(isLocal \|\| isPrivateLan\)/);
 
 const { CITY_BOUNDS, createCityPlan, chunkVisible } = await import(

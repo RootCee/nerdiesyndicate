@@ -25,10 +25,18 @@ export function seededRandom(seed) {
 const ROLE_OUTFITS = Object.freeze({ worker: ['worker', 'farmer'], guard: ['suit', 'formal'] });
 
 export function seedPopulation(seed, count = NPC_POPULATION.max) {
+  return seedResidents(seed, Math.min(count, NPC_POPULATION.max));
+}
+
+// Bank P1.2: the permanent city population (up to 200 residents) from one seed. The same stream of
+// draws as seedPopulation, so a seed's first 36 residents are identical either way; the role mix
+// repeats every 36 residents.
+export const PERMANENT_POPULATION_MAX = 200;
+export function seedResidents(seed, count) {
   const random = seededRandom(`npc:${seed}`), pick = (list) => list[Math.floor(random() * list.length)];
   const roles = Object.entries(NPC_POPULATION.roles).flatMap(([role, n]) => Array(n).fill(role));
   const residents = [];
-  for (let i = 0; i < Math.min(count, NPC_POPULATION.max); i++) {
+  for (let i = 0; i < Math.min(count, PERMANENT_POPULATION_MAX); i++) {
     const role = roles[i % roles.length], packName = random() < 0.5 ? 'women' : 'men', pack = NPC_LIBRARY[packName];
     const preferred = (ROLE_OUTFITS[role] || []).filter((o) => pack.outfits.includes(o));
     const body = preferred.length && random() < 0.6 ? pick(preferred) : pick(pack.outfits);

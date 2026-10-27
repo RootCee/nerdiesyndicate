@@ -20,6 +20,8 @@ import { GUN_SHOP_BUILDING_ID, gunShopSite } from './gun-shop-layout.js';
 import { buildAcademyGrounds, addAcademyColliders, academyMapRects } from './academy.js';
 import { ACADEMY_CHUNKS, ACADEMY_GATE, ACADEMY_AXIS_Z, LIBRARY, LIBRARY_FOOT } from './academy-layout.js';
 import { LibrarySystem } from './library-system.js';
+import { BankInteriorSystem } from './bank-interior.js';
+import { bankBuilding } from './bank-layout.js';
 
 const material = (color, roughness = 0.88, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
 const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
@@ -197,7 +199,7 @@ export function buildCityExpansion(scene, Q = {}) {
   const streetlights = buildStreetlights(infrastructure, ground.streetlights, mats);
 
   const chunks = [];
-  let apartment = null, house = null, originalHouse = null, duplicatedHouse = null, combatVenue = null, bank = null, gunShop = null, library = null;
+  let apartment = null, house = null, originalHouse = null, duplicatedHouse = null, combatVenue = null, bank = null, gunShop = null, library = null, bankInterior = null;
   for (const district of plan.districts) {
     const group = new THREE.Group(); group.name = `city-chunk-${district.id}`; scene.add(group);
     const batch = kit ? new KitBatch() : null;
@@ -242,6 +244,8 @@ export function buildCityExpansion(scene, Q = {}) {
     // M7.2: the Academy Library's interior (its facade is the showcase design)
     if (district.buildings.some((b) => b.id === LIBRARY.id)) library = new LibrarySystem(scene, { ...LIBRARY }, { addCollider, mobile: plan.profile.key === 'mobile', kit });
     if (district.buildings.some((b) => b.id === GUN_SHOP_BUILDING_ID)) gunShop = new GunShopSystem(scene, gunShopSite(plan), { addCollider, mobile: plan.profile.key === 'mobile', kit });
+    // Phase 2.1: the bank's interior (the facade stays the showcase design; BankSystem keeps its sign outside the showcase)
+    if (district.buildings.some((b) => b.id === BANK_BUILDING_ID)) bankInterior = new BankInteriorSystem(scene, bankBuilding(plan), { addCollider, mobile: plan.profile.key === 'mobile', kit, cityService: Q.cityService || null });
     if (district.buildings.some((b) => b.id === BANK_BUILDING_ID)) bank = new BankSystem(group, bankSite(plan), { mobile: plan.profile.key === 'mobile', visuals: !kit || !inShowcase(bankSite(plan).x, bankSite(plan).z) });
     if (district.id === 'west-industrial-south') {
       addBox(group, mats.sidewalk, 42, 0.08, 34, -112, 0.02, -72, 'underground-parking-lot');
@@ -313,7 +317,7 @@ export function buildCityExpansion(scene, Q = {}) {
   addCollider(MAP.minX - 2, MAP.maxZ, MAP.maxX + 2, MAP.maxZ + 2, 0, 12, { boundary: true });
 
   const city = {
-    plan, ground, chunks, apartment, house, originalHouse, duplicatedHouse, combatVenue, bank, gunShop, library, infrastructure, mode: 'free-roam',
+    plan, ground, chunks, apartment, house, originalHouse, duplicatedHouse, combatVenue, bank, gunShop, library, bankInterior, infrastructure, mode: 'free-roam',
     // M7.2: the clock tower's hands follow the city clock (hours 0..24)
     academyClock: { hands: clockHands, hours: null },
     setAcademyClock(hours) {
@@ -381,6 +385,7 @@ export function buildCityExpansion(scene, Q = {}) {
         combatVenue: combatVenue?.site.id || null,
         bank: bank?.site.id || null,
         library: library?.site.id || null,
+        bankInterior: bankInterior?.site.id || null,
         bounds: { ...MAP },
       };
     },
