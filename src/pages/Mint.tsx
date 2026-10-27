@@ -8,7 +8,7 @@ export default function Mint() {
     <>
       <Seo
         title="Nerdie Syndicate NFT Mint | Nerdie Blaq"
-        description="Mint a Nerdie Syndicate NFT on Base to unlock dashboard access, token-bound wallets, and deeper ecosystem utility."
+        description="Mint a Nerdie Syndicate NFT on Base to unlock dashboard access, a character wallet when it launches, and deeper ecosystem utility."
         path="/mint"
         noindex
       />
@@ -36,7 +36,7 @@ export default function Mint() {
             <ul className="space-y-4">
               {[
                 { title: "Clubhouse Dashboard", desc: "Full access to the advanced Nerdie Blaq Clubhouse dashboard with real-time data." },
-                { title: "ERC-6551 Token-Bound Wallet", desc: "Each NFT has its own wallet. Link it to manage assets directly." },
+                { title: "ERC-6551 Character Wallet (Coming Soon)", desc: "Each character will get its own on-chain wallet after a security upgrade. Wallets are not active yet." },
                 { title: "Nerdie City Alpha Pass", desc: "Early access to Nerdie City, the 3D blockchain game." },
                 { title: "Exclusive Events", desc: "Virtual competitions, chess battles, rap battles, and coding courses." },
                 { title: "Community Marketplace", desc: "Access to the Nerdie Blaq marketplace for trading and staking." },

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { NFTAttribute } from '../hooks/useNFTs';
 import type { NFTGameplayProfile } from '../lib/nftGameplayProfile';
+import { TBA_ACCOUNTS_ENABLED, TBA_PAUSED_TITLE } from '../lib/tbaSafety';
 
 interface NFTCardProps {
   tokenId: number;
@@ -150,15 +151,15 @@ export default function NFTCard({
 
         <span
           className={`absolute left-3 top-12 px-2.5 py-1 text-[10px] font-bold rounded-full ${
-            tbaAddress
+            TBA_ACCOUNTS_ENABLED && tbaAddress
               ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/40'
               : 'bg-zinc-950/80 text-neutral-400 border border-zinc-700/50'
           }`}
         >
-          {tbaAddress ? 'TBA Active' : 'TBA Pending'}
+          {!TBA_ACCOUNTS_ENABLED ? TBA_PAUSED_TITLE : tbaAddress ? 'TBA Active' : 'TBA Pending'}
         </span>
 
-        {tbaAddress && (
+        {TBA_ACCOUNTS_ENABLED && tbaAddress && (
           <div className="absolute top-3 right-3 flex flex-col items-end gap-1.5">
             {compactEthBalance && (
               <span className="px-2.5 py-1 bg-zinc-950/85 text-emerald-300 text-[10px] font-bold rounded-full border border-emerald-900/30">
@@ -243,8 +244,8 @@ export default function NFTCard({
           </p>
         </div>
 
-        {/* TBA info */}
-        {tbaAddress && (
+        {/* TBA info (paused: see tbaSafety.ts) */}
+        {TBA_ACCOUNTS_ENABLED && tbaAddress && (
           <div className="pt-2.5 border-t border-zinc-800 space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="text-neutral-600 text-[10px]">Token-Bound Account</span>

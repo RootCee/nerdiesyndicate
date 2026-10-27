@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { NFTAttribute } from '../hooks/useNFTs';
 import type { NFTGameplayProfile } from '../lib/nftGameplayProfile';
+import { TBA_ACCOUNTS_ENABLED, TBA_PAUSED_NOTICE, TBA_PAUSED_TITLE } from '../lib/tbaSafety';
 
 interface NFTDetailModalProps {
   tokenId: number;
@@ -144,7 +145,8 @@ export default function NFTDetailModal({
     return () => { document.body.style.overflow = ''; };
   }, []);
 
-  const basescanUrl = tbaAddress
+  // while character wallets are paused, BaseScan opens the NFT itself, never a computed account address
+  const basescanUrl = TBA_ACCOUNTS_ENABLED && tbaAddress
     ? `https://basescan.org/address/${tbaAddress}`
     : `https://basescan.org/token/0x4d410D24fAcd00EB9470d4261db855b57c9CDc0e?a=${tokenId}`;
 
@@ -304,7 +306,12 @@ export default function NFTDetailModal({
             {/* TBA Section */}
             <div className="mb-5">
               <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">Token-Bound Account</h3>
-              {tbaAddress ? (
+              {!TBA_ACCOUNTS_ENABLED ? (
+                <div className="bg-amber-950/30 border border-amber-800/40 rounded-xl p-3.5" role="note">
+                  <p className="text-amber-200 text-sm font-semibold">{TBA_PAUSED_TITLE}</p>
+                  <p className="mt-1 text-amber-100/80 text-xs leading-relaxed">{TBA_PAUSED_NOTICE}</p>
+                </div>
+              ) : tbaAddress ? (
                 <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-3.5 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <span className="text-neutral-400 text-xs font-mono">
@@ -355,8 +362,8 @@ export default function NFTDetailModal({
                 </svg>
                 View on BaseScan
               </a>
-              {/* Placeholder: Send tokens from TBA */}
-              <button
+              {/* Placeholder: Send tokens from TBA (hidden while character wallets are paused) */}
+              {TBA_ACCOUNTS_ENABLED && <button
                 disabled
                 className="flex items-center justify-center gap-2 w-full py-2.5 bg-red-900/20 border border-red-800/30 text-red-400/50 text-sm font-medium rounded-xl cursor-not-allowed"
               >
@@ -364,7 +371,7 @@ export default function NFTDetailModal({
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
                 </svg>
                 Send from TBA (Coming Soon)
-              </button>
+              </button>}
             </div>
           </div>
 

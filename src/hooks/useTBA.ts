@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { getReadProvider } from '../lib/providers';
 import { CONTRACTS, ABIS, BASE_CHAIN_ID } from '../lib/contracts';
+import { TBA_ACCOUNTS_ENABLED } from '../lib/tbaSafety';
 
 export interface TBAInfo {
   tokenId: number;
@@ -23,7 +24,8 @@ export function useTBA(tokenIds: number[]): UseTBAReturn {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (tokenIds.length === 0) {
+    // Paused (see tbaSafety.ts): no account addresses are computed, so none can be shown or copied.
+    if (!TBA_ACCOUNTS_ENABLED || tokenIds.length === 0) {
       setTbas([]);
       setLoading(false);
       return;

@@ -957,7 +957,7 @@ function NftPreviewSection() {
               </h2>
               <p className="text-neutral-300 leading-relaxed mb-6 font-medium">
                 200 unique ERC-6551 NFTs on Base. Each one unlocks the advanced Clubhouse dashboard,
-                exclusive holder events, the Nerdie City alpha pass, and your own token-bound wallet.
+                exclusive holder events, the Nerdie City alpha pass, and a character wallet (coming soon).
               </p>
               <div className="flex flex-col sm:flex-row gap-3">
                 <Link
