@@ -60,9 +60,9 @@ import { NpcRenderer, NPC_RENDER_RULES } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=bank-m2.2-rel3';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=bank-m2.2-rel4';
 
-const GAME_BUILD_ID = 'bank-m2.2-rel3';
+const GAME_BUILD_ID = 'bank-m2.2-rel4';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -220,15 +220,19 @@ const libraryPanel = new LibraryPanel({ mobile: Q.mobile, onOpen: (open) => {
 const cityService = economyDemoAllowed(location) ? new EconomyDemoService() : new CityServiceClient();
 // Founder Executive Suite: the connected founder wallet signs a one-time challenge (through the website),
 // then the suite shows the oversight figures for a 30-minute session. Only the founder wallet is accepted.
+// Every read signs in again (one wallet prompt) if the 30-minute pass has ended.
+async function founderSession() {
+  if (cityService.founderSignedIn) return;
+  const wallet = latestWalletState;
+  if (!wallet?.connected || !wallet.address) throw new Error('Connect your wallet with MY WALLET, then sign in.');
+  if (wallet.chainId !== 8453) throw new Error('Switch your wallet to Base, then sign in.');
+  await cityService.founderSignIn({ address: wallet.address, sign: (message) => walletBridge.signFounderChallenge(message) });
+}
 const founderAccess = cityService.founderSignIn ? {
-  async signIn() {
-    const wallet = latestWalletState;
-    if (!wallet?.connected || !wallet.address) throw new Error('Connect your wallet with MY WALLET, then sign in.');
-    if (wallet.chainId !== 8453) throw new Error('Switch your wallet to Base, then sign in.');
-    if (!cityService.founderSignedIn) await cityService.founderSignIn({ address: wallet.address, sign: (message) => walletBridge.signFounderChallenge(message) });
-    return cityService.founderOverview();
-  },
-  refresh: () => cityService.founderOverview(),
+  async signIn() { await founderSession(); return cityService.founderOverview(); },
+  async refresh() { await founderSession(); return cityService.founderOverview(); },
+  async residents() { await founderSession(); return cityService.founderResidents(); },
+  async resident(residentId) { await founderSession(); return cityService.founderResident(residentId); },
 } : null;
 const bankPanel = new BankPanel({ cityService, founderAccess, onOpen: (open) => {
   if (open) { input.moveX = input.moveY = 0; input.fire = input.ads = input.sprint = false; document.exitPointerLock?.(); } else if (MATCH.started && !MATCH.over && !TOUCH) requestLock();

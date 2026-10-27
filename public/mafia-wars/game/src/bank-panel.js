@@ -22,7 +22,24 @@ const STYLE = `
 #bankPanel .bp-b.on{border-color:#e8c55a;background:#3a2d16}
 #bankPanel .bp-warn{background:#3a1820;border:1px solid #b8434f;border-radius:10px;padding:10px 12px;margin:10px 0}
 #bankPanel .bp-b:focus-visible,#bankPanel .bp-x:focus-visible{outline:3px solid #e8c55a;outline-offset:1px}
-@media (max-width:620px){#bankPanel .bp-grid{grid-template-columns:1fr}}
+#bankPanel [role=tablist]{margin-bottom:12px}
+#bankPanel h3{margin:18px 0 8px;font-size:18px;letter-spacing:.06em;color:#f2d28b}
+#bankPanel .bp-res{display:grid;grid-template-columns:3ch minmax(0,1fr) auto;gap:2px 12px;align-items:center;width:100%;margin:0 0 6px;padding:10px 12px;background:#1a1230;border:1px solid #3a2d5c;border-radius:10px;color:#fff;text-align:left;cursor:pointer;font:inherit}
+#bankPanel .bp-res:hover{border-color:#6a55a3}
+#bankPanel .bp-res .no{color:#9b8fb8;font-variant-numeric:tabular-nums}
+#bankPanel .bp-res .who b{display:block;font-size:18px;font-weight:600}
+#bankPanel .bp-res small{display:block;font:400 14px/1.35 'Barlow',sans-serif;color:#b7a9db}
+#bankPanel .bp-res .money{text-align:right;font-variant-numeric:tabular-nums;font-size:17px}
+#bankPanel .bp-chip{display:inline-block;margin-left:6px;padding:0 7px;border-radius:999px;border:1px solid #4caf6a;background:#173322;color:#bff0c9;font-size:12px;letter-spacing:.08em;vertical-align:2px}
+#bankPanel .bp-chip.warn{border-color:#b8434f;background:#3a1820;color:#ffd0d5}
+#bankPanel .bp-scroll{overflow-x:auto}
+#bankPanel .bp-table{width:100%;border-collapse:collapse;font:400 15px 'Barlow',sans-serif;font-variant-numeric:tabular-nums}
+#bankPanel .bp-table th,#bankPanel .bp-table td{padding:6px 8px;border-bottom:1px solid #2c2247;text-align:right;white-space:nowrap}
+#bankPanel .bp-table th{color:#9b8fb8;font-weight:600;font-size:13px;letter-spacing:.08em}
+#bankPanel .bp-table th:first-child,#bankPanel .bp-table td:first-child{text-align:left}
+#bankPanel .bp-log p{margin:0 0 6px;font-size:15px}
+#bankPanel .bp-spark{display:block;width:100%;height:64px;background:#1a1230;border:1px solid #3a2d5c;border-radius:10px}
+@media (max-width:620px){#bankPanel .bp-grid{grid-template-columns:1fr}#bankPanel .bp-grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}#bankPanel .bp-grid-2 .bp-stat span{font-size:20px}#bankPanel .bp-res{grid-template-columns:3ch minmax(0,1fr)}#bankPanel .bp-res .money{grid-column:2;text-align:left}}
 `;
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -56,22 +73,103 @@ const ECONOMY_ROWS = [['issued', 'sNERDIE issued'], ['treasury', 'Treasury'], ['
 
 const n = (v) => (v == null ? '—' : esc(Number(v).toLocaleString('en-US')));
 
+// Resident oversight helpers: city minutes as clock times, and the resident list's sort orders.
+const clockTime = (minute) => { const m = ((minute % 1440) + 1440) % 1440, h = Math.floor(m / 60); return `${h % 12 || 12}:${String(m % 60).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
+const cityWhen = (minute) => (minute == null ? '—' : `Day ${Math.floor(minute / 1440)} · ${clockTime(minute)}`);
+const shiftText = (job) => `${clockTime(job.shiftStartMinute)}–${clockTime(job.shiftStartMinute + job.shiftDurationMinutes)}`;
+const words = (s) => esc(String(s ?? '').replaceAll('_', ' ').replaceAll('-', ' '));
+const wealth = (r) => Number(r.checking || 0) + Number(r.savings || 0);
+export const RESIDENT_SORTS = Object.freeze({
+  no: { label: 'No.', compare: (a, b) => a.residentNo - b.residentNo },
+  wealth: { label: 'Wealth', compare: (a, b) => wealth(b) - wealth(a) },
+  checking: { label: 'Checking', compare: (a, b) => Number(b.checking) - Number(a.checking) },
+  savings: { label: 'Savings', compare: (a, b) => Number(b.savings) - Number(a.savings) },
+  earned: { label: 'Earned', compare: (a, b) => (b.lifetime?.wages || 0) - (a.lifetime?.wages || 0) },
+  shift: { label: 'Shift', compare: (a, b) => (a.job?.shiftStartMinute ?? 1e9) - (b.job?.shiftStartMinute ?? 1e9) },
+});
+const FOUNDER_START = Object.freeze({ status: 'idle', data: null, error: null, tab: 'overview', residents: null, sort: 'no', selected: null, history: null });
+
 export class BankPanel {
-  // founderAccess: { signIn(): Promise<overview body>, refresh(): Promise<overview body> } or null.
+  // founderAccess: { signIn(), refresh(): Promise<overview body>, residents(): Promise<{ residents }>,
+  // resident(id): Promise<{ history }> } or null. residents/resident are optional (older builds).
   constructor({ cityService = null, founderAccess = null, onOpen = () => {}, document: doc = globalThis.document } = {}) {
     Object.assign(this, { cityService, founderAccess, onOpen, doc }); this.reader = new BankReader(); this.isOpen = false;
-    this.founder = { status: 'idle', data: null, error: null };
+    this.founder = { ...FOUNDER_START };
   }
-  async founderAction(kind) {
+  // Actions: signin, refresh, tab:overview|residents, sort:<RESIDENT_SORTS key>, resident:<res_0001>, back.
+  async founderAction(action) {
     if (!this.founderAccess || this.founder.status === 'working') return;
-    this.founder = { ...this.founder, status: 'working', error: null }; this.render();
-    try {
-      const data = kind === 'refresh' && this.founder.data ? await this.founderAccess.refresh() : await this.founderAccess.signIn();
-      this.founder = { status: 'ok', data, error: null };
-    } catch (error) {
-      this.founder = { status: 'error', data: null, error: error?.message || 'Founder sign-in did not complete.' };
+    const [kind, arg] = String(action).split(':'), f = this.founder, access = this.founderAccess;
+    if (kind === 'tab') {
+      f.tab = arg === 'residents' && access.residents ? 'residents' : 'overview'; f.selected = null; f.history = null; f.error = null;
+      if (f.tab === 'residents' && !f.residents) return this.#founderLoad(async () => { f.residents = (await access.residents()).residents; });
+      return this.render();
+    }
+    if (kind === 'sort') { f.sort = RESIDENT_SORTS[arg] ? arg : 'no'; return this.render(); }
+    if (kind === 'back') { f.selected = null; f.history = null; f.error = null; return this.render(); }
+    if (kind === 'resident' && access.resident) return this.#founderLoad(async () => { f.history = (await access.resident(arg)).history; f.selected = arg; });
+    // Sign in, or refresh whatever is on screen.
+    const refreshing = kind === 'refresh' && !!f.data;
+    return this.#founderLoad(async () => {
+      f.data = refreshing ? await access.refresh() : await access.signIn();
+      if (refreshing && f.tab === 'residents') {
+        f.residents = (await access.residents()).residents;
+        if (f.selected) f.history = (await access.resident(f.selected)).history;
+      }
+    }, !refreshing);
+  }
+  // A failed sign-in returns to the sign-in screen; a failed read keeps what is on screen and says why.
+  async #founderLoad(work, signingIn = false) {
+    this.founder.status = 'working'; this.founder.error = null; this.render();
+    try { await work(); this.founder.status = 'ok'; }
+    catch (error) {
+      const message = error?.message || 'Founder sign-in did not complete.';
+      if (signingIn || !this.founder.data) this.founder = { ...FOUNDER_START, status: 'error', error: message };
+      else { this.founder.status = 'ok'; this.founder.error = message; }
     }
     this.render();
+  }
+  // Every resident: job and shift (and whether they are on it now), balances, lifetime wages, rent trouble.
+  #residentsHtml() {
+    const f = this.founder, list = [...(f.residents || [])].sort(RESIDENT_SORTS[f.sort]?.compare || RESIDENT_SORTS.no.compare);
+    if (!list.length) return '<p>No residents loaded yet. Press Refresh.</p>';
+    const onShift = list.filter((r) => r.job?.onShiftNow).length, employed = list.filter((r) => r.job).length;
+    const sorts = `<div class="bp-actions"><span class="bp-note" style="align-self:center">Sort</span>${Object.entries(RESIDENT_SORTS).map(([id, s]) => `<button type="button" class="bp-b${f.sort === id ? ' on' : ''}" data-founder="sort:${id}" aria-pressed="${f.sort === id}">${esc(s.label)}</button>`).join('')}</div>`;
+    const rows = list.map((r) => {
+      const chips = `${r.job?.onShiftNow ? '<span class="bp-chip">ON SHIFT</span>' : ''}${r.housing?.status === 'arrears' ? '<span class="bp-chip warn">RENT ARREARS</span>' : ''}`;
+      const job = r.job ? `${esc(r.job.title)} · ${words(r.job.workplaceId)} · ${shiftText(r.job)}` : 'No permanent job (municipal temp work rotation)';
+      return `<button type="button" class="bp-res" data-founder="resident:${esc(r.residentId)}" aria-label="${esc(r.name)}, open history">
+        <span class="no">${esc(r.residentNo)}</span>
+        <span class="who"><b>${esc(r.name)}${chips}</b><small>${job}</small><small>Now: ${words(r.state?.activity || 'home')} · ${words(r.state?.locationId || '')}</small></span>
+        <span class="money">${n(r.checking)} checking<small>${n(r.savings)} savings · ${n(r.lifetime?.wages)} earned</small></span>
+      </button>`;
+    }).join('');
+    return `<p class="bp-note">${n(list.length)} residents · ${n(employed)} with a permanent job · ${n(onShift)} on shift now · amounts in sNERDIE</p>${sorts}${rows}`;
+  }
+  // One resident: who they are, their totals, balance over time, daily records, activity and ledger lines.
+  #residentHtml(h) {
+    const r = h.resident || {}, days = h.days || [], activity = (h.activity || []).slice(0, 25), ledger = (h.ledger || []).slice(0, 25), l = r.lifetime || {};
+    const job = r.job ? `${esc(r.job.title)} at ${words(r.job.workplaceId)} · ${shiftText(r.job)} · ${n(r.job.wage)} a shift${r.job.onShiftNow ? '<span class="bp-chip">ON SHIFT</span>' : ''}` : 'No permanent job · municipal temp work rotation';
+    const stats = [['Checking', n(r.checking)], ['Savings', n(r.savings)], ['Lifetime wages', n(l.wages)], ['Shifts · temp shifts', `${n(l.shifts)} · ${n(l.tempShifts)}`],
+      ['Spent · purchases', `${n(l.spent)} · ${n(l.purchases)}`], ['Rent paid · arrears', `${n(l.rentPaid)} · ${n(l.rentArrears)}`], ['Hunger · spending mood', `${n(r.state?.hunger)} · ${n(r.state?.discretionary)}`], ['Days on record', n(l.daysRecorded)]];
+    const oldestFirst = [...days].reverse(), values = oldestFirst.map((d) => Number(d.checking) + Number(d.savings));
+    let chart = '<p class="bp-note">The balance chart starts once two daily records exist. A record is taken for every resident at the end of each city day (11:59 PM Pacific).</p>';
+    if (values.length >= 2) {
+      const max = Math.max(...values, 1), min = Math.min(...values, 0), span = max - min || 1;
+      const points = values.map((v, i) => `${((i / (values.length - 1)) * 296 + 2).toFixed(1)},${(58 - ((v - min) / span) * 54).toFixed(1)}`).join(' ');
+      chart = `<svg class="bp-spark" viewBox="0 0 300 60" preserveAspectRatio="none" role="img" aria-label="Checking plus savings over ${values.length} days, from ${values[0]} to ${values.at(-1)} sNERDIE"><polyline points="${points}" fill="none" stroke="#e8c55a" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
+        <p class="bp-note">Checking + savings · day ${esc(oldestFirst[0].cityDay)} to day ${esc(oldestFirst.at(-1).cityDay)} · ${n(values[0])} → ${n(values.at(-1))}</p>`;
+    }
+    const dayRows = days.slice(0, 30).map((d) => `<tr><td>Day ${esc(d.cityDay)}</td><td>${n(d.checking)}</td><td>${n(d.savings)}</td><td>${n(d.earned)}</td><td>${n(d.spent)}</td><td>${n(d.shifts)}</td><td>${d.rentStatus ? words(d.rentStatus) : '—'}</td><td>${n(d.hunger)}</td></tr>`).join('');
+    const detail = (details) => Object.entries(details || {}).map(([k, v]) => `${words(k)} ${esc(typeof v === 'object' ? JSON.stringify(v) : v)}`).join(' · ');
+    return `<div class="bp-actions"><button type="button" class="bp-b" data-founder="back">← All residents</button></div>
+      <h3>${esc(r.name)} · resident ${esc(r.residentNo)}</h3>
+      <p class="bp-note">${job}<br>Home ${words(r.housing?.propertyId)} (${words(r.housing?.status)}) · now ${words(r.state?.activity)} at ${words(r.state?.locationId)}</p>
+      <div class="bp-grid bp-grid-2">${stats.map(([k, v]) => `<div class="bp-stat"><b>${esc(k)}</b><span>${v}</span></div>`).join('')}</div>
+      <h3>Balance over time</h3>${chart}
+      <h3>Daily record</h3>${dayRows ? `<div class="bp-scroll"><table class="bp-table"><thead><tr><th>Day</th><th>Checking</th><th>Savings</th><th>Earned</th><th>Spent</th><th>Shifts</th><th>Rent</th><th>Hunger</th></tr></thead><tbody>${dayRows}</tbody></table></div>` : '<p class="bp-note">No daily records yet: the first is taken at the end of today (11:59 PM Pacific).</p>'}
+      <h3>Activity</h3><div class="bp-log">${activity.length ? activity.map((a) => `<p>${esc(cityWhen(a.cityMinute))} · <b>${words(a.kind)}</b> · ${words(a.locationId)}${a.details && Object.keys(a.details).length ? ` · ${detail(a.details)}` : ''}</p>`).join('') : '<p class="bp-note">No activity recorded yet.</p>'}</div>
+      <h3>Ledger</h3><div class="bp-log">${ledger.length ? ledger.map((e) => `<p>#${esc(e.seq)} · ${words(e.kind)} · ${words(e.account)} <b>${Number(e.amount) > 0 ? '+' : ''}${n(e.amount)}</b>${e.memo ? ` · ${esc(e.memo)}` : ''} · ${esc(new Date(e.occurredAt).toLocaleString())}</p>`).join('') : '<p class="bp-note">No ledger entries yet: every account starts at zero, with no free money.</p>'}</div>`;
   }
   #founderHtml() {
     const f = this.founder;
@@ -85,10 +183,14 @@ export class BankPanel {
       const stats = [['Treasury', n(e.treasury)], ['sNERDIE issued', n(e.issued)], ['Ledger integrity', o.integrity?.ok ? 'Verified' : 'PROBLEM'], ['Ledger entries', n(e.entries)],
         ['Residents', n(e.population)], ['Employed', n(e.employed)], ['Temp work slots a day', n(temp)], ['Wages paid', n(e.wagesPaid)],
         ['Rent paid · arrears', `${n(rent.paid)} · ${n(rent.arrears)}`], ['Business sales', n(e.businessSales)], ['Aggregate savings', n(e.savings)], ['Economic day', day == null ? '—' : n(day)]];
-      return `<p class="bp-note">Signed in as ${esc(f.data.founder)} · session ends ${esc(new Date(f.data.sessionExpiresAt).toLocaleTimeString())}</p>
-        ${alerts.length ? `<div class="bp-warn"><p>Alerts: ${alerts.map((a) => esc(String(a).replaceAll('_', ' '))).join(', ')}</p></div>` : '<p class="bp-note">No alerts.</p>'}
+      const tab = f.tab === 'residents' ? 'residents' : 'overview';
+      const tabs = this.founderAccess.residents ? `<div class="bp-actions" role="tablist">${[['overview', 'Overview'], ['residents', 'Residents']].map(([id, label]) => `<button type="button" role="tab" aria-selected="${tab === id}" class="bp-b${tab === id ? ' on' : ''}" data-founder="tab:${id}">${label}</button>`).join('')}</div>` : '';
+      const overview = `${alerts.length ? `<div class="bp-warn"><p>Alerts: ${alerts.map((a) => esc(String(a).replaceAll('_', ' '))).join(', ')}</p></div>` : '<p class="bp-note">No alerts.</p>'}
         ${o.integrity && !o.integrity.ok ? `<div class="bp-warn"><p>Integrity problems: ${esc((o.integrity.problems || []).join('; '))}</p></div>` : ''}
-        <div class="bp-grid">${stats.map(([k, v]) => `<div class="bp-stat"><b>${esc(k)}</b><span>${v}</span></div>`).join('')}</div>
+        <div class="bp-grid">${stats.map(([k, v]) => `<div class="bp-stat"><b>${esc(k)}</b><span>${v}</span></div>`).join('')}</div>`;
+      const body = tab === 'overview' ? overview : f.selected && f.history ? this.#residentHtml(f.history) : this.#residentsHtml();
+      return `<p class="bp-note">Signed in as ${esc(f.data.founder)} · session ends ${esc(new Date(f.data.sessionExpiresAt).toLocaleTimeString())}</p>
+        ${tabs}${f.error ? `<div class="bp-warn"><p>${esc(f.error)}</p></div>` : ''}${body}
         <div class="bp-actions"><button type="button" class="bp-b" data-founder="refresh">Refresh</button></div>`;
     }
     return `<p>The Founder Executive Suite is reserved for the founder's oversight of the treasury, residents, businesses, payroll, ledger integrity and security alerts.</p>
@@ -138,5 +240,8 @@ export class BankPanel {
     if (!this.el || !this.reader.view) return;
     const v = this.reader.view, titles = { teller: [`Teller ${v.id?.slice(-1) || ''}`, 'Bank services'], board: ['City Economy Board', 'Live ledger figures'], market: ['Market Intelligence', 'Historical archive'], restricted: ['Founder Executive Suite', 'Restricted'] };
     const [title, kicker] = titles[v.kind]; this.el.title.textContent = title; this.el.kicker.textContent = kicker; this.el.main.innerHTML = this.html();
+    // A new view (another station, tab or resident) starts at the top; a refresh keeps the scroll position.
+    const viewKey = `${v.kind}:${v.id || ''}:${this.founder.tab}:${this.founder.selected || ''}`;
+    if (viewKey !== this.viewKey) { this.el.main.scrollTop = 0; this.viewKey = viewKey; }
   }
 }

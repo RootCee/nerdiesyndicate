@@ -45,11 +45,18 @@ export class CityServiceClient {
     return this.founderSession;
   }
   get founderSignedIn() { return !!this.founderSession && this.founderSession.expiresAt > this.now(); }
-  async founderOverview() {
+  founderOverview() { return this.#founderGet('/v1/founder/overview', 'The founder overview'); }
+  // Resident oversight: every resident with balances and totals, and one resident's history.
+  founderResidents() { return this.#founderGet('/v1/founder/residents', 'The resident list'); }
+  founderResident(residentId) {
+    if (!/^res_[0-9]{4}$/.test(String(residentId))) return Promise.reject(new Error('Unknown resident.'));
+    return this.#founderGet(`/v1/founder/residents/${residentId}`, 'This resident\'s history');
+  }
+  async #founderGet(path, label) {
     if (!this.founderSignedIn) throw new Error('Sign in with the founder wallet first.');
-    const r = await this.fetch(`${this.endpoint}/v1/founder/overview`, { method: 'GET', headers: { accept: 'application/json', authorization: `Bearer ${this.founderSession.token}` } });
+    const r = await this.fetch(`${this.endpoint}${path}`, { method: 'GET', headers: { accept: 'application/json', authorization: `Bearer ${this.founderSession.token}` } });
     if (r.status === 401) { this.founderSession = null; throw new Error('Your founder session ended. Sign in again.'); }
-    if (!r.ok) throw new Error(`The founder overview is unavailable (HTTP ${r.status}).`);
+    if (!r.ok) throw new Error(`${label} is unavailable (HTTP ${r.status}).`);
     return r.json();
   }
   #snapshot(path, ttl, shape) {
