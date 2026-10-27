@@ -41,6 +41,10 @@ export const CITY_PROFILES = Object.freeze({
 
 // M7.0A: moved north 12 m. At z 100 the building stood on the north-market road (126 m2) and its
 // entrance was in the traffic lane. Its interior, doors, and safe zone are derived from this site.
+// Stage 2: apartment and loft buildings have six storeys of 3.4 m over a 0.6 m base (the showcase draws
+// one row of windows per storey from the height).
+export const APARTMENT_STOREYS = 6, APARTMENT_STOREY_HEIGHT = 3.4, APARTMENT_TOWER_HEIGHT = APARTMENT_STOREYS * APARTMENT_STOREY_HEIGHT + 0.6;
+
 export const APARTMENT_SITE = Object.freeze({
   id: 'north-court',
   name: 'North Court Apartments',
@@ -117,7 +121,7 @@ function district(id, centerZ, seedOffset) {
         z,
         width: 14 + (hash % 3),
         depth: 10 + ((hash >> 2) % 3),
-        height: 7.5 + ((hash >> 4) % 4) * 2.4,
+        height: APARTMENT_TOWER_HEIGHT, // Stage 2: six-storey apartment buildings (3.4 m floors over a 0.6 m base)
         tint: BUILDING_TINTS[hash % BUILDING_TINTS.length],
       });
     }
@@ -175,7 +179,7 @@ function westMixedUse(id, centerZ, seedOffset, industrial = false) {
       x: kind === 'warehouse' ? (x === -112 ? -106 : -126) : x, z,
       width: kind === 'warehouse' ? 19 : 13 + (hash % 4),
       depth: kind === 'warehouse' ? 14 : 10 + ((hash >> 2) % 4),
-      height: kind === 'mixed' ? 14 + ((hash >> 4) % 3) * 2.4 : kind === 'warehouse' ? 8.5 : 8 + ((hash >> 4) % 2) * 1.8,
+      height: kind === 'mixed' ? APARTMENT_TOWER_HEIGHT : kind === 'warehouse' ? 8.5 : 8 + ((hash >> 4) % 2) * 1.8,
       tint: BUILDING_TINTS[(hash + 2) % BUILDING_TINTS.length],
     });
   }

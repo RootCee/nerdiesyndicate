@@ -49,6 +49,7 @@ import { ChessClient } from './chess-client.js';
 import { LibraryPanel } from './library-panel.js';
 import { BankPanel } from './bank-panel.js';
 import { ResidentPanel } from './resident-panel.js';
+import { FloorPanel } from './floor-panel.js';
 import { RESIDENT_NAMES } from './resident-names.js';
 import { PERMANENT_RESIDENT_IDENTITIES, PERMANENT_RESIDENT_SCHEDULES } from './permanent-residents.js';
 import { chessLevel, chessResident } from './chess-residents.js';
@@ -66,9 +67,9 @@ import { NpcRenderer, NPC_RENDER_RULES } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=bank-m2.2-rel7';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=bank-m2.2-rel8';
 
-const GAME_BUILD_ID = 'bank-m2.2-rel7';
+const GAME_BUILD_ID = 'bank-m2.2-rel8';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -257,6 +258,21 @@ const residentPanel = new ResidentPanel({
     if (open) { input.moveX = input.moveY = 0; input.fire = input.ads = input.sprint = false; document.exitPointerLock?.(); } else if (MATCH.started && !MATCH.over && !TOUCH) requestLock();
   },
 });
+// Stage 2 apartment buildings: the lift's floor menu (the lobby and storeys 2-6). Choosing a floor rides there.
+const floorPanel = new FloorPanel({
+  onChoose: (floor) => { const st = city?.interiors?.goToFloor(floor, player, time); if (st) applyBuildingTransition(st); },
+  onOpen: (open) => {
+    if (open) { input.moveX = input.moveY = 0; input.fire = input.ads = input.sprint = false; document.exitPointerLock?.(); } else if (MATCH.started && !MATCH.over && !TOUCH) requestLock();
+  },
+});
+// A building door or a lift ride: the interior's render mode (an apartment shows the real city outside its
+// windows; other rooms are isolated), the callout, and the space messages the server needs, in order.
+function applyBuildingTransition(st) {
+  setInteriorRenderLayer(!!st.isolated);
+  setCameraMode(thirdCamera.enabled); // re-snap after the teleport, keeping the player's view
+  hud.callout(st.active ? st.name.toUpperCase() : 'BACK ON THE BLOCK', st.active ? (st.subtitle || 'SAFE ZONE') : 'EXPLORE THE CITY');
+  if (multiplayerActive) for (const t of st.transitions || []) multiplayer?.updateSpace(t.spaceId, t.action);
+}
 // Only the city's permanent residents (the bank's 36) can talk: they have names, jobs and homes.
 function talkableResident(index, identity) {
   const schedule = PERMANENT_RESIDENT_SCHEDULES[index];
@@ -778,7 +794,7 @@ function startGame(mode = selectedMode, options = {}) {
   setCombatLobby(false);
   score.red = score.blue = 0; MATCH.left = MATCH.time; MATCH.over = false; MATCH.started = true; for (const n in ab) ab[n].have = 0; snitchUntil = 0;
   for (const interior of [city?.gunShop, city?.library, city?.bankInterior, city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = false; interior.interior.visible = false; }
-  city?.interiors?.reset();
+  city?.interiors?.reset(); floorPanel.close();
   libraryPanel.close(); bankPanel.close(); residentPanel.close();
   setInteriorRenderLayer(false);
   while (bots.length) ctx.remove(bots[bots.length - 1]);
@@ -931,7 +947,8 @@ function applyLocalContext(context, revision = localContextRevision + 1, state =
   // Stage 2 buildings: the server's word decides which one (if any) this client is in (a reconnect restores it)
   const building = spaceId.startsWith('bld-') ? spaceId : null;
   if (building) city?.interiors?.enterSpace(building); else city?.interiors?.reset();
-  setInteriorRenderLayer(!!target || !!building);
+  if (!building) floorPanel.close();
+  setInteriorRenderLayer(!!target || (!!building && !city?.interiors?.inApartment)); // an apartment shows the city outside
   if (state && ['x', 'y', 'z'].every((key) => Number.isFinite(state[key]))) {
     if (spaceId === 'underground' || priorSpace === 'underground') {
       player.respawn(new THREE.Vector3(state.x, state.y, state.z));
@@ -1408,6 +1425,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'Escape' && libraryPanel.open) { libraryPanel.close(); return; }
   if (e.code === 'Escape' && bankPanel.open) { bankPanel.close(); return; }
   if (e.code === 'Escape' && residentPanel.open) { residentPanel.close(); return; }
+  if (e.code === 'Escape' && floorPanel.open) { floorPanel.close(); return; }
   if (e.code === 'Escape' && combatLobbyOpen) { setCombatLobby(false); return; }
   if (e.code === 'KeyX' && practiceCombat && MATCH.started) { returnToCity(); return; }
   if (e.code === 'Escape' && cityMap?.isOpen) { setCityMap(false); return; }
@@ -1436,7 +1454,7 @@ function loop(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now; time += dt;
   fpsAcc += dt; fpsN++; if (fpsAcc > 0.5) { hud.fps(Math.round(fpsN / fpsAcc)); fpsAcc = 0; fpsN = 0; }
   const look = poll();
-  if (!MATCH.started || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || (!input.locked && !TOUCH && !MATCH.over && MATCH.started)) { look.dx = look.dy = 0; }
+  if (!MATCH.started || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open || (!input.locked && !TOUCH && !MATCH.over && MATCH.started)) { look.dx = look.dy = 0; }
   if (!MATCH.started) { // idle camera drift on the title
     player.yaw += dt * 0.03; player.update(dt, { moveX: 0, moveY: 0 }, { dx: 0, dy: 0 }, time); input.camera = false;
   } else {
@@ -1450,8 +1468,8 @@ function loop(now) {
     if (input.ab) { if (isCombatMode(MATCH.mode)) useAbility(input.ab); input.ab = 0; }
     if (input.camera) { input.camera = false; if (!combatLobbyOpen) toggleCamera(); }
     if (input.map) { input.map = false; setCityMap(!cityMap?.isOpen); }
-    if (cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open) { input.fire = false; input.ads = false; input.jump = false; input.interact = false; input.reload = false; }
-    player.update(dt, MATCH.over || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
+    if (cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open) { input.fire = false; input.ads = false; input.jump = false; input.interact = false; input.reload = false; }
+    player.update(dt, MATCH.over || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
     blendServerCorrection(dt);
     if (multiplayerActive && Number.isFinite(localCombat?.health)) {
       player.hp = localCombat.health; player.dead = localCombat.dead === true;
@@ -1518,12 +1536,14 @@ function loop(now) {
       if (gunShopState.action) handleGunShopAction(gunShopState);
       if (libraryState.open) libraryPanel.openStation(libraryState.open);
       if (bankInteriorState.open) { if (bankInteriorState.open.kind === 'wallet') walletBridge.openBank(); else bankPanel.openStation(bankInteriorState.open); }
-      const transition = gunShopState.transitioned ? { type: 'shop', spaceId: 'nerdie-arms', state: gunShopState } : libraryState.transitioned ? { type: 'library', spaceId: 'academy-library', state: libraryState } : bankInteriorState.transitioned ? { type: 'bank', spaceId: 'nerdie-city-bank', state: bankInteriorState } : apartmentState.transitioned ? { type: 'apartment', spaceId: 'north-court', state: apartmentState } : originalHouseState.transitioned ? { type: 'house', spaceId: 'hood-cross-west', state: originalHouseState } : duplicatedHouseState.transitioned ? { type: 'house', spaceId: 'hood-duplicate-west-5', state: duplicatedHouseState } : houseState.transitioned ? { type: 'house', spaceId: 'east-73', state: houseState } : buildingState.transitioned ? { type: 'building', spaceId: buildingState.spaceId, state: buildingState } : null;
+      if (buildingState.floorMenu) floorPanel.show(buildingState.floorMenu);
+      if (buildingState.transitioned) applyBuildingTransition(buildingState);
+      const transition = gunShopState.transitioned ? { type: 'shop', spaceId: 'nerdie-arms', state: gunShopState } : libraryState.transitioned ? { type: 'library', spaceId: 'academy-library', state: libraryState } : bankInteriorState.transitioned ? { type: 'bank', spaceId: 'nerdie-city-bank', state: bankInteriorState } : apartmentState.transitioned ? { type: 'apartment', spaceId: 'north-court', state: apartmentState } : originalHouseState.transitioned ? { type: 'house', spaceId: 'hood-cross-west', state: originalHouseState } : duplicatedHouseState.transitioned ? { type: 'house', spaceId: 'hood-duplicate-west-5', state: duplicatedHouseState } : houseState.transitioned ? { type: 'house', spaceId: 'east-73', state: houseState } : null;
       if (transition) {
         setInteriorRenderLayer(transition.state.active);
         setCameraMode(thirdCamera.enabled); // re-snap after the teleport, keeping the player's view
         console.log(`${transition.type} transition:`, transition.state.active ? 'inside' : 'outside');
-        hud.callout(transition.state.active ? transition.state.name.toUpperCase() : 'BACK ON THE BLOCK', transition.state.active ? (transition.type === 'shop' ? 'GUNS · AMMO · SAFE ZONE' : transition.type === 'library' ? 'GUIDES · PRACTICE EXAMS · SAFE ZONE' : transition.type === 'bank' ? 'TELLERS · ECONOMY BOARD · MARKET INTELLIGENCE · SAFE ZONE' : transition.type === 'building' ? (buildingState.subtitle || 'SAFE ZONE') : transition.type === 'house' ? 'PRIVATE HOUSE INTERIOR' : 'APARTMENT INTERIOR PROTOTYPE') : 'EXPLORE THE CITY');
+        hud.callout(transition.state.active ? transition.state.name.toUpperCase() : 'BACK ON THE BLOCK', transition.state.active ? (transition.type === 'shop' ? 'GUNS · AMMO · SAFE ZONE' : transition.type === 'library' ? 'GUIDES · PRACTICE EXAMS · SAFE ZONE' : transition.type === 'bank' ? 'TELLERS · ECONOMY BOARD · MARKET INTELLIGENCE · SAFE ZONE' : transition.type === 'house' ? 'PRIVATE HOUSE INTERIOR' : 'APARTMENT INTERIOR PROTOTYPE') : 'EXPLORE THE CITY');
         if (multiplayerActive) multiplayer?.updateSpace(transition.spaceId, transition.state.active ? 'enter' : 'exit');
       }
       city.update(player);

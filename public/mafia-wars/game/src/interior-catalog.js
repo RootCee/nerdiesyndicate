@@ -11,6 +11,8 @@
 // wall (max z); players arrive facing south.
 import { createCityPlan, ENTERABLE_HOUSE_SITE } from './city-layout.js';
 import { CITY_HALL_ENTRY } from './city-park-layout.js';
+import { HOUSE_STOOP, flightDepth, houseDoorOffset } from './entry-steps.js';
+import { APARTMENT_FLOORS, balconyFor, facadeBays, storeyCeiling, storeyFloor } from './apartment-building.js';
 
 export const GENERIC_INTERIOR_Y = 300;
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -136,18 +138,94 @@ const TEMPLATES = {
   },
 };
 function shop(w, d, h, palette, furniture) { return { w, d, h, palette, rooms: ['Shop floor'], partitions: [], furniture }; }
+// An apartment building's lobby: the concierge desk, mailboxes, seating, and the lift bank on the back
+// wall. The lift (its floor menu) takes residents and visitors to storeys 2-6 (apartmentUnit).
+export const LOBBY_LIFT_Z = 2.2; // the lift call spot, this far in front of the lobby's back wall
 function apartmentLayout(k, style) {
-  // lobby 5.5 m deep at the front; the model apartment (about 110 m²) behind a doorway
-  const w = 15, d = 17, lobbyZ = d / 2 - 5.5;
-  return { w, d, h: 3.4, palette: style === 'loft' ? 'loft' : k % 2 ? 'city' : 'oak', rooms: ['Lobby', 'Living room', 'Kitchen', 'Bedroom', 'Bath'],
-    partitions: [wallX(lobbyZ, -w / 2, w / 2, [[0, 1.4]]), wallX(-2, -w / 2, w / 2, [[-3.8, 1.1], [3.2, 0.9]]), wallZ(1, -d / 2, -2)],
+  const w = 15, d = 11;
+  return { w, d, h: 3.6, palette: style === 'loft' ? 'loft' : k % 2 ? 'city' : 'oak', rooms: ['Lobby'], partitions: [],
     furniture: [
-      f('mailboxes', -7.2, lobbyZ + 2.6, 0.35, 3.2, 1.7), f('lift', 7.25, lobbyZ + 2.6, 0.3, 2, 2.4, { collide: true }), f('bench', -3.6, lobbyZ + 0.6, 2.2, 0.5, 0.45), f('plant', 5.6, d / 2 - 0.8, 0.6, 0.6, 1.3),
-      f('sofa', -4, 0.6, 2.8, 0.95, 0.85), deco('rug', -4, 2.2, 3.2, 2.2, 0.01), f('table', -4, 2.2, 1.1, 0.6, 0.42), f('tv', -7.1, 1.6, 0.4, 2, 1.25),
-      f('counter', 6.95, 0.3, 0.65, 3.4, 0.92), f('island', 4.2, 1.1, 1.0, 2, 0.92), f('fridge', 6.95, 2.5, 0.7, 0.7, 1.9),
-      f('bed', -3.8, -5.6, 2.0, 2.2, 0.6), f('wardrobe', -7.1, -3.2, 0.6, 1.8, 2.1), f('nightstand', -5.4, -7.8, 0.5, 0.45, 0.55), f('desk', -0.4, -7.7, 1.4, 0.6, 0.76),
-      f('tub', 4.2, -7.8, 1.7, 0.8, 0.6), f('sink', 6.95, -3.4, 0.45, 0.6, 0.9), f('toilet', 2, -5, 0.45, 0.65, 0.45),
+      f('lift', -1.6, -d / 2 + 0.2, 1.8, 0.3, 2.4), f('lift', 1.6, -d / 2 + 0.2, 1.8, 0.3, 2.4), deco('rug', 0, -d / 2 + LOBBY_LIFT_Z, 4.4, 1.6, 0.01),
+      f('mailboxes', -7.3, -1.2, 0.35, 3.4, 1.7), f('counter', 4.8, 1.4, 2.8, 0.8, 1.05), f('desk', 4.8, 0.6, 0.5, 0.4, 0.76),
+      f('sofa', -4.2, 2.6, 2.6, 0.9, 0.85), f('table', -4.2, 1.4, 1.1, 0.6, 0.42), f('plant', -6.8, d / 2 - 0.8, 0.6, 0.6, 1.4), f('plant', 6.8, d / 2 - 0.8, 0.6, 0.6, 1.4),
+      f('plant', -3.2, -d / 2 + 0.6, 0.6, 0.6, 1.4), f('plant', 3.2, -d / 2 + 0.6, 0.6, 0.6, 1.4),
     ] };
+}
+
+// ---------------------------------------------------------------- apartments (storeys 2-6)
+// One apartment per storey, laid out inside the real building at its real height, so its windows (the
+// facade's own window bays) look out on the city and its balcony door opens onto the facade's balcony.
+// Layouts scale with the footprint; each storey is better than the one below; the penthouse has stairs to
+// a private roof terrace.
+const CORE_A = 1.4; // the entrance hall either side of the lift core, along the facade
+export function apartmentUnit(entry, floor) {
+  const spec = APARTMENT_FLOORS.find((x) => x.floor === floor); if (!spec) return null;
+  const b = { ...entry.site, front: entry.facing, kind: 'apartments' }, [nx, nz] = NORMALS[b.front], ux = nz, uz = -nx;
+  const L = nx ? b.depth : b.width, D = nx ? b.width : b.depth, A = L / 2 - 0.3, Dh = D / 2 - 0.3; // inner half-sizes
+  const level = storeyFloor(floor), ceiling = storeyCeiling(floor), top = b.height, penthouse = spec.layout === 'penthouse';
+  const P = (a, dd) => ({ x: r2(b.x + ux * a + nx * dd), z: r2(b.z + uz * a + nz * dd) });
+  const rect = (a0, a1, d0, d1) => { const p = P(a0, d0), q = P(a1, d1); return { minX: Math.min(p.x, q.x), maxX: Math.max(p.x, q.x), minZ: Math.min(p.z, q.z), maxZ: Math.max(p.z, q.z) }; };
+  const box = (type, a, dd, wa, wd, h, extra = {}) => { const c = P(a, dd), along = Math.abs(ux) > 0.5; return { type, x: c.x, z: c.z, w: along ? wa : wd, d: along ? wd : wa, h, collide: extra.collide ?? true, ...extra }; };
+  // the hall runs from the lift (coreD) to the living room (back); doors off it are always in front of the lift.
+  // The penthouse's living room is deeper, but never so deep that the rooms behind it get cramped.
+  const coreD = -Dh + 2.2, back = penthouse ? Math.max(-Dh * 0.25, coreD + 3.1) : 0.4, split = Math.max((-Dh + back) / 2, coreD + 1.3);
+  // walls in local (a = along the facade, d = depth, + toward the street), turned into world runs
+  const runs = [];
+  const runA = (dd, a0, a1, gaps = []) => runs.push({ dd, a0, a1, gaps, axis: 'a' }); // a wall running along the facade at depth dd
+  const runD = (a, d0, d1, gaps = []) => runs.push({ a, d0, d1, gaps, axis: 'd' });  // a wall running front-to-back at a
+  runA(back, -A, -CORE_A); runD(-CORE_A, -Dh, back, [[(coreD + back) / 2, 0.55]]);
+  const luxury = spec.tier !== 'standard';
+  if (luxury) { runA(back, CORE_A, A); runA(split, CORE_A, A); runD(CORE_A, -Dh, back, [[(coreD + split) / 2, 0.5], [(split + back) / 2, 0.5]]); }
+  else { runA(back, CORE_A, A); runD(CORE_A, -Dh, back, [[(coreD + back) / 2, 0.5]]); }
+  const fx = [
+    box('lift', 0, -Dh + 1.1, 2.4, 2.2, 2.4),
+    // living (front): sofa facing the windows' side wall, a table, the TV; the kitchen on the other side
+    box('sofa', -A * 0.45, Dh * 0.35, Math.min(3.2, A * 0.6), 0.95, 0.85), box('table', -A * 0.45, Dh * 0.62, 1.2, 0.6, 0.42), box('rug', -A * 0.45, Dh * 0.55, Math.min(3.6, A * 0.7), 2.2, 0.01, { collide: false }),
+    box('tv', -A + 0.25, Dh * 0.5, 0.4, 2.0, 1.25), box('counter', A - 0.35, back + (Dh - back) * 0.45, 0.65, Math.min(4.2, (Dh - back) * 0.7), 0.92),
+    box('island', A * 0.42, back + (Dh - back) * 0.5, luxury ? 2.2 : 1.6, 0.95, 0.92), box('fridge', A - 0.35, back + 0.55, 0.7, 0.7, 1.9),
+    // the bedroom (back left)
+    box('bed', (-A - CORE_A) / 2, (-Dh + back) / 2 - 0.3, luxury ? 2.0 : 1.7, 2.2, 0.6), box('wardrobe', -A + 0.3, back - 1.1, 0.6, 1.8, 2.1), box('nightstand', (-A - CORE_A) / 2 + 1.4, -Dh + 0.35, 0.5, 0.45, 0.55),
+    box('plant', -A + 0.4, Dh - 0.5, 0.6, 0.6, 1.4),
+  ];
+  if (luxury) fx.push(box('bed', (A + CORE_A) / 2, (-Dh + split) / 2, 1.6, 2.0, 0.55), box('tub', (A + CORE_A) / 2, back - 0.55, 1.7, 0.8, 0.6), box('sink', A - 0.3, split + 0.6, 0.45, 0.6, 0.9), box('toilet', CORE_A + 0.45, split + 0.55, 0.45, 0.65, 0.45));
+  else fx.push(box('tub', (A + CORE_A) / 2, -Dh + 0.5, 1.7, 0.8, 0.6), box('sink', A - 0.3, back - 0.8, 0.45, 0.6, 0.9), box('toilet', CORE_A + 0.5, -Dh + 1.6, 0.45, 0.65, 0.45));
+  // from floor 3 up: a study desk and a dining table
+  if (spec.layout !== 'standard') fx.push(box('desk', -A * 0.4, back + 0.45, 1.4, 0.6, 0.76), box('table', A * 0.42, Dh - 1.1, 1.6, 0.9, 0.76));
+  if (spec.layout === 'luxury-plus' || penthouse) fx.push(box('wardrobe', -CORE_A - 0.35, -Dh + 0.5, 0.6, 0.9, 2.1), box('plant', A - 0.4, Dh - 0.5, 0.6, 0.6, 1.4), box('sofa', -A * 0.45, Dh * 0.08, Math.min(2.4, A * 0.45), 0.9, 0.85));
+  // the penthouse's stairs to the roof: real steps along the left wall, up through an opening in the ceiling
+  let stairs = null, roof = null;
+  if (penthouse) {
+    const n = Math.ceil((top - level) / 0.2), rise = (top - level) / n, tread = 0.28, run = n * tread, d0 = Math.min(Dh - 0.3 - run, back + 0.6);
+    stairs = { steps: Array.from({ length: n }, (_, i) => ({ ...rect(-A, -A + 1.15, d0 + i * tread, d0 + (i + 1) * tread), top: r2(level + rise * (i + 1)) })), opening: rect(-A, -A + 1.2, d0 + run - 3.2, d0 + run + 0.2) };
+    roof = { y: top, rect: rect(-A - 0.3, A + 0.3, -Dh - 0.3, Dh + 0.3), furniture: [box('lounger', A * 0.3, Dh * 0.5, 0.8, 2.0, 0.4), box('lounger', A * 0.6, Dh * 0.5, 0.8, 2.0, 0.4), box('tub', A * 0.45, -Dh * 0.4, 2.2, 2.2, 0.8), box('plant', A - 0.5, -Dh + 0.5, 0.8, 0.8, 1.6), box('plant', A - 0.5, Dh - 0.5, 0.8, 0.8, 1.6), box('table', -A * 0.2, Dh * 0.4, 1.2, 1.2, 0.74), box('rug', -A * 0.2, Dh * 0.4, 3, 3, 0.01, { collide: false })].map((o) => ({ ...o, y: 0 })) };
+  }
+  // the facade's windows on every side (facadeBays), with the front balcony bays as doors
+  const balcony = balconyFor(b, floor), openings = [];
+  for (const [side, [sx, sz]] of Object.entries(NORMALS)) {
+    const length = sx ? b.depth : b.width, half = sx ? b.width / 2 : b.depth / 2, bays = facadeBays(length), sux = sz, suz = -sx, front = side === b.front;
+    for (let i = 0; i < bays.bays; i++) {
+      const a = bays.at(i), door = front && balcony?.bays.includes(i);
+      openings.push({ side, x: r2(b.x + sx * half + sux * a), z: r2(b.z + sz * half + suz * a), width: door ? 1.25 : Math.min(1.5, bays.span * 0.55), sill: door ? 0 : 0.9, head: door ? 2.3 : 2.54, door: !!door, normal: [sx, sz] });
+    }
+  }
+  const out = balcony ? (() => { const c0 = P(balcony.along - balcony.width / 2, D / 2), c1 = P(balcony.along + balcony.width / 2, D / 2 + balcony.depth); return { minX: Math.min(c0.x, c1.x), maxX: Math.max(c0.x, c1.x), minZ: Math.min(c0.z, c1.z), maxZ: Math.max(c0.z, c1.z), level, front: b.front }; })() : null;
+  const lift = P(0, coreD + 0.8);
+  return Object.freeze({
+    floor, tier: spec.tier, title: spec.title, layout: spec.layout, level, ceiling, height: r2(ceiling - level), facing: b.front, building: rect(-L / 2, L / 2, -D / 2, D / 2), inner: rect(-A, A, -Dh, Dh),
+    runs: runs.map((r) => r.axis === 'a' ? { ...rect(r.a0, r.a1, r.dd - 0.08, r.dd + 0.08), gaps: r.gaps.map(([c, h]) => ({ ...P(c, r.dd), half: h })) } : { ...rect(r.a - 0.08, r.a + 0.08, r.d0, r.d1), gaps: r.gaps.map(([c, h]) => ({ ...P(r.a, c), half: h })) }),
+    furniture: Object.freeze(fx), openings: Object.freeze(openings), balcony: out, stairs, roof, lift: { x: lift.x, z: lift.z },
+    area: Math.round((2 * A) * (2 * Dh) + (balcony ? balcony.width * balcony.depth : 0) + (roof ? (2 * A + 0.6) * (2 * Dh + 0.6) : 0)),
+  });
+}
+export function apartmentUnitSpace(entry, floor, U = apartmentUnit(entry, floor), lobby = interiorLayout(entry)) {
+  const liftLobby = { x: lobby.doorX, y: lobby.y, z: r2(lobby.minZ + LOBBY_LIFT_Z) }, inside = { x: U.lift.x, y: U.level, z: U.lift.z };
+  const minX = Math.min(U.building.minX, U.balcony?.minX ?? Infinity), maxX = Math.max(U.building.maxX, U.balcony?.maxX ?? -Infinity);
+  const minZ = Math.min(U.building.minZ, U.balcony?.minZ ?? Infinity), maxZ = Math.max(U.building.maxZ, U.balcony?.maxZ ?? -Infinity);
+  return Object.freeze({
+    id: `${entry.spaceId}-f${floor}`, parent: entry.spaceId, floor, layer: 0, safeZone: true,
+    entry: Object.freeze(liftLobby), inside: Object.freeze(inside), exit: Object.freeze(inside), outside: Object.freeze(liftLobby),
+    bounds: Object.freeze({ minX: r2(minX), maxX: r2(maxX), minY: U.level - 1, maxY: r2((U.roof ? U.roof.y + 3 : U.ceiling + 0.5)), minZ: r2(minZ), maxZ: r2(maxZ) }),
+  });
 }
 export const INTERIOR_TEMPLATES = Object.freeze(Object.keys(TEMPLATES));
 
@@ -158,7 +236,18 @@ function doorOf(b) {
   // City Hall: its own entrance at the foot of the front steps (the waypoint's door)
   if (b.id === 'city-hall') return { facing: CITY_HALL_ENTRY.facing, out: (dist) => ({ x: r2(CITY_HALL_ENTRY.x - (dist - 1.4)), z: CITY_HALL_ENTRY.z }) };
   const facing = DOOR_SIDE[b.id] || b.front || b.facing || (b.x > 0 ? 'west' : 'east'), [nx, nz] = NORMALS[facing] || NORMALS.east, half = nx ? b.width / 2 : b.depth / 2;
-  return { facing, out: (dist) => ({ x: r2(b.x + nx * (half + dist)), z: r2(b.z + nz * (half + dist)) }) };
+  // where the facade draws its door (city-showcase.js): a house's beside its garage, up its stoop; an apartment
+  // building's in its middle bay; everything else at the centre
+  const along = doorAlong(b, facing), stoop = b.kind === 'house' ? flightDepth(HOUSE_STOOP) : 0, ux = nz, uz = -nx;
+  return { facing, along, stoop, out: (dist) => ({ x: r2(b.x + nx * (half + stoop + dist) + ux * along), z: r2(b.z + nz * (half + stoop + dist) + uz * along) }) };
+}
+export function doorAlong(b, facing = b.front) {
+  if (b.kind === 'house') return houseDoorOffset(b);
+  if ((!b.kind || b.kind === 'mixed') && facing === b.front) { // midrise: the entrance bay
+    const length = NORMALS[facing][0] ? b.depth : b.width, bays = Math.max(1, Math.floor((length - 1.2) / 2.8)), span = (length - 1.2) / bays;
+    return r2(-length / 2 + 0.6 + span * (Math.floor(bays / 2) + 0.5));
+  }
+  return 0;
 }
 const hash = (s) => { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
 
@@ -207,5 +296,10 @@ export function interiorCatalog(plan = null) {
 }
 
 export function genericInteriorSpaces(plan = null) {
-  return Object.fromEntries(interiorCatalog(plan).map((e) => [e.spaceId, interiorSpace(e)]));
+  const out = {};
+  for (const e of interiorCatalog(plan)) {
+    out[e.spaceId] = interiorSpace(e);
+    if (e.template === 'apartments' || e.template === 'lofts') for (const { floor } of APARTMENT_FLOORS) { const sp = apartmentUnitSpace(e, floor); out[sp.id] = sp; }
+  }
+  return out;
 }

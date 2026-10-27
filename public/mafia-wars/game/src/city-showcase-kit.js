@@ -211,9 +211,18 @@ export function fpoint(f, a, out) { return [f.cx + f.ux * a + f.nx * out, f.cz +
 
 // A window that reads as set into the wall: glass just proud of the face, a deeper surround
 // (lintel, sill, jambs), and a mullion on wide windows. `lit` picks the night glass.
-export function windowUnit(batch, kit, f, a, y, w, h, { glass = kit.m.glass, surround = kit.m.trim, mullion = true, sill = true, depth = 0.16 } = {}) {
-  const m = kit.m;
-  fbox(batch, glass, f, a, y, 0.03, w, h, 0.04);
+// A pane facing out of a facade, seen only from outside: from inside the building (an apartment) it is not
+// drawn at all, so the room looks out through it.
+export function fplane(batch, mat, f, a, y, out, across, h) {
+  const x = f.cx + f.ux * a + f.nx * out, z = f.cz + f.uz * a + f.nz * out;
+  return batch.add(mat, new THREE.PlaneGeometry(across, h).rotateY(Math.atan2(f.nx, f.nz)).translate(x, y, z));
+}
+// pane: the glass as an outward pane (fplane) instead of a box, for homes people look out of
+// lean: a side or rear window as two boxes (a recessed surround panel and the glass), for tall buildings
+export function windowUnit(batch, kit, f, a, y, w, h, { glass = kit.m.glass, surround = kit.m.trim, mullion = true, sill = true, depth = 0.16, lean = false, pane = false } = {}) {
+  const m = kit.m, glaze = (out) => (pane ? fplane(batch, glass, f, a, y, out + 0.02, w, h) : fbox(batch, glass, f, a, y, out, w, h, 0.04));
+  if (lean) { if (!pane) fbox(batch, surround, f, a, y, 0.02, w + 0.28, h + 0.3, 0.04); else for (const s of [-1, 1]) fbox(batch, surround, f, a + s * (w / 2 + 0.07), y, 0.04, 0.14, h + 0.3, 0.08); glaze(0.05); return; }
+  glaze(0.03);
   fbox(batch, surround, f, a, y + h / 2 + 0.09, depth / 2, w + 0.32, 0.18, depth);
   if (sill) fbox(batch, surround, f, a, y - h / 2 - 0.06, depth / 2 + 0.04, w + 0.36, 0.12, depth + 0.08);
   for (const s of [-1, 1]) fbox(batch, surround, f, a + s * (w / 2 + 0.07), y, depth / 2, 0.14, h, depth);

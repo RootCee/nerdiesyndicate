@@ -76,13 +76,16 @@ export function applySpaceIntent(player, message, now, protocolVersion) {
   player.lastSpaceSeq = message.seq;
   const current = player.context?.space?.id || 'city', target = MULTIPLAYER_SPACES[message.spaceId];
   if (!player.state) return { ok: false, reason: 'position_unavailable' };
+  // Stage 2: an apartment (a space with a parent) is entered from its building's lobby, at the lift, and left
+  // back into the lobby; everything else is entered from the city and left to it.
+  const from = target.parent || 'city';
   if (message.action === 'enter') {
-    if (current !== 'city' || target.id === 'city' || distance(player.state, target.entry) > 3.6) return { ok: false, reason: 'not_at_entrance' };
+    if (current !== from || target.id === 'city' || distance(player.state, target.entry) > 3.6) return { ok: false, reason: 'not_at_entrance' };
     player.context.space = { id: target.id, instanceId: target.id }; player.contextRevision++;
     player.state = { ...player.state, x: target.inside.x, y: target.inside.y, z: target.inside.z, serverTime: now };
   } else {
     if (current !== target.id || target.id === 'city' || distance(player.state, target.exit) > 3.6) return { ok: false, reason: 'not_at_exit' };
-    player.context.space = { id: 'city', instanceId: null }; player.contextRevision++;
+    player.context.space = target.parent ? { id: target.parent, instanceId: target.parent } : { id: 'city', instanceId: null }; player.contextRevision++;
     player.state = { ...player.state, x: target.outside.x, y: target.outside.y, z: target.outside.z, serverTime: now };
   }
   return { ok: true, state: { playerId: player.id, context: player.context, contextRevision: player.contextRevision, state: player.state, serverTime: now } };

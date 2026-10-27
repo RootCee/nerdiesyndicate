@@ -1,5 +1,5 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
-import { MAP, addCollider, removeColliders, mapRects } from './world.js';
+import { MAP, addCollider, removeColliders, colliders, mapRects } from './world.js';
 import { createCityPlan, chunkVisible, FRONT_NORMALS } from './city-layout.js';
 import { HybridApartmentSystem } from './apartment-system.js';
 import { HybridHouseSystem } from './house-system.js';
@@ -23,6 +23,8 @@ import { LibrarySystem } from './library-system.js';
 import { BankInteriorSystem } from './bank-interior.js';
 import { bankBuilding } from './bank-layout.js';
 import { GenericInteriorSystem } from './generic-interiors.js';
+import { entranceWalkways } from './entrance-walkways.js';
+import { buildEntranceWalkways } from './entrance-walkways-view.js';
 
 const material = (color, roughness = 0.88, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
 const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
@@ -318,7 +320,9 @@ export function buildCityExpansion(scene, Q = {}) {
   addCollider(MAP.minX - 2, MAP.maxZ, MAP.maxX + 2, MAP.maxZ + 2, 0, 12, { boundary: true });
 
   // Stage 2: every other building can be entered (interiors are built on entry, removed on exit)
-  const interiors = new GenericInteriorSystem(scene, { addCollider, removeColliders, mobile: plan.profile.key === 'mobile' });
+  // ... and every set-back entrance has a lit walkway from the sidewalk
+  const walkways = buildEntranceWalkways(entranceWalkways(plan, ground), { mobile: plan.profile.key === 'mobile' }); scene.add(walkways);
+  const interiors = new GenericInteriorSystem(scene, { addCollider, removeColliders, worldColliders: colliders, mobile: plan.profile.key === 'mobile' });
   const city = {
     plan, ground, chunks, apartment, house, originalHouse, duplicatedHouse, combatVenue, bank, gunShop, library, bankInterior, interiors, infrastructure, mode: 'free-roam',
     // M7.2: the clock tower's hands follow the city clock (hours 0..24)
@@ -390,6 +394,7 @@ export function buildCityExpansion(scene, Q = {}) {
         library: library?.site.id || null,
         bankInterior: bankInterior?.site.id || null,
         enterableBuildings: interiors.entries.length,
+        entranceWalkways: walkways.userData.lamps,
         bounds: { ...MAP },
       };
     },

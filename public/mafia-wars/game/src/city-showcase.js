@@ -1,5 +1,6 @@
+import { balconyFor, isApartmentBuilding } from './apartment-building.js';
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
-import { KitBatch, facade, fbox, fpoint, windowUnit, waterTank, roofUnits, signMaterial, PALETTE } from './city-showcase-kit.js';
+import { KitBatch, facade, fbox, fplane, fpoint, windowUnit, waterTank, roofUnits, signMaterial, PALETTE } from './city-showcase-kit.js';
 import { SHOWCASE_HEROES, SHOWCASE_BUSINESSES } from './city-showcase-layout.js';
 import { STOREFRONT_BUSINESSES } from './city-pois.js';
 import { CIVIC_STAIRS, HOUSE_STOOP, LIBRARY_STAIRS, entrySteps, flightDepth } from './entry-steps.js';
@@ -557,7 +558,7 @@ function midrise(batch, kit, b, parent, { mobile = false } = {}) {
   batch.box(m.concrete, b.x, 0.45, b.z, b.width + 0.2, 0.9, b.depth + 0.2);
   const floors = Math.max(2, Math.floor((b.height - 0.6) / 3.1)), fh = (b.height - 0.6) / floors;
   for (let k = 1; k < floors; k++) course(batch, kit, b, k * fh, m.trim);
-  const shop = b.kind === 'storefront';
+  const shop = b.kind === 'storefront', homes = isApartmentBuilding(b);
   for (const side of ['north', 'south', 'east', 'west']) {
     const f = facade(b, side), front = side === b.front, bays = Math.max(1, Math.floor((f.length - 1.2) / 2.8)), span = (f.length - 1.2) / bays;
     for (let k = 0; k < floors; k++) {
@@ -570,7 +571,22 @@ function midrise(batch, kit, b, parent, { mobile = false } = {}) {
           fbox(batch, m.lamp, f, a, 2.83, 0.75, 0.25, 0.03, 0.25);
           continue;
         }
-        windowUnit(batch, kit, f, a, k * fh + fh * 0.55, Math.min(1.5, span * 0.55), fh * 0.48, { glass: litGlass(kit, r), surround: body === m.brick ? m.trim : m.concrete, mullion: !mobile, sill: !mobile || front });
+        // Stage 2: apartment storeys 2-6 open onto a front balcony (apartment-building.js; the apartment inside lines up)
+        const balcony = front && homes ? balconyFor(b, k + 1) : null;
+        if (balcony && balcony.bays.includes(i)) {
+          const lv = balcony.level;
+          for (const sd of [-1, 1]) fbox(batch, m.frame, f, a + sd * 0.68, lv + 1.2, 0.05, 0.1, 2.45, 0.08); fbox(batch, m.frame, f, a, lv + 2.4, 0.05, 1.45, 0.1, 0.08); fplane(batch, m.glass, f, a, lv + 1.18, 0.09, 1.25, 2.3); // the balcony door (a pane residents see out through)
+          if (i === balcony.bays[0]) {
+            const d = balcony.depth, bw = balcony.width;
+            fbox(batch, m.concrete, f, balcony.along, lv - 0.09, d / 2, bw, 0.18, d);                                   // slab
+            // an open steel railing (hand rail, a middle rail, posts), so the street shows through it
+            for (const ry of mobile ? [1.06] : [1.06, 0.55]) { fbox(batch, m.frame, f, balcony.along, lv + ry, d - 0.03, bw + 0.06, 0.05, 0.06); if (!mobile) for (const sd of [-1, 1]) fbox(batch, m.frame, f, balcony.along + sd * (bw / 2), lv + ry, d / 2, 0.06, 0.05, d); }
+            if (!mobile) for (let k2 = 1, posts = Math.max(2, Math.round(bw / 1.0)); k2 < posts; k2++) fbox(batch, m.frame, f, balcony.along - bw / 2 + (bw / posts) * k2, lv + 0.53, d - 0.03, 0.05, 1.06, 0.05); // (phones: the end posts only)
+            for (const sd of [-1, 1]) fbox(batch, m.frame, f, balcony.along + sd * (bw / 2), lv + 0.53, d - 0.03, 0.06, 1.06, 0.06);
+          }
+          continue;
+        }
+        windowUnit(batch, kit, f, a, k * fh + fh * 0.55, Math.min(1.5, span * 0.55), fh * 0.48, { glass: litGlass(kit, r), surround: body === m.brick ? m.trim : m.concrete, mullion: !mobile, sill: !mobile || front, lean: !front || (mobile && k >= 2), pane: homes && k > 0 }); // full detail faces the street (low floors only on phones)
       }
     }
     if (front && shop) {
@@ -586,6 +602,7 @@ function midrise(batch, kit, b, parent, { mobile = false } = {}) {
   }
   cornice(batch, kit, b, b.height - 0.25, m.trim, 0.3, 0.34);
   parapet(batch, kit, b, body, 0.55, 0.3);
+  if (homes) return; // an apartment building's roof is its penthouse's terrace: no tanks or plant on it
   if (r() < 0.4) waterTank(batch, kit, b.x + (r() - 0.5) * b.width * 0.4, b.height, b.z + (r() - 0.5) * b.depth * 0.4, 0.95);
   roofUnits(batch, kit, b.x, b.height, b.z, 1 + Math.floor(r() * 2), r);
   if (r() < 0.5) batch.box(m.concrete, b.x - b.width * 0.25, b.height + 1.2, b.z + b.depth * 0.2, 2.6, 2.4, 2.6);

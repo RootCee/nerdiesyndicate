@@ -2,7 +2,8 @@ import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { insideInteractionRange, interactionCooldownReady } from './city-layout.js';
 import { addInteriorIsolationShell } from './apartment-system.js';
 import { KitBatch, signMaterial } from './city-showcase-kit.js';
-import { interiorCatalog, interiorLayout, interiorSpace, PROPERTY_TIERS } from './interior-catalog.js';
+import { interiorCatalog, interiorLayout, interiorSpace, apartmentUnit, apartmentUnitSpace, LOBBY_LIFT_Z, PROPERTY_TIERS } from './interior-catalog.js';
+import { APARTMENT_FLOORS } from './apartment-building.js';
 import { streetAddress } from './city-addresses.js';
 
 // Stage 2: every building without a hand-built interior can be entered (interior-catalog.js). One system
@@ -14,25 +15,28 @@ const NORMALS = Object.freeze({ north: [0, 1], south: [0, -1], east: [1, 0], wes
 
 // Colours per palette: floor, walls, trim, accent, fabric, wood, metal, glow.
 const PALETTES = Object.freeze({
-  warm: [0x8a6a4e, 0xe9dccb, 0x5b4636, 0xc4703e, 0x6e3b3b, 0x9a6d45, 0x3a3a40, 0xffd7a0],
-  oak: [0xa07b52, 0xece6da, 0x6b5440, 0x3f6e8c, 0x3c4a5e, 0xb08a5c, 0x34363c, 0xffe4b8],
-  sage: [0x9b8a70, 0xdfe6d8, 0x55604d, 0x7a9a6a, 0x4f5f4a, 0x8f7556, 0x36383c, 0xfff0c8],
-  city: [0x6f6a66, 0xd9d6d0, 0x3d3b3a, 0x8a3dff, 0x2e2a3a, 0x7a6450, 0x2a2c31, 0xe8dcff],
+  warm: [0x8a6a4e, 0xd9cbb8, 0x5b4636, 0xc4703e, 0x6e3b3b, 0x9a6d45, 0x3a3a40, 0xffd7a0],
+  oak: [0xa07b52, 0xdcd5c8, 0x6b5440, 0x3f6e8c, 0x3c4a5e, 0xb08a5c, 0x34363c, 0xffe4b8],
+  sage: [0x9b8a70, 0xcfd8c8, 0x55604d, 0x7a9a6a, 0x4f5f4a, 0x8f7556, 0x36383c, 0xfff0c8],
+  city: [0x6f6a66, 0xcdcac3, 0x3d3b3a, 0x8a3dff, 0x2e2a3a, 0x7a6450, 0x2a2c31, 0xe8dcff],
   loft: [0x5e4a3c, 0xa65a42, 0x2c2c30, 0xe0a040, 0x3a3a44, 0x7c5a3e, 0x26272b, 0xffd890],
   market: [0xb8b2a6, 0xf2efe6, 0x2f6b47, 0xd8432f, 0x2f6b47, 0x9c7c58, 0x8b9096, 0xffffff],
   industrial: [0x76716a, 0xa8a49c, 0x3b3d42, 0xe6b422, 0x4a4d52, 0x8a6a46, 0x55595f, 0xfff4d8],
   clean: [0xd8dde2, 0xeef3f6, 0x3c7fb8, 0x6cc6e8, 0x3c7fb8, 0xb7a58a, 0xc9ced3, 0xffffff],
   bright: [0x2b2b30, 0xf4f4f4, 0x111114, 0xff3b5c, 0x22222a, 0x9a7a58, 0x8c9096, 0xffffff],
-  suit: [0x5a4434, 0x2a2730, 0xc19a49, 0x6b1f2c, 0x23202a, 0x6e4c34, 0x2a2a2e, 0xffe2a8],
-  lounge: [0x1c1820, 0x2a1f33, 0xc19a49, 0x8a3dff, 0x4b1c3a, 0x5c3a28, 0x222228, 0xff6ad5],
+  suit: [0x6a5240, 0x4a4250, 0xc19a49, 0x6b1f2c, 0x23202a, 0x6e4c34, 0x2a2a2e, 0xffe2a8],
+  lounge: [0x2e2834, 0x3e3050, 0xc19a49, 0x8a3dff, 0x4b1c3a, 0x5c3a28, 0x222228, 0xff6ad5],
   civic: [0xc9c2b4, 0xeae4d6, 0x7a6640, 0x1f3f6b, 0x6b1f2c, 0x7a5636, 0x5a5650, 0xfff2d8],
   academy: [0x8a6e52, 0xe6e0d2, 0x2a3a5c, 0xc19a49, 0x2a3a5c, 0x8d6a48, 0x3a3c42, 0xfff0d0],
   stone: [0x77736c, 0x9a958c, 0x4a4640, 0xc19a49, 0x4a4640, 0x6e5238, 0x6a6a6e, 0xffe0a0],
+  // apartments: richer wood for the luxury floors; polished stone, cream and gold for the penthouse
+  luxury: [0x8a6a4e, 0xe0d8ca, 0x3b2f27, 0x6b1f2c, 0x2e2a3a, 0x9a6d45, 0x34363c, 0xffe4b8],
+  penthouse: [0xd8d2c6, 0xece6dc, 0xc19a49, 0x2a2a30, 0x3a3046, 0x6e4c34, 0x3a3a40, 0xfff0d0],
 });
 
 // Floors by palette: wood in homes, the lounge and the Academy; tile in shops and lobbies; stone in civic and
 // tailoring rooms; concrete where things are stored.
-const FLOOR_KIND = Object.freeze({ warm: 'wood', oak: 'wood', sage: 'wood', loft: 'wood', lounge: 'wood', academy: 'wood', city: 'tile', market: 'tile', clean: 'tile', bright: 'tile', civic: 'stone', suit: 'stone', industrial: 'concrete', stone: 'concrete' });
+const FLOOR_KIND = Object.freeze({ warm: 'wood', oak: 'wood', sage: 'wood', loft: 'wood', lounge: 'wood', academy: 'wood', city: 'tile', market: 'tile', clean: 'tile', bright: 'tile', civic: 'stone', suit: 'stone', luxury: 'wood', penthouse: 'stone', industrial: 'concrete', stone: 'concrete' });
 function floorTexture(kind, color) {
   const [r, g, bl] = [(color >> 16) & 255, (color >> 8) & 255, color & 255], size = 64, data = new Uint8Array(size * size * 4);
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
@@ -46,6 +50,11 @@ function floorTexture(kind, color) {
   const t = new THREE.DataTexture(data, size, size, THREE.RGBAFormat); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; t.needsUpdate = true; return t;
 }
+// Light per room type, calibrated from measured renders (qa/stage2/interiors.html?measure=1) to an even,
+// comfortable level: mean brightness about 0.48 (the lounge a moodier 0.36), nothing crushed or blown out.
+const POINT_SHARE = 0.35, FILL = 2.3;
+const LIGHT_SCALE = Object.freeze({ house: 0.69, apartments: 0.81, lofts: 1.9, grocery: 0.92, wholesale: 2, laundromat: 0.47, sneakers: 2, tailor: 5.6,
+  'music-venue': 5.1, warehouse: 2, 'city-hall': 1.06, 'lecture-hall': 1.24, 'clock-tower': 1.33 });
 // The name on a business's (or hall's, or lobby's) feature wall.
 const FEATURE_LINE = Object.freeze({ grocery: 'GROCERIES · ESSENTIALS · FRESH DAILY', wholesale: 'WHOLESALE SUPPLY · TRADE ONLY', laundromat: 'WASH · DRY · FOLD', sneakers: 'KICKS · RELEASES · CUSTOMS',
   tailor: 'BESPOKE SUITS · TAILORING', 'music-venue': 'LIVE MUSIC · LOUNGE · BAR', 'city-hall': 'CITY OF NERDIE CITY · COUNCIL CHAMBER', 'lecture-hall': 'NERDIE BLAQ ACADEMY', warehouse: 'LOADING · STORAGE', 'clock-tower': 'THE CLOCK WORKS' });
@@ -73,19 +82,53 @@ export function residentialPlaque(entry) {
   return { title: buildingName(entry), line: tier ? `${tier.label} · Value ${tier.value.toLocaleString('en-US')} sNERDIE · about ${tier.area} m²` : 'Nerdie City', address };
 }
 
+// One room's materials from its palette (floor texture sized to the room).
+function makeMaterials(palette, w, d) {
+  const colors = PALETTES[palette] || PALETTES.oak, [cFloor, cWall, cTrim, cAccent, cFabric, cWood, cMetal, cGlow] = colors;
+  const std = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: o.r ?? 0.75, metalness: o.metal ?? 0, emissive: o.e ?? 0x000000, emissiveIntensity: o.ei ?? 0 });
+  // (lofts and the lounge have a dark, exposed ceiling)
+  const M = { floor: std(0xffffff, { r: 0.5 }), ceiling: std(palette === 'loft' ? 0x4a3f36 : palette === 'lounge' ? 0x2a2230 : 0xe6e2da, { r: 0.95 }), p1: std(0xd8432f, { r: 0.6 }), p2: std(0xf2c14e, { r: 0.6 }), p3: std(0x2f6b9a, { r: 0.6 }), p4: std(0x3f8f55, { r: 0.6 }), wall: std(cWall, { r: 0.9 }), trim: std(cTrim), accent: std(cAccent, { r: 0.6 }), fabric: std(cFabric, { r: 0.95 }), wood: std(cWood, { r: 0.6 }),
+    metal: std(cMetal, { r: 0.4, metal: 0.6 }), glow: std(0x222222, { e: cGlow, ei: 0.5 }), pane: std(0x222222, { e: cGlow, ei: 0.42 }), white: std(0xf2f0ea, { r: 0.35 }), dark: std(0x141418, { r: 0.5 }), leaf: std(0x3b6b44, { r: 0.9 }), screen: std(0x0a0c12, { e: 0x3355aa, ei: 0.35 }) };
+  M.floor.map = floorTexture(FLOOR_KIND[palette] || 'wood', cFloor); M.floor.map.repeat.set(w / 4, d / 4);
+  return { M, colors };
+}
+
+// A rectangle minus axis-aligned holes inside it, as up to four rectangles per hole (for ceilings and roofs
+// with a stair opening).
+function subtractRect(r, holes) {
+  let parts = [r];
+  for (const h of holes) parts = parts.flatMap((p) => {
+    if (h.maxX <= p.minX || h.minX >= p.maxX || h.maxZ <= p.minZ || h.minZ >= p.maxZ) return [p];
+    const out = [], x0 = Math.max(p.minX, h.minX), x1 = Math.min(p.maxX, h.maxX);
+    if (h.minZ > p.minZ) out.push({ ...p, maxZ: h.minZ }); if (h.maxZ < p.maxZ) out.push({ ...p, minZ: h.maxZ });
+    const z0 = Math.max(p.minZ, h.minZ), z1 = Math.min(p.maxZ, h.maxZ);
+    if (x0 > p.minX) out.push({ minX: p.minX, maxX: x0, minZ: z0, maxZ: z1 }); if (x1 < p.maxX) out.push({ minX: x1, maxX: p.maxX, minZ: z0, maxZ: z1 });
+    return out;
+  });
+  return parts;
+}
+
 export class GenericInteriorSystem {
   // The catalog is the server's (default plan), so doors and rooms match multiplayer-spaces.js exactly.
-  constructor(scene, { addCollider, removeColliders, mobile = false } = {}) {
-    Object.assign(this, { scene, addCollider, removeColliders, mobile });
-    this.entries = interiorCatalog().map((e) => ({ e, name: buildingName(e), door: new THREE.Vector3(e.door.x, 0, e.door.z) }));
-    this.active = null; this.group = null; this.colliders = []; this.transitionReadyAt = 0; this.kit = { night: [], mobile };
+  // worldColliders: the city's collider list, so an apartment can set its building's solid box aside while
+  // someone is inside it (and put it back on the way out).
+  constructor(scene, { addCollider, removeColliders, worldColliders = null, mobile = false } = {}) {
+    Object.assign(this, { scene, addCollider, removeColliders, worldColliders, mobile });
+    this.entries = interiorCatalog().map((e) => ({ e, name: buildingName(e), door: new THREE.Vector3(e.door.x, 0, e.door.z), apartments: e.template === 'apartments' || e.template === 'lofts' }));
+    this.active = null; this.unit = null; this.group = null; this.colliders = []; this.shelved = []; this.transitionReadyAt = 0; this.kit = { night: [], mobile };
   }
-  get site() { return this.active ? { id: this.active.e.spaceId, name: this.active.name } : null; }
+  get site() { return this.active ? { id: this.unit?.space.id || this.active.e.spaceId, name: this.unit ? `${this.active.name} · ${this.unit.U.title}` : this.active.name } : null; }
+  // The floors a lift offers: the lobby and storeys 2-6, each with its tier, value and size (all open to visit for now).
+  floorMenu() {
+    if (!this.active?.apartments) return null;
+    return { building: this.active.name, current: this.unit?.floor || 1, floors: [{ floor: 1, title: 'Lobby', open: true },
+      ...APARTMENT_FLOORS.map(({ floor }) => { const U = apartmentUnit(this.active.e, floor); return { floor, title: U.title, tier: PROPERTY_TIERS[U.tier].label, value: PROPERTY_TIERS[U.tier].value, area: U.area, open: true }; })] };
+  }
 
-  // { active, transitioned, prompt, name, mobileLabel, spaceId }
+  // { active, transitioned, prompt, name, mobileLabel, spaceId, isolated, transitions?, floorMenu? }
   update(player, input, now = 0) {
     const interact = !!input.interact, tap = this.mobile ? 'TAP' : '[E]';
-    const idle = (prompt = '', mobileLabel = '') => ({ active: !!this.active, transitioned: false, prompt, name: this.active?.name || '', mobileLabel, spaceId: this.active?.e.spaceId || null });
+    const idle = (prompt = '', mobileLabel = '', extra = {}) => ({ active: !!this.active, transitioned: false, prompt, name: this.active?.name || '', mobileLabel, spaceId: this.unit?.space.id || this.active?.e.spaceId || null, isolated: !!this.active && !this.unit, ...extra });
     if (!this.active) {
       if (player.pos.y > 3) return idle();
       let best = null, bestD = DOOR_REACH;
@@ -94,43 +137,82 @@ export class GenericInteriorSystem {
       if (!interact || !interactionCooldownReady(now, this.transitionReadyAt)) return idle(`${best.name.toUpperCase()} · ${tap} ENTER`, 'ENTER');
       return this.#enter(best, player, now);
     }
-    if (insideInteractionRange(player.pos, this.exit, 2.2)) {
+    // the lift: in the lobby, and in each apartment
+    const lift = this.unit ? { x: this.unit.U.lift.x, y: this.unit.U.level, z: this.unit.U.lift.z } : this.active.apartments ? this.space.liftLobby : null;
+    if (lift && Math.hypot(player.pos.x - lift.x, player.pos.z - lift.z) < 1.6 && Math.abs(player.pos.y - lift.y) < 1) {
+      const open = interact && interactionCooldownReady(now, this.transitionReadyAt);
+      return idle(`ELEVATOR · ${tap} CHOOSE FLOOR`, 'ELEVATOR', open ? { floorMenu: this.floorMenu() } : {});
+    }
+    if (!this.unit && insideInteractionRange(player.pos, this.exit, 2.2)) {
       if (!interact || !interactionCooldownReady(now, this.transitionReadyAt)) return idle(`EXIT TO THE STREET · ${tap} EXIT`, 'EXIT');
       return this.#leave(player, now);
     }
     return idle();
   }
+  // Ride the lift: 1 is the lobby, 2-6 the apartments. Returns the same shape as update(), with the space
+  // messages the server needs (leave the current apartment, then enter the next).
+  goToFloor(floor, player, now = 0) {
+    if (!this.active?.apartments || floor === (this.unit?.floor || 1)) return null;
+    const it = this.active, transitions = [];
+    if (this.unit) transitions.push({ spaceId: this.unit.space.id, action: 'exit' });
+    this.#dispose();
+    if (floor === 1) {
+      this.#buildLobby(it); const l = this.space.liftLobby;
+      player.pos.set(l.x, l.y, l.z + 0.6); player.yaw = Math.PI; // facing out of the lift, toward the street door
+    } else {
+      this.#buildUnit(it, floor); transitions.push({ spaceId: this.unit.space.id, action: 'enter' });
+      const sp = this.unit.space.inside, [nx, nz] = NORMALS[it.e.facing];
+      player.pos.set(sp.x, sp.y, sp.z); player.yaw = Math.atan2(-nx, -nz); // facing the street side, the windows and the balcony
+    }
+    player.vel.set(0, 0, 0); player.onGround = true; this.transitionReadyAt = now + TRANSITION_COOLDOWN;
+    return { active: true, transitioned: true, prompt: '', name: it.name, mobileLabel: '', spaceId: this.unit?.space.id || it.e.spaceId, isolated: !this.unit, transitions,
+      subtitle: this.unit ? `FLOOR ${floor} · ${PROPERTY_TIERS[this.unit.U.tier].label.toUpperCase()} · VALUE ${PROPERTY_TIERS[this.unit.U.tier].value.toLocaleString('en-US')} SNERDIE` : 'LOBBY · SAFE ZONE' };
+  }
   // Leave without a door (mode change, respawn): drop the interior.
-  reset() { if (this.active) this.#dispose(); this.active = null; }
-  // The server placed this client in a building (its confirmation, or a reconnect): make sure that interior
-  // is the one built. The server's state sets the position.
+  reset() { this.#dispose(); this.active = null; }
+  // The server placed this client in a building or an apartment (its confirmation, or a reconnect): make sure
+  // that is the one built. The server's state sets the position.
   enterSpace(spaceId) {
-    if (this.active?.e.spaceId === spaceId) return true;
-    const it = this.entries.find((x) => x.e.spaceId === spaceId); if (!it) return false;
-    this.#dispose(); this.active = it; this.layout = interiorLayout(it.e); this.space = interiorSpace(it.e, this.layout);
-    this.group = this.build(it.e, this.layout); this.scene.add(this.group);
-    this.exit = new THREE.Vector3(this.space.exit.x, this.space.exit.y, this.space.exit.z);
+    if ((this.unit?.space.id || this.active?.e.spaceId) === spaceId) return true;
+    const m = /^(.*)-f(\d)$/.exec(spaceId), base = m && this.entries.some((x) => x.e.spaceId === m[1]) ? m[1] : spaceId;
+    const it = this.entries.find((x) => x.e.spaceId === base); if (!it) return false;
+    this.#dispose(); this.active = it;
+    if (m && base !== spaceId) this.#buildUnit(it, Number(m[2])); else this.#buildLobby(it);
     return true;
   }
+  get inApartment() { return !!this.unit; }
 
-  #enter(it, player, now) {
-    this.#dispose(); this.active = it;
-    this.layout = interiorLayout(it.e); this.space = interiorSpace(it.e, this.layout);
+  #buildLobby(it) {
+    this.layout = interiorLayout(it.e); this.space = { ...interiorSpace(it.e, this.layout), liftLobby: { x: this.layout.doorX, y: this.layout.y, z: this.layout.minZ + LOBBY_LIFT_Z } };
     this.group = this.build(it.e, this.layout); this.scene.add(this.group);
-    const s = this.space; this.exit = new THREE.Vector3(s.exit.x, s.exit.y, s.exit.z);
+    this.exit = new THREE.Vector3(this.space.exit.x, this.space.exit.y, this.space.exit.z);
+  }
+  #buildUnit(it, floor) {
+    const U = apartmentUnit(it.e, floor);
+    this.unit = { floor, U, space: apartmentUnitSpace(it.e, floor, U) };
+    // the building's own solid box would hold everyone out of it: set it aside while inside
+    if (this.worldColliders && this.removeColliders) { this.shelved = this.worldColliders.filter((c) => c.cityChunk === it.e.buildingId && !c.entrySteps && !c.vehicle); this.removeColliders(this.shelved); }
+    this.group = this.buildUnit(it.e, U); this.scene.add(this.group);
+  }
+  #enter(it, player, now) {
+    this.#dispose(); this.active = it; this.#buildLobby(it);
+    const s = this.space;
     player.pos.set(s.inside.x, s.inside.y, s.inside.z); player.vel.set(0, 0, 0); player.onGround = true; player.yaw = 0; // facing into the room (south)
     this.transitionReadyAt = now + TRANSITION_COOLDOWN;
-    return { active: true, transitioned: true, prompt: '', name: it.name, mobileLabel: '', spaceId: it.e.spaceId, subtitle: `${residentialPlaque(it.e).line.toUpperCase()} · SAFE ZONE` };
+    return { active: true, transitioned: true, prompt: '', name: it.name, mobileLabel: '', spaceId: it.e.spaceId, isolated: true, transitions: [{ spaceId: it.e.spaceId, action: 'enter' }],
+      subtitle: it.apartments ? 'LOBBY · TAKE THE ELEVATOR TO THE APARTMENTS · SAFE ZONE' : `${residentialPlaque(it.e).line.toUpperCase()} · SAFE ZONE` };
   }
   #leave(player, now) {
     const it = this.active, s = this.space, [nx, nz] = NORMALS[it.e.facing] || NORMALS.east;
     this.#dispose(); this.active = null;
     player.pos.set(s.outside.x, 0, s.outside.z); player.vel.set(0, 0, 0); player.onGround = true; player.yaw = Math.atan2(-nx, -nz); // facing away from the door
     this.transitionReadyAt = now + TRANSITION_COOLDOWN;
-    return { active: false, transitioned: true, prompt: '', name: it.name, mobileLabel: '', spaceId: it.e.spaceId };
+    return { active: false, transitioned: true, prompt: '', name: it.name, mobileLabel: '', spaceId: it.e.spaceId, isolated: false, transitions: [{ spaceId: it.e.spaceId, action: 'exit' }] };
   }
   #dispose() {
     if (this.colliders.length) { this.removeColliders?.(this.colliders); this.colliders = []; }
+    if (this.shelved.length && this.worldColliders) { this.worldColliders.push(...this.shelved); this.shelved = []; }
+    this.unit = null;
     if (!this.group) return;
     this.scene.remove(this.group);
     this.group.traverse((o) => { o.geometry?.dispose?.(); const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : []; for (const m of mats) { m.map?.dispose?.(); m.dispose?.(); } });
@@ -140,11 +222,7 @@ export class GenericInteriorSystem {
   // The interior's meshes, lights and (through addCollider) colliders. Public so the tests can measure it.
   build(e, L) {
     const g = new THREE.Group(); g.name = `interior-${e.spaceId}`;
-    const y = L.y, H = L.height, b = new KitBatch(), [cFloor, cWall, cTrim, cAccent, cFabric, cWood, cMetal, cGlow] = PALETTES[L.palette] || PALETTES.oak;
-    const std = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: o.r ?? 0.75, metalness: o.metal ?? 0, emissive: o.e ?? 0x000000, emissiveIntensity: o.ei ?? 0 });
-    const M = { floor: std(0xffffff, { r: 0.5 }), ceiling: std(0xf4f1ea, { r: 0.95 }), p1: std(0xd8432f, { r: 0.6 }), p2: std(0xf2c14e, { r: 0.6 }), p3: std(0x2f6b9a, { r: 0.6 }), p4: std(0x3f8f55, { r: 0.6 }), wall: std(cWall, { r: 0.9 }), trim: std(cTrim), accent: std(cAccent, { r: 0.6 }), fabric: std(cFabric, { r: 0.95 }), wood: std(cWood, { r: 0.6 }),
-      metal: std(cMetal, { r: 0.4, metal: 0.6 }), glow: std(0x222222, { e: cGlow, ei: 1.2 }), white: std(0xf2f0ea, { r: 0.35 }), dark: std(0x141418, { r: 0.5 }), leaf: std(0x3b6b44, { r: 0.9 }), screen: std(0x0a0c12, { e: 0x3355aa, ei: 0.35 }) };
-    M.floor.map = floorTexture(FLOOR_KIND[L.palette] || 'wood', cFloor); M.floor.map.repeat.set((L.maxX - L.minX) / 4, (L.maxZ - L.minZ) / 4);
+    const y = L.y, H = L.height, b = new KitBatch(), { M, colors: [cFloor, cWall, cTrim, cAccent, cFabric, cWood, cMetal, cGlow] } = makeMaterials(L.palette, L.maxX - L.minX, L.maxZ - L.minZ);
     const bx = (mat, x0, x1, y0, y1, z0, z1) => b.box(mat, (x0 + x1) / 2, y + (y0 + y1) / 2, (z0 + z1) / 2, x1 - x0, y1 - y0, z1 - z0);
     const box = (x0, x1, y0, y1, z0, z1, extra = {}) => { const c = this.addCollider?.(x0, z0, x1, z1, y + y0, y + y1, { interior: e.spaceId, ...extra }); if (c) this.colliders.push(c); };
     const cx = (L.minX + L.maxX) / 2, cz = (L.minZ + L.maxZ) / 2, w = L.maxX - L.minX, d = L.maxZ - L.minZ, t = WALL;
@@ -163,7 +241,7 @@ export class GenericInteriorSystem {
     bx(M.dark, d0, d1, 0, 2.4, L.maxZ - 0.02, L.maxZ);
     // windows: glowing panes along the side walls (daylight in, without a view of the sky)
     const step = this.mobile ? 6 : 4;
-    for (let z = L.minZ + 2.5; z < L.maxZ - 2; z += step) for (const x of [L.minX + 0.02, L.maxX - 0.02]) bx(M.glow, x - 0.02, x + 0.02, Math.min(1.1, H - 2), Math.min(H - 0.5, 2.6), z - 0.8, z + 0.8);
+    for (let z = L.minZ + 2.5; z < L.maxZ - 2; z += step) for (const x of [L.minX + 0.02, L.maxX - 0.02]) bx(M.pane, x - 0.02, x + 0.02, Math.min(1.1, H - 2), Math.min(H - 0.5, 2.6), z - 0.8, z + 0.8);
     // partitions with doorways
     for (const p of L.partitions) {
       const cuts = [...p.gaps].sort((a, c) => a[0] - c[0]); let from = p.from;
@@ -195,7 +273,7 @@ export class GenericInteriorSystem {
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#f2d28b'; ctx.font = '700 64px Barlow, sans-serif'; ctx.fillText(P.title.toUpperCase(), cw / 2, ch * 0.3, cw * 0.9);
       ctx.fillStyle = '#e7e0f4'; ctx.font = '500 34px Barlow, sans-serif'; ctx.fillText(P.line, cw / 2, ch * 0.58, cw * 0.92);
       ctx.fillStyle = '#b7a9db'; ctx.font = '400 32px Barlow, sans-serif'; ctx.fillText(P.address, cw / 2, ch * 0.8, cw * 0.9);
-    }, { w: 1024, h: 260, preview: 0x100e14, day: 1, night: 1 });
+    }, { w: 1024, h: 260, preview: 0x100e14, day: 0.8, night: 0.8 });
     // the feature wall: a business's name (or the hall's, or the building directory in a lobby)
     const isHome = e.template === 'house', isLobby = e.template === 'apartments' || e.template === 'lofts';
     if (!isHome) {
@@ -204,16 +282,112 @@ export class GenericInteriorSystem {
         ctx.fillStyle = '#0d0b12'; ctx.fillRect(0, 0, cw, ch); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.shadowColor = `#${cGlow.toString(16).padStart(6, '0')}`; ctx.shadowBlur = 30; ctx.fillStyle = '#f2d28b'; ctx.font = '700 150px Barlow, sans-serif'; ctx.fillText(title, cw / 2, ch * 0.42, cw * 0.92);
         ctx.shadowBlur = 0; ctx.fillStyle = '#e7e0f4'; ctx.font = '500 52px Barlow, sans-serif'; ctx.fillText(line, cw / 2, ch * 0.8, cw * 0.9);
-      }, { w: 1600, h: 320, preview: 0x0d0b12, day: 1.2, night: 1.2 });
-      const fw = Math.min(w - 2, isLobby ? 6 : 9), fh = fw * 0.2, fz = isLobby ? cz + (L.maxZ - cz) * 0.25 - 0.1 : L.minZ + 0.05; // a lobby's sign is over the doorway into the apartment
-      const fm = new THREE.Mesh(new THREE.PlaneGeometry(fw, fh), feature); fm.position.set(cx, y + Math.min(H - 0.4 - fh / 2, isLobby ? 2.9 : H * 0.62), isLobby ? L.partitions[0].at + 0.1 : fz); fm.name = `${e.spaceId}-feature`; g.add(fm);
+      }, { w: 1600, h: 320, preview: 0x0d0b12, day: 0.7, night: 0.7 });
+      const fw = Math.min(w - 2, isLobby ? 6 : 9), fh = fw * 0.2, fz = L.minZ + 0.05; // a lobby's sign is above the lifts
+      const fm = new THREE.Mesh(new THREE.PlaneGeometry(fw, fh), feature); fm.position.set(cx, y + Math.min(H - 0.4 - fh / 2, isLobby ? 3.05 : H * 0.62), fz); fm.name = `${e.spaceId}-feature`; g.add(fm);
     }
     const plaque = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.61), sign); plaque.position.set(d1 + 1.8, y + 1.75, L.maxZ - 0.04); plaque.rotation.y = Math.PI; plaque.name = `${e.spaceId}-plaque`; g.add(plaque);
-    const lights = this.mobile ? [[cx, H - 0.6, cz, 0xfff0d8, 70, Math.max(w, d) * 1.3]] : [[cx, H - 0.6, cz + d / 4, 0xfff0d8, 60, Math.max(w, d) * 1.2], [cx, H - 0.6, cz - d / 4, 0xfff0d8, 50, Math.max(w, d) * 1.2]];
-    for (const [lx, ly, lz, c, i, r] of lights) { const light = new THREE.PointLight(c, i * (L.palette === 'lounge' ? 1.6 : 1.25), r, 2); light.position.set(lx, y + ly, lz); g.add(light); }
+    // lights hang no higher than 4.2 m (tall halls get pendants), and reach the whole room
+    const ly = Math.min(H * 0.62, 4.2), reach = Math.hypot(w, d); // well below the ceiling: no scorched spot overhead
+    const lights = this.mobile ? [[cx, ly, cz, 0xfff0d8, 70, reach]] : [[cx, ly, cz + d / 4, 0xfff0d8, 60, reach], [cx, ly, cz - d / 4, 0xfff0d8, 50, reach]];
+    const scale = LIGHT_SCALE[e.template] ?? 1;
+    // mostly soft, even fill (no hot spots on walls as you walk past); the point lights only add shape
+    for (const [lx, ly, lz, c, i, r] of lights) { const light = new THREE.PointLight(c, i * POINT_SHARE * scale, r, 2); light.position.set(lx, y + ly, lz); g.add(light); }
     // a soft fill so no corner goes black (interiors are lit only by their own lights)
-    const fill = new THREE.HemisphereLight(0xfff4e6, 0x3a3026, L.palette === 'lounge' ? 0.55 : 0.7); fill.position.set(cx, y + H, cz); g.add(fill);
+    const fill = new THREE.HemisphereLight(0xfff4e6, 0x4a4036, FILL * Math.sqrt(scale)); fill.position.set(cx, y + H, cz); g.add(fill);
     g.traverse((o) => o.layers.set(1));
+    return g;
+  }
+
+  // An apartment at its real height inside its building (render layer 0: the city is outside its windows).
+  // Walls fill the space between the rooms and the facade, with holes exactly where the facade's windows and
+  // balcony doors are; the balcony and, for the penthouse, the stairs and the roof terrace are walkable.
+  buildUnit(e, U) {
+    const g = new THREE.Group(); g.name = `apartment-${e.spaceId}-f${U.floor}`;
+    const y = U.level, H = U.height, b = new KitBatch(), I = U.inner, Bd = U.building;
+    const palette = U.tier === 'penthouse' ? 'penthouse' : U.tier === 'luxury' ? 'luxury' : (interiorLayout(e).palette);
+    const { M, colors } = makeMaterials(palette, I.maxX - I.minX, I.maxZ - I.minZ);
+    const glass = new THREE.MeshStandardMaterial({ color: 0xbfd3ea, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.14, depthWrite: false });
+    const bx = (mat, x0, x1, y0, y1, z0, z1) => b.box(mat, (x0 + x1) / 2, y + (y0 + y1) / 2, (z0 + z1) / 2, x1 - x0, y1 - y0, z1 - z0);
+    const box = (x0, x1, y0, y1, z0, z1, extra = {}) => { const c = this.addCollider?.(x0, z0, x1, z1, y + y0, y + y1, { interior: e.spaceId, ...extra }); if (c) this.colliders.push(c); };
+    // floor and ceiling (the penthouse's ceiling is open above its stairs)
+    bx(M.floor, I.minX, I.maxX, -0.16, 0, I.minZ, I.maxZ); box(Bd.minX, Bd.maxX, -0.25, 0, Bd.minZ, Bd.maxZ, { step: true });
+    const holes = U.stairs ? [U.stairs.opening] : [];
+    for (const r of subtractRect({ minX: Bd.minX, maxX: Bd.maxX, minZ: Bd.minZ, maxZ: Bd.maxZ }, holes)) bx(M.ceiling, r.minX, r.maxX, H, H + 0.12, r.minZ, r.maxZ);
+    // the outer walls, from the rooms to the facade, with the facade's openings cut through
+    for (const side of ['north', 'south', 'east', 'west']) {
+      const ns = NORMALS[side], alongX = !ns[0], ops = U.openings.filter((o) => o.side === side).sort((a, c) => (alongX ? a.x - c.x : a.z - c.z));
+      const w0 = ns[0] > 0 ? I.maxX : ns[0] < 0 ? Bd.minX : null, w1 = ns[0] > 0 ? Bd.maxX : ns[0] < 0 ? I.minX : null, d0 = ns[1] > 0 ? I.maxZ : ns[1] < 0 ? Bd.minZ : null, d1 = ns[1] > 0 ? Bd.maxZ : ns[1] < 0 ? I.minZ : null;
+      const piece = (a0, a1, y0, y1, solid, mat = M.wall) => {
+        if (a1 - a0 < 0.01 || y1 - y0 < 0.01) return;
+        if (alongX) { bx(mat, a0, a1, y0, y1, d0, d1); if (solid) box(a0, a1, y0, y1, d0, d1); } else { bx(mat, w0, w1, y0, y1, a0, a1); if (solid) box(w0, w1, y0, y1, a0, a1); }
+      };
+      const start = alongX ? Bd.minX : Bd.minZ, end = alongX ? Bd.maxX : Bd.maxZ; let at = start;
+      for (const o of ops) {
+        const c = alongX ? o.x : o.z, a0 = c - o.width / 2, a1 = c + o.width / 2;
+        piece(at, a0, 0, H, true);
+        piece(a0, a1, 0, o.sill, true, M.accent); piece(a0, a1, o.head, H, false);
+        if (!o.door) piece(a0, a1, o.sill, o.head, true, glass); // a window's pane (a balcony doorway stays open: the facade draws its door)
+        at = a1;
+      }
+      piece(at, end, 0, H, true);
+      // a dado rail inside, like the other rooms
+      if (alongX) bx(M.trim, Bd.minX, Bd.maxX, 0.96, 1.02, ns[1] > 0 ? d0 - 0.02 : d1, ns[1] > 0 ? d0 : d1 + 0.02); else bx(M.trim, ns[0] > 0 ? w0 - 0.02 : w1, ns[0] > 0 ? w0 : w1 + 0.02, 0.96, 1.02, Bd.minZ, Bd.maxZ);
+    }
+    // rooms: walls with doorways
+    for (const r of U.runs) {
+      const alongX = r.maxX - r.minX >= r.maxZ - r.minZ, cuts = r.gaps.map((gp) => [alongX ? gp.x : gp.z, gp.half]).sort((a, c) => a[0] - c[0]);
+      let at = alongX ? r.minX : r.minZ; const end = alongX ? r.maxX : r.maxZ;
+      const seg = (a0, a1) => { if (a1 - a0 < 0.05) return; if (alongX) { bx(M.wall, a0, a1, 0, H, r.minZ, r.maxZ); box(a0, a1, 0, H, r.minZ, r.maxZ); } else { bx(M.wall, r.minX, r.maxX, 0, H, a0, a1); box(r.minX, r.maxX, 0, H, a0, a1); } };
+      for (const [c, half] of cuts) { seg(at, c - half); if (alongX) bx(M.wall, c - half, c + half, 2.2, H, r.minZ, r.maxZ); else bx(M.wall, r.minX, r.maxX, 2.2, H, c - half, c + half); at = c + half; }
+      seg(at, end);
+    }
+    const draw = (o, oy = 0) => {
+      const x0 = o.x - o.w / 2, x1 = o.x + o.w / 2, z0 = o.z - o.d / 2, z1 = o.z + o.d / 2;
+      this.#piece({ ...o, y: oy }, { bx, b, M, y, x0, x1, z0, z1, h: o.h, oy, L_PAL: palette });
+      if (o.collide) box(x0, x1, oy, oy + Math.max(o.h, 0.05), z0, z1, { furniture: o.type });
+    };
+    for (const o of U.furniture) draw(o);
+    // the balcony: its floor and rails (the facade draws the slab and the glass)
+    if (U.balcony) {
+      const B = U.balcony, [fx, fz] = NORMALS[B.front];
+      box(B.minX, B.maxX, -0.25, 0, B.minZ, B.maxZ, { step: true });
+      if (fx) { const xo = fx > 0 ? B.maxX : B.minX; box(Math.min(xo, xo - fx * 0.08), Math.max(xo, xo - fx * 0.08), 0, 1.1, B.minZ, B.maxZ); box(B.minX, B.maxX, 0, 1.1, B.minZ - 0.08, B.minZ); box(B.minX, B.maxX, 0, 1.1, B.maxZ, B.maxZ + 0.08); }
+      else { const zo = fz > 0 ? B.maxZ : B.minZ; box(B.minX, B.maxX, 0, 1.1, Math.min(zo, zo - fz * 0.08), Math.max(zo, zo - fz * 0.08)); box(B.minX - 0.08, B.minX, 0, 1.1, B.minZ, B.maxZ); box(B.maxX, B.maxX + 0.08, 0, 1.1, B.minZ, B.maxZ); }
+      // a pair of chairs and a little table to sit out with the street below
+      const cxB = (B.minX + B.maxX) / 2, czB = (B.minZ + B.maxZ) / 2;
+      draw({ type: 'table', x: cxB, z: czB, w: 0.6, d: 0.6, h: 0.72, collide: true }); draw({ type: 'nightstand', x: cxB + (fx ? 0 : 0.7), z: czB + (fx ? 0.7 : 0), w: 0.45, d: 0.45, h: 0.45, collide: false });
+    }
+    // the penthouse: stairs up through the ceiling, and the roof terrace behind the parapet
+    if (U.stairs) {
+      for (const st of U.stairs.steps) { bx(M.wood, st.minX, st.maxX, st.top - y - 0.2, st.top - y, st.minZ, st.maxZ); box(st.minX, st.maxX, -0.1, st.top - y, st.minZ, st.maxZ, { step: true }); }
+    }
+    if (U.roof) {
+      const R = U.roof, ry = R.y - y, inset = 0.35;
+      for (const r of subtractRect(R.rect, [U.stairs.opening])) box(r.minX, r.maxX, ry - 0.2, ry, r.minZ, r.maxZ, { step: true });
+      for (const [x0, x1, z0, z1] of [[R.rect.minX, R.rect.maxX, R.rect.minZ, R.rect.minZ + inset], [R.rect.minX, R.rect.maxX, R.rect.maxZ - inset, R.rect.maxZ], [R.rect.minX, R.rect.minX + inset, R.rect.minZ, R.rect.maxZ], [R.rect.maxX - inset, R.rect.maxX, R.rect.minZ, R.rect.maxZ]]) box(x0, x1, ry, ry + 1.15, z0, z1); // the parapet (kept high enough that nobody falls)
+      bx(M.floor, R.rect.minX + inset, R.rect.maxX - inset, ry, ry + 0.03, R.rect.minZ + inset, R.rect.maxZ - inset); // a deck over the roof
+      for (const o of R.furniture) draw(o, ry + 0.03);
+      for (const [x, z] of [[R.rect.minX + 0.6, R.rect.minZ + 0.6], [R.rect.maxX - 0.6, R.rect.minZ + 0.6], [R.rect.minX + 0.6, R.rect.maxZ - 0.6], [R.rect.maxX - 0.6, R.rect.maxZ - 0.6]]) { bx(M.metal, x - 0.04, x + 0.04, ry, ry + 2.2, z - 0.04, z + 0.04); bx(M.glow, x - 0.12, x + 0.12, ry + 2.2, ry + 2.36, z - 0.12, z + 0.12); } // terrace lanterns
+    }
+    // ceiling lights and a plaque by the lift
+    const cx = (I.minX + I.maxX) / 2, cz = (I.minZ + I.maxZ) / 2;
+    for (let lx = I.minX + 2.2; lx < I.maxX - 1; lx += 4.2) for (let lz = I.minZ + 2.2; lz < I.maxZ - 1; lz += 4.2) bx(M.glow, lx - 0.4, lx + 0.4, H - 0.04, H - 0.005, lz - 0.4, lz + 0.4);
+    b.build(g, `${e.spaceId}-f${U.floor}`, { castShadow: false });
+    const tier = PROPERTY_TIERS[U.tier], sign = signMaterial(this.kit, (ctx, cw, ch) => {
+      ctx.fillStyle = '#100e14'; ctx.fillRect(0, 0, cw, ch); ctx.strokeStyle = '#c19a49'; ctx.lineWidth = 8; ctx.strokeRect(8, 8, cw - 16, ch - 16); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#f2d28b'; ctx.font = '700 60px Barlow, sans-serif'; ctx.fillText(`FLOOR ${U.floor} · ${U.title.toUpperCase()}`, cw / 2, ch * 0.32, cw * 0.92);
+      ctx.fillStyle = '#e7e0f4'; ctx.font = '500 34px Barlow, sans-serif'; ctx.fillText(`Value ${tier.value.toLocaleString('en-US')} sNERDIE · about ${U.area} m²`, cw / 2, ch * 0.6, cw * 0.9);
+      ctx.fillStyle = '#b7a9db'; ctx.font = '400 30px Barlow, sans-serif'; ctx.fillText(buildingName(e), cw / 2, ch * 0.82, cw * 0.9);
+    }, { w: 1024, h: 260, preview: 0x100e14, day: 0.8, night: 0.8 });
+    const [nx, nz] = NORMALS[e.facing], plaque = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.48), sign);
+    plaque.position.set(U.lift.x + nx * -0.55 + nz * 1.9, y + 1.75, U.lift.z + nz * -0.55 - nx * 1.9); plaque.rotation.y = Math.atan2(nx, nz); g.add(plaque);
+    // light: one or two warm lights well below the ceiling and a soft fill (the city's sky light comes in too)
+    const ly = H * 0.62, reach = Math.hypot(I.maxX - I.minX, I.maxZ - I.minZ), scale = U.tier === 'penthouse' ? 0.9 : 0.75;
+    const lights = this.mobile ? [[cx, cz, 60]] : [[cx, cz - (I.maxZ - I.minZ) / 4, 50], [cx, cz + (I.maxZ - I.minZ) / 4, 45]];
+    for (const [lx, lz, i] of lights) { const light = new THREE.PointLight(colors[7], i * POINT_SHARE * scale, reach, 2); light.position.set(lx, y + ly, lz); g.add(light); }
+    const fill = new THREE.HemisphereLight(0xfff4e6, 0x4a4036, 0.9); fill.position.set(cx, y + H, cz); g.add(fill);
+    if (U.roof) { const lamp = new THREE.PointLight(0xffd9a0, 25, 16, 2); lamp.position.set(cx, U.roof.y + 2.4, cz); g.add(lamp); }
     return g;
   }
 
