@@ -53,7 +53,7 @@ function floorTexture(kind, color) {
 // Light per room type, calibrated from measured renders (qa/stage2/interiors.html?measure=1) to an even,
 // comfortable level: mean brightness about 0.48 (the lounge a moodier 0.36), nothing crushed or blown out.
 const POINT_SHARE = 0.35, FILL = 2.3;
-const LIGHT_SCALE = Object.freeze({ house: 0.69, apartments: 0.81, lofts: 1.9, grocery: 0.92, wholesale: 2, laundromat: 0.47, sneakers: 2, tailor: 5.6,
+const LIGHT_SCALE = Object.freeze({ house: 0.92, apartments: 1.1, lofts: 3.4, grocery: 0.92, wholesale: 2, laundromat: 0.47, sneakers: 2, tailor: 5.6,
   'music-venue': 5.1, warehouse: 2, 'city-hall': 1.06, 'lecture-hall': 1.24, 'clock-tower': 1.33 });
 // The name on a business's (or hall's, or lobby's) feature wall.
 const FEATURE_LINE = Object.freeze({ grocery: 'GROCERIES · ESSENTIALS · FRESH DAILY', wholesale: 'WHOLESALE SUPPLY · TRADE ONLY', laundromat: 'WASH · DRY · FOLD', sneakers: 'KICKS · RELEASES · CUSTOMS',
@@ -95,6 +95,8 @@ function makeMaterials(palette, w, d) {
 
 // A rectangle minus axis-aligned holes inside it, as up to four rectangles per hole (for ceilings and roofs
 // with a stair opening).
+// Floor pieces overlap by this much: groundAt's strict edges would otherwise leave a seam with no floor.
+const SEAM = 0.02;
 function subtractRect(r, holes) {
   let parts = [r];
   for (const h of holes) parts = parts.flatMap((p) => {
@@ -232,32 +234,72 @@ export class GenericInteriorSystem {
     bx(M.ceiling, L.minX - t, L.maxX + t, H, H + 0.15, L.minZ - t, L.maxZ + t);
     // outer walls, the door gap in the north wall
     // walls: paint above a panelled dado (accent below a trim rail), a skirting board and a crown moulding
-    const wallRun = (x0, x1, z0, z1, solid = true) => { bx(M.wall, x0, x1, 1.0, H, z0, z1); bx(M.accent, x0, x1, 0, 1.0, z0, z1); bx(M.trim, x0 - 0.01, x1 + 0.01, 0.96, 1.04, z0 - 0.02, z1 + 0.02); bx(M.trim, x0 - 0.01, x1 + 0.01, 0, 0.12, z0 - 0.02, z1 + 0.02); bx(M.trim, x0 - 0.01, x1 + 0.01, H - 0.1, H, z0 - 0.03, z1 + 0.03); if (solid) box(x0, x1, 0, H, z0, z1); };
+    const wallRun = (x0, x1, z0, z1, solid = true, y0 = 0, y1 = H) => { bx(M.wall, x0, x1, y0 + 1.0, y1, z0, z1); bx(M.accent, x0, x1, y0, y0 + 1.0, z0, z1); bx(M.trim, x0 - 0.01, x1 + 0.01, y0 + 0.96, y0 + 1.04, z0 - 0.02, z1 + 0.02); bx(M.trim, x0 - 0.01, x1 + 0.01, y0, y0 + 0.12, z0 - 0.02, z1 + 0.02); bx(M.trim, x0 - 0.01, x1 + 0.01, y1 - 0.1, y1, z0 - 0.03, z1 + 0.03); if (solid) box(x0, x1, y0, y1, z0, z1); };
+    const G = L.upper ? L.upper.y - 0.2 : H; // a two-storey interior's ground-floor ceiling (the upper floor's underside)
     const d0 = L.doorX - L.doorWidth / 2, d1 = L.doorX + L.doorWidth / 2;
     wallRun(L.minX - t, L.maxX + t, L.minZ - t, L.minZ); wallRun(L.minX - t, L.minX, L.minZ, L.maxZ); wallRun(L.maxX, L.maxX + t, L.minZ, L.maxZ);
     wallRun(L.minX - t, d0, L.maxZ, L.maxZ + t); wallRun(d1, L.maxX + t, L.maxZ, L.maxZ + t);
-    bx(M.wall, d0, d1, 2.4, H, L.maxZ, L.maxZ + t); box(d0, d1, 0, H, L.maxZ, L.maxZ + t, { door: e.spaceId });
-    bx(M.trim, d0 - 0.12, d0, 0, 2.5, L.maxZ - 0.05, L.maxZ); bx(M.trim, d1, d1 + 0.12, 0, 2.5, L.maxZ - 0.05, L.maxZ); bx(M.trim, d0 - 0.12, d1 + 0.12, 2.4, 2.52, L.maxZ - 0.05, L.maxZ);
-    bx(M.dark, d0, d1, 0, 2.4, L.maxZ - 0.02, L.maxZ);
+    bx(M.wall, d0, d1, 2.8, H, L.maxZ, L.maxZ + t); box(d0, d1, 0, H, L.maxZ, L.maxZ + t, { door: e.spaceId });
+    bx(M.trim, d0 - 0.14, d0, 0, 2.9, L.maxZ - 0.06, L.maxZ); bx(M.trim, d1, d1 + 0.14, 0, 2.9, L.maxZ - 0.06, L.maxZ); bx(M.trim, d0 - 0.14, d1 + 0.14, 2.8, 2.94, L.maxZ - 0.06, L.maxZ); bx(M.trim, d0 - 0.02, d1 + 0.02, 2.36, 2.44, L.maxZ - 0.07, L.maxZ);
+    // the street door, seen from inside: panelled double doors with glass lights, handles, a threshold and a transom
+    for (const [a0, a1] of [[d0, L.doorX - 0.01], [L.doorX + 0.01, d1]]) {
+      bx(M.wood, a0, a1, 0.02, 2.36, L.maxZ - 0.07, L.maxZ - 0.02);
+      bx(M.screen, a0 + 0.14, a1 - 0.14, 1.25, 2.2, L.maxZ - 0.08, L.maxZ - 0.07); bx(M.trim, a0 + 0.12, a1 - 0.12, 0.25, 1.05, L.maxZ - 0.085, L.maxZ - 0.07);
+    }
+    for (const hx of [L.doorX - 0.12, L.doorX + 0.12]) bx(M.metal, hx - 0.02, hx + 0.02, 0.95, 1.2, L.maxZ - 0.12, L.maxZ - 0.07);
+    bx(M.metal, d0, d1, 0, 0.02, L.maxZ - 0.12, L.maxZ); bx(M.pane, d0 + 0.05, d1 - 0.05, 2.45, 2.75, L.maxZ - 0.04, L.maxZ - 0.02);
     // windows: glowing panes along the side walls (daylight in, without a view of the sky)
     const step = this.mobile ? 6 : 4;
-    for (let z = L.minZ + 2.5; z < L.maxZ - 2; z += step) for (const x of [L.minX + 0.02, L.maxX - 0.02]) bx(M.pane, x - 0.02, x + 0.02, Math.min(1.1, H - 2), Math.min(H - 0.5, 2.6), z - 0.8, z + 0.8);
+    for (const base of L.upper ? [0, L.upper.y] : [0]) { const top = L.upper ? (base ? H : G) : H; for (let z = L.minZ + 2.5; z < L.maxZ - 2; z += step) for (const x of [L.minX + 0.02, L.maxX - 0.02]) { bx(M.pane, x - 0.02, x + 0.02, base + Math.min(1.0, top - base - 2), base + Math.min(top - base - 0.5, 2.5), z - 0.75, z + 0.75); bx(M.trim, x - 0.04, x + 0.04, base + Math.min(1.0, top - base - 2) - 0.06, base + Math.min(1.0, top - base - 2), z - 0.85, z + 0.85); } }
     // partitions with doorways
     for (const p of L.partitions) {
-      const cuts = [...p.gaps].sort((a, c) => a[0] - c[0]); let from = p.from;
-      const seg = (a, c) => { if (c - a < 0.05) return; if (p.axis === 'x') wallRun(a, c, p.at - 0.08, p.at + 0.08); else wallRun(p.at - 0.08, p.at + 0.08, a, c); };
-      for (const [c, half] of cuts) { seg(from, c - half); if (p.axis === 'x') bx(M.wall, c - half, c + half, 2.3, H, p.at - 0.08, p.at + 0.08); else bx(M.wall, p.at - 0.08, p.at + 0.08, 2.3, H, c - half, c + half); from = c + half; }
+      const py = p.y || 0, ph = p.h ? py + p.h : G, cuts = [...p.gaps].sort((a, c) => a[0] - c[0]); let from = p.from;
+      const seg = (a, c) => { if (c - a < 0.05) return; if (p.axis === 'x') wallRun(a, c, p.at - 0.08, p.at + 0.08, true, py, ph); else wallRun(p.at - 0.08, p.at + 0.08, a, c, true, py, ph); };
+      for (const [c, half] of cuts) {
+        seg(from, c - half);
+        const along = (a0, a1, y0, y1, out, mat) => (p.axis === 'x' ? bx(mat, a0, a1, py + y0, py + y1, p.at - out, p.at + out) : bx(mat, p.at - out, p.at + out, a0, a1, py + y0, py + y1));
+        along(c - half, c + half, 2.3, ph - py, 0.08, M.wall);                                              // the wall over the doorway
+        along(c - half - 0.1, c - half, 0, 2.4, 0.11, M.trim); along(c + half, c + half + 0.1, 0, 2.4, 0.11, M.trim); along(c - half - 0.1, c + half + 0.1, 2.3, 2.42, 0.11, M.trim); // the casing
+        // a pair of door leaves folded back flat against the wall either side (they never stand in the way)
+        for (const sd of [-1, 1]) { const a0 = sd < 0 ? c - half - 0.12 - half : c + half + 0.12, a1 = a0 + half; if (p.axis === 'x') bx(M.wood, a0, a1, py + 0.02, py + 2.2, p.at + 0.09, p.at + 0.13); else bx(M.wood, p.at + 0.09, p.at + 0.13, py + 0.02, py + 2.2, a0, a1); }
+        from = c + half;
+      }
       seg(from, p.to);
+    }
+    // the upper floor: its slab (open over the stairs), the stairs themselves, and the landing railing
+    if (L.upper) {
+      const U2 = L.upper, full = { minX: L.minX, maxX: L.maxX, minZ: L.minZ, maxZ: L.maxZ };
+      for (const r of subtractRect(full, [U2.opening])) { bx(M.floor, r.minX, r.maxX, U2.y - 0.04, U2.y, r.minZ, r.maxZ); bx(M.ceiling, r.minX, r.maxX, U2.y - 0.22, U2.y - 0.04, r.minZ, r.maxZ); box(r.minX - SEAM, r.maxX + SEAM, U2.y - 0.22, U2.y, r.minZ - SEAM, r.maxZ + SEAM, { step: true }); } // pieces overlap: no gap at a seam
+      const S = L.stairs, st0 = S.steps[0], rise = st0.top, tread = st0.maxZ - st0.minZ, open = st0.maxX; // the open side faces the room
+      for (const st of S.steps) {
+        bx(M.wood, st.minX, st.maxX, st.top - 0.05, st.top, st.minZ - 0.03, st.maxZ);           // tread (a small nosing)
+        bx(M.white, st.minX, st.maxX, st.top - rise, st.top - 0.05, st.maxZ - 0.03, st.maxZ);     // riser
+        box(st.minX, st.maxX, 0, st.top, st.minZ, st.maxZ, { step: true, furniture: 'stairs' });
+        bx(M.trim, open - 0.04, open + 0.04, st.top, st.top + 0.92, (st.minZ + st.maxZ) / 2 - 0.02, (st.minZ + st.maxZ) / 2 + 0.02); // a baluster
+      }
+      const run = S.steps.length * tread, slope = Math.atan2(U2.y, run), zMid = (S.steps[0].maxZ + S.steps.at(-1).minZ) / 2, len = Math.hypot(run, U2.y);
+      b.add(M.wall, new THREE.BoxGeometry(0.12, 0.45, len).rotateX(-slope).translate(open + 0.06, y + U2.y / 2 - 0.3, zMid));   // the stringer
+      b.add(M.wood, new THREE.BoxGeometry(0.08, 0.06, len).rotateX(-slope).translate(open, y + U2.y / 2 + 0.95, zMid));         // the handrail
+      for (const zz of [S.steps[0].maxZ, S.steps.at(-1).minZ]) bx(M.wood, open - 0.07, open + 0.07, zz === S.steps[0].maxZ ? 0 : U2.y - 0.2, (zz === S.steps[0].maxZ ? 0 : U2.y) + 1.05, zz - 0.07, zz + 0.07); // newel posts
+      for (const r of S.rails) {
+        box(r.minX, r.maxX, U2.y, U2.y + 1.05, r.minZ, r.maxZ, { furniture: 'railing' });
+        const alongX = r.maxX - r.minX > r.maxZ - r.minZ;
+        bx(M.wood, r.minX - 0.02, r.maxX + 0.02, U2.y + 0.98, U2.y + 1.05, r.minZ - 0.02, r.maxZ + 0.02);
+        for (let a = (alongX ? r.minX : r.minZ) + 0.1; a < (alongX ? r.maxX : r.maxZ); a += 0.14) alongX ? bx(M.trim, a - 0.015, a + 0.015, U2.y, U2.y + 0.98, r.minZ, r.maxZ) : bx(M.trim, r.minX, r.maxX, U2.y, U2.y + 0.98, a - 0.015, a + 0.015);
+      }
     }
     // furniture
     for (const o of L.furniture) {
       const x0 = o.x - o.w / 2, x1 = o.x + o.w / 2, z0 = o.z - o.d / 2, z1 = o.z + o.d / 2, h = o.h, oy = o.y || 0;
-      this.#piece(o, { bx, b, M, y, x0, x1, z0, z1, h, oy });
+      this.#piece(o, { bx, b, M, y, x0, x1, z0, z1, h, oy, bounds: L });
       if (o.collide) box(x0, x1, oy, oy + Math.max(h, 0.05), z0, z1, o.step ? { step: true, furniture: o.type } : { furniture: o.type });
     }
     // ceiling lights: a panel every few metres
     const lightStep = this.mobile ? 6 : 4.5;
-    for (let lx = L.minX + lightStep / 2; lx < L.maxX; lx += lightStep) for (let lz = L.minZ + lightStep / 2; lz < L.maxZ; lz += lightStep) bx(M.glow, lx - 0.45, lx + 0.45, H - 0.05, H - 0.01, lz - 0.45, lz + 0.45);
+    for (const ceil of L.upper ? [G, H] : [H]) for (let lx = L.minX + lightStep / 2; lx < L.maxX; lx += lightStep) for (let lz = L.minZ + lightStep / 2; lz < L.maxZ; lz += lightStep) {
+      if (L.upper && ceil === G && lx > L.upper.opening.minX - 0.5 && lx < L.upper.opening.maxX + 0.5 && lz > L.upper.opening.minZ - 0.5 && lz < L.upper.opening.maxZ + 0.5) continue;
+      bx(M.glow, lx - 0.45, lx + 0.45, ceil - 0.05, ceil - 0.01, lz - 0.45, lz + 0.45);
+    }
     // framed art along the side walls of homes and lobbies
     if (FLOOR_KIND[L.palette] === 'wood' || L.palette === 'city') {
       const arts = [M.p1, M.p3, M.p4, M.p2];
@@ -289,7 +331,8 @@ export class GenericInteriorSystem {
     const plaque = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.61), sign); plaque.position.set(d1 + 1.8, y + 1.75, L.maxZ - 0.04); plaque.rotation.y = Math.PI; plaque.name = `${e.spaceId}-plaque`; g.add(plaque);
     // lights hang no higher than 4.2 m (tall halls get pendants), and reach the whole room
     const ly = Math.min(H * 0.62, 4.2), reach = Math.hypot(w, d); // well below the ceiling: no scorched spot overhead
-    const lights = this.mobile ? [[cx, ly, cz, 0xfff0d8, 70, reach]] : [[cx, ly, cz + d / 4, 0xfff0d8, 60, reach], [cx, ly, cz - d / 4, 0xfff0d8, 50, reach]];
+    const lights = L.upper ? (this.mobile ? [[cx, G * 0.62, cz, 0xfff0d8, 70, reach]] : [[cx, G * 0.62, cz, 0xfff0d8, 70, reach], [cx, L.upper.y + L.upper.h * 0.62, cz, 0xfff0d8, 60, reach]])
+      : this.mobile ? [[cx, ly, cz, 0xfff0d8, 70, reach]] : [[cx, ly, cz + d / 4, 0xfff0d8, 60, reach], [cx, ly, cz - d / 4, 0xfff0d8, 50, reach]];
     const scale = LIGHT_SCALE[e.template] ?? 1;
     // mostly soft, even fill (no hot spots on walls as you walk past); the point lights only add shape
     for (const [lx, ly, lz, c, i, r] of lights) { const light = new THREE.PointLight(c, i * POINT_SHARE * scale, r, 2); light.position.set(lx, y + ly, lz); g.add(light); }
@@ -344,19 +387,17 @@ export class GenericInteriorSystem {
     }
     const draw = (o, oy = 0) => {
       const x0 = o.x - o.w / 2, x1 = o.x + o.w / 2, z0 = o.z - o.d / 2, z1 = o.z + o.d / 2;
-      this.#piece({ ...o, y: oy }, { bx, b, M, y, x0, x1, z0, z1, h: o.h, oy, L_PAL: palette });
+      this.#piece({ ...o, y: oy }, { bx, b, M, y, x0, x1, z0, z1, h: o.h, oy, bounds: U.inner });
       if (o.collide) box(x0, x1, oy, oy + Math.max(o.h, 0.05), z0, z1, { furniture: o.type });
     };
     for (const o of U.furniture) draw(o);
     // the balcony: its floor and rails (the facade draws the slab and the glass)
     if (U.balcony) {
       const B = U.balcony, [fx, fz] = NORMALS[B.front];
-      box(B.minX, B.maxX, -0.25, 0, B.minZ, B.maxZ, { step: true });
+      box(B.minX - SEAM, B.maxX + SEAM, -0.25, 0, B.minZ - SEAM, B.maxZ + SEAM, { step: true }); // overlapping the room's floor: no seam at the door
       if (fx) { const xo = fx > 0 ? B.maxX : B.minX; box(Math.min(xo, xo - fx * 0.08), Math.max(xo, xo - fx * 0.08), 0, 1.1, B.minZ, B.maxZ); box(B.minX, B.maxX, 0, 1.1, B.minZ - 0.08, B.minZ); box(B.minX, B.maxX, 0, 1.1, B.maxZ, B.maxZ + 0.08); }
       else { const zo = fz > 0 ? B.maxZ : B.minZ; box(B.minX, B.maxX, 0, 1.1, Math.min(zo, zo - fz * 0.08), Math.max(zo, zo - fz * 0.08)); box(B.minX - 0.08, B.minX, 0, 1.1, B.minZ, B.maxZ); box(B.maxX, B.maxX + 0.08, 0, 1.1, B.minZ, B.maxZ); }
-      // a pair of chairs and a little table to sit out with the street below
-      const cxB = (B.minX + B.maxX) / 2, czB = (B.minZ + B.maxZ) / 2;
-      draw({ type: 'table', x: cxB, z: czB, w: 0.6, d: 0.6, h: 0.72, collide: true }); draw({ type: 'nightstand', x: cxB + (fx ? 0 : 0.7), z: czB + (fx ? 0.7 : 0), w: 0.45, d: 0.45, h: 0.45, collide: false });
+      // (kept clear: a balcony is for standing out over the street)
     }
     // the penthouse: stairs up through the ceiling, and the roof terrace behind the parapet
     if (U.stairs) {
@@ -364,7 +405,7 @@ export class GenericInteriorSystem {
     }
     if (U.roof) {
       const R = U.roof, ry = R.y - y, inset = 0.35;
-      for (const r of subtractRect(R.rect, [U.stairs.opening])) box(r.minX, r.maxX, ry - 0.2, ry, r.minZ, r.maxZ, { step: true });
+      for (const r of subtractRect(R.rect, [U.stairs.opening])) box(r.minX - SEAM, r.maxX + SEAM, ry - 0.2, ry, r.minZ - SEAM, r.maxZ + SEAM, { step: true }); // overlapping: no gap at a seam
       for (const [x0, x1, z0, z1] of [[R.rect.minX, R.rect.maxX, R.rect.minZ, R.rect.minZ + inset], [R.rect.minX, R.rect.maxX, R.rect.maxZ - inset, R.rect.maxZ], [R.rect.minX, R.rect.minX + inset, R.rect.minZ, R.rect.maxZ], [R.rect.maxX - inset, R.rect.maxX, R.rect.minZ, R.rect.maxZ]]) box(x0, x1, ry, ry + 1.15, z0, z1); // the parapet (kept high enough that nobody falls)
       bx(M.floor, R.rect.minX + inset, R.rect.maxX - inset, ry, ry + 0.03, R.rect.minZ + inset, R.rect.maxZ - inset); // a deck over the roof
       for (const o of R.furniture) draw(o, ry + 0.03);
@@ -383,7 +424,7 @@ export class GenericInteriorSystem {
     const [nx, nz] = NORMALS[e.facing], plaque = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.48), sign);
     plaque.position.set(U.lift.x + nx * -0.55 + nz * 1.9, y + 1.75, U.lift.z + nz * -0.55 - nx * 1.9); plaque.rotation.y = Math.atan2(nx, nz); g.add(plaque);
     // light: one or two warm lights well below the ceiling and a soft fill (the city's sky light comes in too)
-    const ly = H * 0.62, reach = Math.hypot(I.maxX - I.minX, I.maxZ - I.minZ), scale = U.tier === 'penthouse' ? 0.9 : 0.75;
+    const ly = H * 0.62, reach = Math.hypot(I.maxX - I.minX, I.maxZ - I.minZ), scale = U.tier === 'penthouse' ? 0.62 : 1.0; // measured in the city: lower floors a touch brighter, the pale penthouse softer
     const lights = this.mobile ? [[cx, cz, 60]] : [[cx, cz - (I.maxZ - I.minZ) / 4, 50], [cx, cz + (I.maxZ - I.minZ) / 4, 45]];
     for (const [lx, lz, i] of lights) { const light = new THREE.PointLight(colors[7], i * POINT_SHARE * scale, reach, 2); light.position.set(lx, y + ly, lz); g.add(light); }
     const fill = new THREE.HemisphereLight(0xfff4e6, 0x4a4036, 0.9); fill.position.set(cx, y + H, cz); g.add(fill);
@@ -391,8 +432,112 @@ export class GenericInteriorSystem {
     return g;
   }
 
+  // Furniture with real shape: a piece's back is the side nearer a wall (bounds), its front faces the room.
+  // Returns false for anything drawn the simple way (#piece).
+  #detail(o, { bx, b, M, y, x0, x1, z0, z1, h, oy, bounds }) {
+    const xs = x1 - x0, zs = z1 - z0, alongX = xs >= zs, B = bounds || { minX: -1e9, maxX: 1e9, minZ: -1e9, maxZ: 1e9 };
+    // o.back: which side the piece's back is on ('minX'|'maxX'|'minZ'|'maxZ'); otherwise the side nearer a wall
+    const backMin = o.back ? o.back === 'minX' || o.back === 'minZ' : alongX ? z0 - B.minZ <= B.maxZ - z1 : x0 - B.minX <= B.maxX - x1;
+    const A0 = alongX ? x0 : z0, A1 = alongX ? x1 : z1, len = A1 - A0, D = alongX ? zs : xs;
+    // a box spanning a0..a1 along the piece, d0..d1 measured from its back, y0..y1 up from its base
+    const part = (mat, a0, a1, d0, d1, y0, y1) => {
+      if (alongX) { const za = backMin ? z0 + d0 : z1 - d1, zb = backMin ? z0 + d1 : z1 - d0; bx(mat, a0, a1, oy + y0, oy + y1, za, zb); }
+      else { const xa = backMin ? x0 + d0 : x1 - d1, xb = backMin ? x0 + d1 : x1 - d0; bx(mat, xa, xb, oy + y0, oy + y1, a0, a1); }
+    };
+    const feet = (y1, inset = 0.06, r = 0.03, mat = M.metal) => { for (const a of [A0 + inset, A1 - inset]) for (const dd of [inset, D - inset]) part(mat, a - r, a + r, dd - r, dd + r, 0, y1); };
+    const cyl = (mat, a, dd, y0, hh, r, seg = 18) => { const px = alongX ? a : backMin ? x0 + dd : x1 - dd, pz = alongX ? (backMin ? z0 + dd : z1 - dd) : a; b.cyl(mat, px, y + oy + y0 + hh / 2, pz, r, hh, seg); };
+    switch (o.type) {
+      case 'sofa': case 'armchair': {
+        const arm = o.type === 'armchair' ? 0.16 : 0.2, seat = 0.44, n = o.type === 'armchair' ? 1 : Math.max(2, Math.round((len - 2 * arm) / 0.95)), seg = (len - 2 * arm) / n;
+        feet(0.1); part(M.fabric, A0, A1, 0, D, 0.1, seat - 0.12);
+        for (let i = 0; i < n; i++) { const a = A0 + arm + seg * i; part(M.fabric, a + 0.02, a + seg - 0.02, 0.24, D - 0.03, seat - 0.12, seat + 0.04); part(M.fabric, a + 0.03, a + seg - 0.03, 0.04, 0.26, seat - 0.05, h); }
+        part(M.accent, A0, A1, 0, 0.06, 0.1, h + 0.02);
+        for (const [a0, a1] of [[A0, A0 + arm], [A1 - arm, A1]]) part(M.fabric, a0, a1, 0, D, 0.1, seat + 0.2);
+        return true;
+      }
+      case 'bed': {
+        // long axis along the bed's length; the headboard on the end nearer a wall
+        const lx = o.back ? o.back.endsWith('Z') : zs >= xs, a0 = lx ? x0 : z0, a1 = lx ? x1 : z1, l0 = lx ? z0 : x0, l1 = lx ? z1 : x1, headMin = o.back ? o.back.startsWith('min') : lx ? z0 - B.minZ <= B.maxZ - z1 : x0 - B.minX <= B.maxX - x1;
+        const seg = (mat, w0, w1, d0, d1, y0, y1) => { const p0 = headMin ? l0 + d0 : l1 - d1, p1 = headMin ? l0 + d1 : l1 - d0; lx ? bx(mat, w0, w1, oy + y0, oy + y1, p0, p1) : bx(mat, p0, p1, oy + y0, oy + y1, w0, w1); };
+        const L2 = l1 - l0, W2 = a1 - a0;
+        seg(M.wood, a0, a1, 0.08, L2, 0.12, 0.34); seg(M.accent, a0 - 0.04, a1 + 0.04, 0, 0.08, 0, 1.15); seg(M.wood, a0, a1, L2 - 0.05, L2, 0, 0.42); // frame, headboard, footboard
+        for (const w of [a0 + 0.05, a1 - 0.1]) for (const dd of [0.12, L2 - 0.1]) seg(M.wood, w, w + 0.05, dd - 0.03, dd + 0.03, 0, 0.12);
+        seg(M.white, a0 + 0.04, a1 - 0.04, 0.1, L2 - 0.06, 0.34, h - 0.02);                                       // mattress
+        seg(M.fabric, a0 + 0.02, a1 - 0.02, 0.62, L2 - 0.04, h - 0.04, h + 0.03); seg(M.fabric, a0, a1, L2 - 0.08, L2 - 0.04, 0.3, h); // duvet, its fall at the foot
+        for (const pw of W2 > 1.7 ? [[a0 + 0.12, (a0 + a1) / 2 - 0.06], [(a0 + a1) / 2 + 0.06, a1 - 0.12]] : [[a0 + 0.12, a1 - 0.12]]) seg(M.white, pw[0], pw[1], 0.14, 0.52, h - 0.02, h + 0.14); // pillows
+        return true;
+      }
+      case 'counter': case 'island': {
+        if (o.type === 'counter' && o.h > 0.95) return false; // shop counters stay plain
+        const top = o.h, plinth = 0.1, doors = Math.max(1, Math.round(len / 0.6)), dw = len / doors;
+        part(M.dark, A0 + 0.02, A1 - 0.02, 0.04, D - 0.06, 0, plinth); part(M.wood, A0, A1, 0, D - 0.02, plinth, top - 0.04);
+        for (let i = 0; i < doors; i++) { const a = A0 + dw * i; part(M.wood, a + 0.015, a + dw - 0.015, D - 0.02, D, plinth + 0.02, top - 0.08); part(M.metal, a + dw / 2 - 0.08, a + dw / 2 + 0.08, D, D + 0.02, top - 0.2, top - 0.17); }
+        part(M.white, A0 - 0.02, A1 + 0.02, -0.0, D + (o.type === 'island' ? 0.25 : 0.03), top - 0.04, top);             // stone top (an island's overhangs for stools)
+        if (o.type === 'counter') {
+          const sinkA = A0 + len * 0.3, hob = A0 + len * 0.72;
+          part(M.dark, sinkA - 0.32, sinkA + 0.32, 0.12, D - 0.12, top - 0.02, top + 0.003); part(M.metal, sinkA - 0.02, sinkA + 0.02, 0.06, 0.1, top, top + 0.32);  // basin and tap
+          part(M.dark, hob - 0.3, hob + 0.3, 0.1, D - 0.1, top, top + 0.012); for (const [da, dd] of [[-0.15, 0.22], [0.15, 0.22], [-0.15, D - 0.24], [0.15, D - 0.24]]) part(M.metal, hob + da - 0.08, hob + da + 0.08, dd - 0.08, dd + 0.08, top + 0.012, top + 0.02);
+          part(M.white, A0, A1, 0, 0.02, top, top + 0.6);                                                            // tiled splashback
+          part(M.wood, A0, A1, 0, 0.36, top + 0.62, top + 1.4); for (let i = 0; i < doors; i++) { const a = A0 + dw * i; part(M.wood, a + 0.015, a + dw - 0.015, 0.36, 0.38, top + 0.64, top + 1.38); part(M.metal, a + dw / 2 - 0.06, a + dw / 2 + 0.06, 0.38, 0.4, top + 0.68, top + 0.71); } // wall cupboards
+        } else for (let i = 0; i < Math.max(2, Math.floor(len / 0.7)); i++) { const a = A0 + 0.35 + i * ((len - 0.7) / Math.max(1, Math.max(2, Math.floor(len / 0.7)) - 1)); cyl(M.metal, a, D + 0.42, 0, 0.62, 0.03, 8); cyl(M.fabric, a, D + 0.42, 0.62, 0.06, 0.2, 14); } // stools
+        return true;
+      }
+      case 'fridge': {
+        part(M.metal, A0, A1, 0, D, 0, h); part(M.dark, A0 + 0.01, A1 - 0.01, D, D + 0.005, h * 0.62, h * 0.625);
+        for (const [y0, y1] of [[h * 0.66, h * 0.95], [0.15, h * 0.58]]) part(M.white, A0 + 0.03, A0 + 0.06, D, D + 0.04, y0, y1);
+        return true;
+      }
+      case 'wardrobe': {
+        part(M.wood, A0, A1, 0, D, 0, h); const n = Math.max(2, Math.round(len / 0.55)), dw = len / n;
+        for (let i = 0; i < n; i++) { const a = A0 + dw * i; part(M.wood, a + 0.01, a + dw - 0.01, D, D + 0.02, 0.06, h - 0.06); part(M.metal, a + (i % 2 ? 0.05 : dw - 0.07), a + (i % 2 ? 0.07 : dw - 0.05), D + 0.02, D + 0.04, h * 0.42, h * 0.58); }
+        return true;
+      }
+      case 'toilet': {
+        part(M.white, A0 + 0.05, A1 - 0.05, 0, 0.18, 0.35, 0.78);                                  // cistern
+        cyl(M.white, (A0 + A1) / 2, D * 0.58, 0, 0.36, Math.min(len, D) * 0.34); cyl(M.white, (A0 + A1) / 2, D * 0.58, 0.36, 0.06, Math.min(len, D) * 0.4); // pan and seat
+        return true;
+      }
+      case 'sink': {
+        part(M.wood, A0, A1, 0, D, 0.12, 0.82); part(M.white, A0 - 0.02, A1 + 0.02, 0, D + 0.02, 0.82, 0.86);
+        const n = len > 1.1 ? 2 : 1; for (let i = 0; i < n; i++) { const a = A0 + (len / n) * (i + 0.5); part(M.dark, a - 0.22, a + 0.22, 0.12, D - 0.1, 0.84, 0.865); part(M.metal, a - 0.02, a + 0.02, 0.04, 0.1, 0.86, 1.1); }
+        part(M.screen, A0 + 0.05, A1 - 0.05, -0.02, 0, 1.15, 1.95);                                 // the mirror on the wall
+        return true;
+      }
+      case 'tub': {
+        part(M.white, A0, A1, 0, D, 0, h); part(M.screen, A0 + 0.08, A1 - 0.08, 0.08, D - 0.08, h - 0.06, h - 0.01);
+        part(M.metal, A0 + 0.12, A0 + 0.16, 0.02, 0.06, h, h + 0.3); return true;
+      }
+      case 'lamp': {
+        const cx = (A0 + A1) / 2, dd = D / 2; cyl(M.metal, cx, dd, 0, 0.03, 0.18); cyl(M.metal, cx, dd, 0.03, h - 0.35, 0.02, 8); cyl(M.glow, cx, dd, h - 0.36, 0.34, 0.2, 16); return true;
+      }
+      case 'table': {
+        if (!o.chairs) return false;
+        part(M.wood, A0, A1, 0, D, h - 0.05, h); feet(h - 0.05, 0.08, 0.035, M.wood);
+        // chairs: down both long sides, one at each end
+        const per = Math.max(1, Math.floor((o.chairs - 2) / 2)), chair = (a, dd, faceBack) => { part(M.wood, a - 0.22, a + 0.22, dd - 0.22, dd + 0.22, 0.44, 0.48); feet; part(M.wood, a - 0.22, a + 0.22, faceBack ? dd + 0.18 : dd - 0.22, faceBack ? dd + 0.22 : dd - 0.18, 0.48, 0.95); for (const [la, ld] of [[-0.18, -0.18], [0.18, -0.18], [-0.18, 0.18], [0.18, 0.18]]) part(M.wood, a + la - 0.02, a + la + 0.02, dd + ld - 0.02, dd + ld + 0.02, 0, 0.44); };
+        for (let i = 0; i < per; i++) { const a = A0 + (len / per) * (i + 0.5); chair(a, -0.35, false); chair(a, D + 0.35, true); }
+        return true;
+      }
+      case 'lift': {
+        // a lift landing: a stainless frame, two brushed doors with a centre seam, a lit call button and a floor indicator
+        if (D > 0.6) { part(M.wall, A0, A1, 0, D - 0.07, 0, 3.0); part(M.trim, A0, A1, 0, D - 0.07, 0, 0.1); } // an apartment's lift shaft is a clad core, the doors on its face
+        part(M.trim, A0 - 0.12, A0, 0, D + 0.06, 0, 2.5); part(M.trim, A1, A1 + 0.12, 0, D + 0.06, 0, 2.5); part(M.trim, A0 - 0.12, A1 + 0.12, 0, D + 0.06, 2.38, 2.55);
+        const da0 = (A0 + A1) / 2 - Math.min(0.75, len / 2 - 0.1), da1 = (A0 + A1) / 2 + Math.min(0.75, len / 2 - 0.1); // a 1.5 m pair of doors
+        part(M.dark, da0, da1, D - 0.07, D - 0.04, 0, 2.3);
+        part(M.metal, da0 + 0.02, (da0 + da1) / 2 - 0.005, D - 0.05, D - 0.01, 0.02, 2.28); part(M.metal, (da0 + da1) / 2 + 0.005, da1 - 0.02, D - 0.05, D - 0.01, 0.02, 2.28);
+        part(M.trim, da0 - 0.1, da0, D - 0.07, D + 0.04, 0, 2.38); part(M.trim, da1, da1 + 0.1, D - 0.07, D + 0.04, 0, 2.38); part(M.trim, da0 - 0.1, da1 + 0.1, D - 0.07, D + 0.04, 2.3, 2.42);
+        part(M.glow, (A0 + A1) / 2 - 0.25, (A0 + A1) / 2 + 0.25, D, D + 0.04, 2.62, 2.74);               // the floor indicator
+        part(M.metal, A1 + 0.2, A1 + 0.34, D - 0.02, D + 0.02, 1.0, 1.3); part(M.glow, A1 + 0.24, A1 + 0.3, D + 0.02, D + 0.035, 1.12, 1.18); // call button
+        return true;
+      }
+      default: return false;
+    }
+  }
+
   // One piece of furniture, as a few boxes in the room's palette.
-  #piece(o, { bx, b, M, y, x0, x1, z0, z1, h, oy }) {
+  #piece(o, ctx) {
+    if (this.#detail(o, ctx)) return;
+    const { bx, b, M, y, x0, x1, z0, z1, h, oy } = ctx;
     const xs = x1 - x0, zs = z1 - z0, alongX = xs >= zs, mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
     const back = (thick) => alongX ? [z0, z0 + thick] : [x0, x0 + thick];
     const L_VARIANT = (p) => Math.round((p.x * 13 + p.z * 7) * 10) % 9;

@@ -575,7 +575,7 @@ function midrise(batch, kit, b, parent, { mobile = false } = {}) {
         const balcony = front && homes ? balconyFor(b, k + 1) : null;
         if (balcony && balcony.bays.includes(i)) {
           const lv = balcony.level;
-          for (const sd of [-1, 1]) fbox(batch, m.frame, f, a + sd * 0.68, lv + 1.2, 0.05, 0.1, 2.45, 0.08); fbox(batch, m.frame, f, a, lv + 2.4, 0.05, 1.45, 0.1, 0.08); fplane(batch, m.glass, f, a, lv + 1.18, 0.09, 1.25, 2.3); // the balcony door (a pane residents see out through)
+          for (const sd of [-1, 1]) fbox(batch, m.frame, f, a + sd * 0.85, lv + 1.2, 0.05, 0.1, 2.45, 0.08); fbox(batch, m.frame, f, a, lv + 2.4, 0.05, 1.8, 0.1, 0.08); if (!mobile) fbox(batch, m.frame, f, a, lv + 1.18, 0.06, 0.05, 2.3, 0.06); fplane(batch, m.glass, f, a, lv + 1.18, 0.09, 1.6, 2.3); // a 1.6 m pair of glass doors (phones: no centre mullion) // the balcony door (a pane residents see out through)
           if (i === balcony.bays[0]) {
             const d = balcony.depth, bw = balcony.width;
             fbox(batch, m.concrete, f, balcony.along, lv - 0.09, d / 2, bw, 0.18, d);                                   // slab

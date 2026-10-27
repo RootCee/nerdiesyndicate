@@ -59,25 +59,40 @@ const FALLBACK_NAME = Object.freeze({ apartments: 'Apartments', lofts: 'Lofts', 
 // Each template builds in local metres (x across, z from the back wall at -d/2 to the door wall at +d/2)
 // and returns size, partitions (wall runs with doorway gaps) and furniture. `k` is a stable per-building
 // number so neighbouring copies of a template differ a little (colours, which side the sofa is on).
-const wallX = (z, x0, x1, gaps = []) => ({ axis: 'x', at: z, from: x0, to: x1, gaps });   // a wall along x at z
-const wallZ = (x, z0, z1, gaps = []) => ({ axis: 'z', at: x, from: z0, to: z1, gaps });   // a wall along z at x
+const wallX = (z, x0, x1, gaps = [], lv = {}) => ({ axis: 'x', at: z, from: x0, to: x1, gaps, ...lv });   // a wall along x at z (lv: { y, h } for an upper floor)
+const wallZ = (x, z0, z1, gaps = [], lv = {}) => ({ axis: 'z', at: x, from: z0, to: z1, gaps, ...lv });   // a wall along z at x
+// The game's player is 1.24 m across (PLAYER_COLLISION_RADIUS 0.62): doorways are 1.6 m, stairs 1.8 m, lanes 1.5 m.
+export const DOORWAY = 1.6;
 const f = (type, x, z, w, d, h, extra = {}) => ({ type, x, z, w, d, h, collide: true, ...extra });
 const deco = (type, x, z, w, d, h, extra = {}) => ({ type, x, z, w, d, h, collide: false, ...extra });
 
 const TEMPLATES = {
   // A family house: open living room and kitchen at the front, two bedrooms and a bath at the back.
+  // A family house of two storeys (its exterior shows two): an open living room, dining room and kitchen
+  // downstairs; a broad staircase; upstairs the main bedroom, a second bedroom and a big bathroom off a wide
+  // landing. Doorways are 1.6 m double doors; every lane is wide enough to walk.
   house: (k) => {
-    const w = 15, d = 12, s = k % 2 ? 1 : -1; // s: which side the living room is on
-    return { w, d, h: 3.3, palette: k % 3 === 0 ? 'warm' : k % 3 === 1 ? 'oak' : 'sage', rooms: ['Living room', 'Kitchen', 'Bedroom', 'Bedroom', 'Bath'],
-      partitions: [wallX(0, -w / 2, w / 2, [[-5, 1.1], [-0.3, 0.9], [4.6, 1.1]]), wallZ(-2.2, -d / 2, 0), wallZ(1.6, -d / 2, 0)],
+    const w = 16, d = 13, up = 3.4, upH = 3.1, s = 1, lv = { y: up, h: upH }, half = DOORWAY / 2; // the living room always on the east side, clear of the stairs
+    return { w, d, h: up + upH, palette: k % 3 === 0 ? 'warm' : k % 3 === 1 ? 'oak' : 'sage', rooms: ['Living room', 'Dining room', 'Kitchen', 'Main bedroom', 'Bedroom', 'Bathroom'],
+      // the stairs rise along the west wall from the front of the house toward the back
+      stairs: { x0: -w / 2, x1: -w / 2 + 1.8, zBottom: 2.6, steps: 16, tread: 0.32, rise: up / 16 },
+      upper: { y: up, h: upH },
+      partitions: [
+        // a 2.2 m landing corridor beside the stair railing
+        wallZ(-3.9, 0.8, d / 2, [], lv), wallZ(-3.9, -d / 2, -1.6, [], lv),
+        wallX(0.8, -3.9, w / 2, [[3.6, half]], lv), wallX(-1.6, -3.9, w / 2, [[-1.0, half], [4.9, half]], lv), wallZ(1.8, -d / 2, -1.6, [], lv),
+      ],
       furniture: [
-        // the sofa stands clear of the bedroom doorways in the wall behind it
-        f('sofa', s * -4.2, 2.0, 3, 0.95, 0.85), deco('rug', s * -4.2, 3.5, 3.4, 2.2, 0.01), f('table', s * -4.2, 3.4, 1.2, 0.6, 0.42), f('tv', s * -4.2, 5.6, 2.2, 0.45, 1.25),
-        f('counter', s * 6.95, 3, 0.65, 5, 0.92), f('island', s * 4.6, 3.2, 1.0, 2.2, 0.92), f('table', s * 2.3, 4.6, 1.6, 0.9, 0.76), f('fridge', s * 6.95, 0.75, 0.7, 0.7, 1.9),
-        f('bed', -4.7, -4.1, 1.9, 2.2, 0.6), f('nightstand', -6.1, -5.4, 0.5, 0.45, 0.55), f('wardrobe', -6.95, -1.6, 0.6, 1.8, 2.1),
-        f('tub', -0.3, -5.4, 1.7, 0.8, 0.6), f('sink', 1.1, -1.9, 0.6, 0.45, 0.9), f('toilet', -1.6, -2.6, 0.45, 0.65, 0.45),
-        f('bed', 4.4, -4.1, 1.6, 2.1, 0.55), f('desk', 6.8, -1.4, 0.7, 1.4, 0.76), deco('rug', 4.4, -2.2, 2.2, 1.4, 0.01),
-        f('plant', s * -6.8, 5.4, 0.6, 0.6, 1.3), f('plant', s * 6.9, 5.5, 0.6, 0.6, 1.3),
+        // downstairs: living (front), dining (middle), kitchen (back); the stair foot and the door lane stay open
+        f('sofa', s * 4.2, 1.5, 3.0, 0.95, 0.85), f('table', s * 4.2, 3.3, 1.2, 0.6, 0.42), f('tv', s * 4.2, 6.1, 2.2, 0.4, 1.25), deco('rug', s * 4.2, 3.2, 3.6, 2.6, 0.01),
+        f('table', -1.2, -2.6, 2.0, 1.0, 0.76, { chairs: 6 }), deco('rug', -1.2, -2.6, 3.4, 2.4, 0.01),
+        f('counter', 4.2, -6.15, 6.0, 0.7, 0.92), f('island', 4.2, -3.6, 2.4, 1.0, 0.92), f('fridge', 7.55, -4.4, 0.8, 0.8, 1.95),
+        f('plant', s * 7.3, 6.0, 0.6, 0.6, 1.4), f('lamp', s * 6.6, 1.4, 0.5, 0.5, 1.6),
+        // upstairs
+        f('bed', 2.4, 5.2, 2.0, 2.2, 0.6, { y: up }), f('nightstand', 0.95, 6.05, 0.5, 0.45, 0.55, { y: up }), f('nightstand', 3.85, 6.05, 0.5, 0.45, 0.55, { y: up }),
+        f('wardrobe', 7.6, 3.6, 0.6, 2.0, 2.1, { y: up }), f('armchair', -2.7, 5.6, 0.9, 0.9, 0.9, { y: up }), deco('rug', 2.4, 3.6, 3.2, 2.0, 0.01, { y: up }),
+        f('bed', 5.2, -5.3, 1.6, 2.0, 0.55, { y: up }), f('desk', 7.6, -2.6, 0.6, 1.2, 0.76, { y: up }),
+        f('tub', -1.3, -5.9, 1.8, 0.8, 0.6, { y: up }), f('sink', 1.45, -3.9, 0.6, 1.4, 0.9, { y: up }), f('toilet', -3.45, -4.6, 0.5, 0.7, 0.45, { y: up }),
       ] };
   },
   // An apartment building: a lobby with mailboxes and the lift, and a model apartment behind it.
@@ -142,8 +157,8 @@ function shop(w, d, h, palette, furniture) { return { w, d, h, palette, rooms: [
 // wall. The lift (its floor menu) takes residents and visitors to storeys 2-6 (apartmentUnit).
 export const LOBBY_LIFT_Z = 2.2; // the lift call spot, this far in front of the lobby's back wall
 function apartmentLayout(k, style) {
-  const w = 15, d = 11;
-  return { w, d, h: 3.6, palette: style === 'loft' ? 'loft' : k % 2 ? 'city' : 'oak', rooms: ['Lobby'], partitions: [],
+  const w = 15, d = 11; // a lofty 4.2 m lobby: the building's name sits above the lifts
+  return { w, d, h: 4.2, palette: style === 'loft' ? 'loft' : k % 2 ? 'city' : 'oak', rooms: ['Lobby'], partitions: [],
     furniture: [
       f('lift', -1.6, -d / 2 + 0.2, 1.8, 0.3, 2.4), f('lift', 1.6, -d / 2 + 0.2, 1.8, 0.3, 2.4), deco('rug', 0, -d / 2 + LOBBY_LIFT_Z, 4.4, 1.6, 0.01),
       f('mailboxes', -7.3, -1.2, 0.35, 3.4, 1.7), f('counter', 4.8, 1.4, 2.8, 0.8, 1.05), f('desk', 4.8, 0.6, 0.5, 0.4, 0.76),
@@ -166,38 +181,67 @@ export function apartmentUnit(entry, floor) {
   const P = (a, dd) => ({ x: r2(b.x + ux * a + nx * dd), z: r2(b.z + uz * a + nz * dd) });
   const rect = (a0, a1, d0, d1) => { const p = P(a0, d0), q = P(a1, d1); return { minX: Math.min(p.x, q.x), maxX: Math.max(p.x, q.x), minZ: Math.min(p.z, q.z), maxZ: Math.max(p.z, q.z) }; };
   const box = (type, a, dd, wa, wd, h, extra = {}) => { const c = P(a, dd), along = Math.abs(ux) > 0.5; return { type, x: c.x, z: c.z, w: along ? wa : wd, d: along ? wd : wa, h, collide: extra.collide ?? true, ...extra }; };
-  // the hall runs from the lift (coreD) to the living room (back); doors off it are always in front of the lift.
-  // The penthouse's living room is deeper, but never so deep that the rooms behind it get cramped.
-  const coreD = -Dh + 2.2, back = penthouse ? Math.max(-Dh * 0.25, coreD + 3.1) : 0.4, split = Math.max((-Dh + back) / 2, coreD + 1.3);
-  // walls in local (a = along the facade, d = depth, + toward the street), turned into world runs
+  // Open plans sized for the game's 1.24 m player: a 1.7 m lane from the lift straight to the balcony, 1.8 m
+  // openings into bedrooms, 1.6 m bathroom doors, a living room at least 4.2 m deep, and little furniture.
+  const coreA = 1.3, coreD = -Dh + 2.0, lux = spec.tier !== 'standard';
+  const back = Math.min(-Dh + 4.6, Dh - 4.2), BW = Math.max(DOORWAY, 1.8) / 2, DH = DOORWAY / 2;
+  // world sides for 'back toward' a local direction: -d is the building's back, +a the right-hand wall
+  const sideOf = (da, dd) => { const wx = ux * da + nx * dd, wz = uz * da + nz * dd; return Math.abs(wx) > Math.abs(wz) ? (wx < 0 ? 'minX' : 'maxX') : (wz < 0 ? 'minZ' : 'maxZ'); };
+  const toBack = sideOf(0, -1), toFront = sideOf(0, 1), toRight = sideOf(1, 0), toLeft = sideOf(-1, 0);
   const runs = [];
   const runA = (dd, a0, a1, gaps = []) => runs.push({ dd, a0, a1, gaps, axis: 'a' }); // a wall running along the facade at depth dd
   const runD = (a, d0, d1, gaps = []) => runs.push({ a, d0, d1, gaps, axis: 'd' });  // a wall running front-to-back at a
-  runA(back, -A, -CORE_A); runD(-CORE_A, -Dh, back, [[(coreD + back) / 2, 0.55]]);
-  const luxury = spec.tier !== 'standard';
-  if (luxury) { runA(back, CORE_A, A); runA(split, CORE_A, A); runD(CORE_A, -Dh, back, [[(coreD + split) / 2, 0.5], [(split + back) / 2, 0.5]]); }
-  else { runA(back, CORE_A, A); runD(CORE_A, -Dh, back, [[(coreD + back) / 2, 0.5]]); }
+  const bedL = (-A - coreA) / 2, rightMid = (A + coreA) / 2;
+  runA(back, -A, -coreA, [[bedL, penthouse ? 1.2 : BW]]); runD(-coreA, -Dh, back);                // the bedroom (back left), opened wide
+  const stairA0 = A - 1.8;
+  // the luxury corner bathroom (front right, 3.6 x 3.4) needs a wide building: room left of it, or a lane behind it,
+  // for the second bedroom's doorway; narrower buildings keep the bathroom at the back and one larger bedroom
+  // (the penthouse's stairs are planned first: its bathroom stops short of the stair foot)
+  const stN = Math.ceil((top - level) / 0.28), stRun = stN * 0.28, stTop = -Dh + 0.7, stBottom = stTop + stRun;
+  const bathA0 = A - 3.6, bathD0 = penthouse ? Math.max(Dh - 3.4, stBottom + 0.9 + 0.75) : Dh - 3.4, bed2Door = coreA + 1.9;
+  const frontBath = lux && (penthouse || (A >= 6.4 && (bathD0 - back >= 1.7 || bed2Door + 0.9 <= bathA0 - 0.2)));
+  const twoBeds = lux && !penthouse && frontBath;
+  if (penthouse) { /* back right: an open dressing area beside the stairwell (its wall is added with the stairs) */ }
+  else if (twoBeds) { runA(back, coreA, A, [[bed2Door, BW]]); runD(coreA, -Dh, back); }             // a second bedroom (back right)
+  else { runA(back, coreA, A, [[rightMid, DH]]); runD(coreA, -Dh, back); }                             // the bathroom (back right)
+  // luxury floors: the bathroom is a 3.2 m room in the front-right corner, its door facing the living room
+  const bath = frontBath ? { a0: bathA0, d0: bathD0 } : null; // (the penthouse's too)
+  if (bath) { runD(bath.a0, bath.d0, Dh, [[Dh - 1.1, DH]]); runA(bath.d0, bath.a0, A); } // its door near the front, into the clear part
   const fx = [
-    box('lift', 0, -Dh + 1.1, 2.4, 2.2, 2.4),
-    // living (front): sofa facing the windows' side wall, a table, the TV; the kitchen on the other side
-    box('sofa', -A * 0.45, Dh * 0.35, Math.min(3.2, A * 0.6), 0.95, 0.85), box('table', -A * 0.45, Dh * 0.62, 1.2, 0.6, 0.42), box('rug', -A * 0.45, Dh * 0.55, Math.min(3.6, A * 0.7), 2.2, 0.01, { collide: false }),
-    box('tv', -A + 0.25, Dh * 0.5, 0.4, 2.0, 1.25), box('counter', A - 0.35, back + (Dh - back) * 0.45, 0.65, Math.min(4.2, (Dh - back) * 0.7), 0.92),
-    box('island', A * 0.42, back + (Dh - back) * 0.5, luxury ? 2.2 : 1.6, 0.95, 0.92), box('fridge', A - 0.35, back + 0.55, 0.7, 0.7, 1.9),
-    // the bedroom (back left)
-    box('bed', (-A - CORE_A) / 2, (-Dh + back) / 2 - 0.3, luxury ? 2.0 : 1.7, 2.2, 0.6), box('wardrobe', -A + 0.3, back - 1.1, 0.6, 1.8, 2.1), box('nightstand', (-A - CORE_A) / 2 + 1.4, -Dh + 0.35, 0.5, 0.45, 0.55),
-    box('plant', -A + 0.4, Dh - 0.5, 0.6, 0.6, 1.4),
+    box('lift', 0, -Dh + 1.0, 2.6, 2.0, 2.4, { back: toBack }),
+    // living: a sofa facing the windows (1.75 m clear behind it, so the rooms behind open onto a lane) and a low table
+    box('sofa', -A * 0.5, back + 2.3, Math.min(2.8, A - 2.0), 0.95, 0.85, { back: toBack }), box('table', -A * 0.5, back + 3.55, 1.2, 0.6, 0.42), box('rug', -A * 0.5, back + 3.2, Math.min(3.4, A - 1.6), 2.4, 0.01, { collide: false }),
+    // the bedroom: the bed's head against the back wall, a wardrobe on the side wall
+    // the bedroom: the headboard against the side wall, the wardrobe on the back wall beside it, a clear strip in front
+    box('bed', -A + 1.15, -Dh + 0.3 + (lux ? 1.0 : 0.85), 2.2, lux ? 2.0 : 1.7, 0.6, { back: toLeft }), box('wardrobe', (-A + 2.5 - coreA - 0.15) / 2, -Dh + 0.32, Math.min(1.6, -coreA - 0.15 - (-A + 2.5)), 0.62, 2.1, { back: toBack }),
+    box('plant', -A + 0.45, Dh - 0.55, 0.6, 0.6, 1.4),
   ];
-  if (luxury) fx.push(box('bed', (A + CORE_A) / 2, (-Dh + split) / 2, 1.6, 2.0, 0.55), box('tub', (A + CORE_A) / 2, back - 0.55, 1.7, 0.8, 0.6), box('sink', A - 0.3, split + 0.6, 0.45, 0.6, 0.9), box('toilet', CORE_A + 0.45, split + 0.55, 0.45, 0.65, 0.45));
-  else fx.push(box('tub', (A + CORE_A) / 2, -Dh + 0.5, 1.7, 0.8, 0.6), box('sink', A - 0.3, back - 0.8, 0.45, 0.6, 0.9), box('toilet', CORE_A + 0.5, -Dh + 1.6, 0.45, 0.65, 0.45));
-  // from floor 3 up: a study desk and a dining table
-  if (spec.layout !== 'standard') fx.push(box('desk', -A * 0.4, back + 0.45, 1.4, 0.6, 0.76), box('table', A * 0.42, Dh - 1.1, 1.6, 0.9, 0.76));
-  if (spec.layout === 'luxury-plus' || penthouse) fx.push(box('wardrobe', -CORE_A - 0.35, -Dh + 0.5, 0.6, 0.9, 2.1), box('plant', A - 0.4, Dh - 0.5, 0.6, 0.6, 1.4), box('sofa', -A * 0.45, Dh * 0.08, Math.min(2.4, A * 0.45), 0.9, 0.85));
-  // the penthouse's stairs to the roof: real steps along the left wall, up through an opening in the ceiling
+  // the kitchen: along the right-hand wall (the left on luxury floors, whose front-right is the bathroom)
+  const kA = bath || penthouse ? -A + 0.36 : A - 0.36, kSide = bath || penthouse ? toLeft : toRight, kLen = Math.min(3.8, Dh - back - 1.0);
+  if (bath || penthouse) { fx[1] = box('sofa', A * 0.12 + 0.9, back + 2.3, Math.min(2.6, A - 3.4), 0.95, 0.85, { back: toBack }); fx[2] = box('table', A * 0.12 + 0.9, back + 3.55, 1.1, 0.6, 0.42); fx[3] = box('rug', A * 0.12 + 0.9, back + 3.2, 3.0, 2.2, 0.01, { collide: false }); }
+  fx.push(box('counter', kA, back + 0.45 + kLen / 2, 0.66, kLen, 0.92, { back: kSide }), box('fridge', kA, Math.min(Dh - 0.5, back + 0.85 + kLen), 0.7, 0.75, 1.95, { back: kSide }));
+  if (bath) {
+    if (penthouse) fx.push(box('wardrobe', (coreA + stairA0) / 2, -Dh + 0.32, Math.min(1.8, stairA0 - coreA - 0.3), 0.62, 2.1, { back: toBack })); // the dressing area
+    else fx.push(box('bed', A - 1.1, -Dh + 1.1, 2.0, 1.6, 0.55, { back: toRight }));
+    // the corner bathroom: the tub along the side wall, the vanity and the toilet side by side on its back wall; the front stays clear
+    fx.push(box('tub', A - 0.45, bath.d0 + 1.25, 0.8, 1.8, 0.6, { back: toRight }), box('sink', bath.a0 + 1.0, bath.d0 + 0.39, 1.1, 0.62, 0.9, { back: toBack }), box('toilet', bath.a0 + 2.15, bath.d0 + 0.42, 0.5, 0.7, 0.45, { back: toBack }));
+  } else {
+    fx.push(box('tub', rightMid, -Dh + 0.45, 1.8, 0.8, 0.6, { back: toBack }), box('sink', A - 0.33, -Dh + 2.3, 0.62, 1.2, 0.9, { back: toRight }), box('toilet', coreA + 0.4, -Dh + 2.6, 0.5, 0.7, 0.45, { back: toLeft }));
+  }
+  // from floor 3: a dining table near the windows; from floor 5: an island and an armchair
+  if (spec.layout !== 'standard') fx.push(box('table', bath || penthouse ? -A * 0.45 : A * 0.42, Dh - 1.9, 1.7, 0.9, 0.76, { chairs: 4 }));
+  // from floor 5, an island, where the building is wide enough to keep the bedroom doorway clear
+  // (it stands at least 1.75 m in front of the bedroom wall, so the bedroom doorway behind it stays open)
+  const islandLen = Math.min(2.0, Dh - back - 2.7);
+  if ((spec.layout === 'luxury-plus' || penthouse) && A >= 6.4 && islandLen >= 1.4) fx.push(box('island', bath || penthouse ? -A + 2.3 : A - 2.3, back + 1.75 + islandLen / 2, 0.95, islandLen, 0.92, { back: bath || penthouse ? toRight : toLeft }));
+  // the penthouse's stairs to the roof: an enclosed stairwell along the right wall, rising toward the back
   let stairs = null, roof = null;
   if (penthouse) {
-    const n = Math.ceil((top - level) / 0.2), rise = (top - level) / n, tread = 0.28, run = n * tread, d0 = Math.min(Dh - 0.3 - run, back + 0.6);
-    stairs = { steps: Array.from({ length: n }, (_, i) => ({ ...rect(-A, -A + 1.15, d0 + i * tread, d0 + (i + 1) * tread), top: r2(level + rise * (i + 1)) })), opening: rect(-A, -A + 1.2, d0 + run - 3.2, d0 + run + 0.2) };
-    roof = { y: top, rect: rect(-A - 0.3, A + 0.3, -Dh - 0.3, Dh + 0.3), furniture: [box('lounger', A * 0.3, Dh * 0.5, 0.8, 2.0, 0.4), box('lounger', A * 0.6, Dh * 0.5, 0.8, 2.0, 0.4), box('tub', A * 0.45, -Dh * 0.4, 2.2, 2.2, 0.8), box('plant', A - 0.5, -Dh + 0.5, 0.8, 0.8, 1.6), box('plant', A - 0.5, Dh - 0.5, 0.8, 0.8, 1.6), box('table', -A * 0.2, Dh * 0.4, 1.2, 1.2, 0.74), box('rug', -A * 0.2, Dh * 0.4, 3, 3, 0.01, { collide: false })].map((o) => ({ ...o, y: 0 })) };
+    const n = stN, rise = (top - level) / n, tread = 0.28, dTop = stTop, dBottom = stBottom; // the top step clear of the back wall
+    runs.push({ a: stairA0, d0: -Dh, d1: dBottom - 0.05, gaps: [], axis: 'd' }); // the stairwell's wall
+    stairs = { steps: Array.from({ length: n }, (_, i) => ({ ...rect(stairA0, A, dBottom - (i + 1) * tread, dBottom - i * tread), top: r2(level + rise * (i + 1)) })), opening: rect(stairA0, A, dTop - 0.05, dBottom), bottom: P((stairA0 + A) / 2, dBottom + 0.9), top: P((stairA0 + A) / 2, dTop + 0.15) };
+    // the terrace: two loungers 1.8 m apart facing the street, a table for four, a hot tub at the back away from the stairs
+    roof = { y: top, rect: rect(-A - 0.3, A + 0.3, -Dh - 0.3, Dh + 0.3), furniture: [box('lounger', -A + 2.0, Dh - 2.1, 0.8, 2.0, 0.4), box('lounger', -A + 4.6, Dh - 2.1, 0.8, 2.0, 0.4), box('tub', -A + 2.3, -Dh + 2.4, 2.2, 2.2, 0.8), box('plant', -A + 0.75, Dh - 0.75, 0.7, 0.7, 1.6), box('plant', A - 0.75, Dh - 0.75, 0.7, 0.7, 1.6), box('table', A - 2.6, Dh - 2.6, 1.2, 1.2, 0.74), box('rug', -A + 3.3, Dh - 2.1, 4.2, 2.6, 0.01, { collide: false })].map((o) => ({ ...o, y: 0 })) };
   }
   // the facade's windows on every side (facadeBays), with the front balcony bays as doors
   const balcony = balconyFor(b, floor), openings = [];
@@ -205,7 +249,7 @@ export function apartmentUnit(entry, floor) {
     const length = sx ? b.depth : b.width, half = sx ? b.width / 2 : b.depth / 2, bays = facadeBays(length), sux = sz, suz = -sx, front = side === b.front;
     for (let i = 0; i < bays.bays; i++) {
       const a = bays.at(i), door = front && balcony?.bays.includes(i);
-      openings.push({ side, x: r2(b.x + sx * half + sux * a), z: r2(b.z + sz * half + suz * a), width: door ? 1.25 : Math.min(1.5, bays.span * 0.55), sill: door ? 0 : 0.9, head: door ? 2.3 : 2.54, door: !!door, normal: [sx, sz] });
+      openings.push({ side, x: r2(b.x + sx * half + sux * a), z: r2(b.z + sz * half + suz * a), width: door ? DOORWAY : Math.min(1.5, bays.span * 0.55), sill: door ? 0 : 0.9, head: door ? 2.3 : 2.54, door: !!door, normal: [sx, sz] });
     }
   }
   const out = balcony ? (() => { const c0 = P(balcony.along - balcony.width / 2, D / 2), c1 = P(balcony.along + balcony.width / 2, D / 2 + balcony.depth); return { minX: Math.min(c0.x, c1.x), maxX: Math.max(c0.x, c1.x), minZ: Math.min(c0.z, c1.z), maxZ: Math.max(c0.z, c1.z), level, front: b.front }; })() : null;
@@ -261,7 +305,22 @@ export function interiorLayout(entry) {
       gaps: p.gaps.map(([c, half]) => [r2((p.axis === 'x' ? cx : cz) + c), half]) }))),
     furniture: Object.freeze(T.furniture.map((o) => Object.freeze(at(o)))),
     lights: Object.freeze([{ x: cx, z: r2(cz + T.d / 4) }, { x: cx, z: r2(cz - T.d / 4) }]),
+    ...stairsAndUpper(T, cx, cz),
   });
+}
+// A two-storey interior's stairs (treads in world coordinates, each with its top), the upper floor's slab
+// height and its opening over the stairs, and the railing around that opening.
+function stairsAndUpper(T, cx, cz) {
+  if (!T.stairs || !T.upper) return { upper: null, stairs: null };
+  const S = T.stairs, n = S.steps, top = r2(S.zBottom - n * S.tread);
+  const steps = Array.from({ length: n }, (_, i) => Object.freeze({ minX: r2(cx + S.x0), maxX: r2(cx + S.x1), minZ: r2(cz + S.zBottom - (i + 1) * S.tread), maxZ: r2(cz + S.zBottom - i * S.tread), top: r2(S.rise * (i + 1)) }));
+  const opening = Object.freeze({ minX: r2(cx + S.x0), maxX: r2(cx + S.x1), minZ: r2(cz + top), maxZ: r2(cz + S.zBottom) });
+  return {
+    upper: Object.freeze({ y: T.upper.y, h: T.upper.h, opening }),
+    stairs: Object.freeze({ steps: Object.freeze(steps), width: r2(S.x1 - S.x0), bottom: Object.freeze({ x: r2(cx + (S.x0 + S.x1) / 2), z: r2(cz + S.zBottom + 0.8) }), top: Object.freeze({ x: r2(cx + (S.x0 + S.x1) / 2), z: r2(cz + top - 0.9) }),
+      // the landing railing: along the open side of the opening and across its front end
+      rails: Object.freeze([{ minX: opening.maxX, maxX: r2(opening.maxX + 0.08), minZ: opening.minZ, maxZ: opening.maxZ }, { minX: opening.minX, maxX: opening.maxX, minZ: opening.maxZ, maxZ: r2(opening.maxZ + 0.08) }]) }),
+  };
 }
 
 export function interiorSpace(entry, L = interiorLayout(entry)) {
