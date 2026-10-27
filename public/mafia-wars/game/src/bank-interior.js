@@ -180,7 +180,7 @@ export class BankInteriorSystem {
       return;
     }
     const s = e.stats, rows = [['sNERDIE ISSUED', s.issued], ['TREASURY', s.treasury], ['RESIDENTS', s.population], ['EMPLOYED', s.employed], ['WAGES PAID', s.wagesPaid], ['RENT COLLECTED', s.rentCollected],
-      ['BUSINESSES', s.activeBusinesses], ['BUSINESS REVENUE', s.businessRevenue], ['CITY SPENDING', s.citySpending], ['SAVINGS', s.savings]];
+      ['BUSINESSES', s.activeBusinesses], ['BUSINESS SALES', s.businessSales], ['BUSINESS EXPENSES', s.businessOperatingExpenses], ['SAVINGS', s.savings]];
     ctx.fillText(`Simulated NERDIE · updated ${new Date(e.asOf).toUTCString().slice(5, 22)} UTC · ${s.entries} ledger entries`, 48, 132);
     rows.forEach(([label, value], i) => { const col = i % 2, row = Math.floor(i / 2), x = 48 + col * 740, yy = 220 + row * 84;
       ctx.fillStyle = '#9b8fb8'; ctx.font = '600 30px Barlow, sans-serif'; ctx.fillText(label, x, yy); ctx.fillStyle = '#ffffff'; ctx.font = '700 44px Barlow, sans-serif'; ctx.textAlign = 'right'; ctx.fillText(String(value), x + 660, yy); ctx.textAlign = 'left'; });
@@ -194,8 +194,8 @@ export class BankInteriorSystem {
     ctx.fillStyle = '#0a0814'; ctx.fillRect(0, 0, cw, ch); ctx.fillStyle = '#f2d28b'; ctx.font = '700 60px Barlow, sans-serif'; ctx.textAlign = 'left'; ctx.fillText('MARKET INTELLIGENCE', 40, 80);
     const m = this.cityService?.market?.();
     ctx.fillStyle = '#b7a9db'; ctx.font = '400 32px Barlow, sans-serif';
-    if (m?.status !== 'ok') { ctx.fillText('Trading signals, outcomes and bot performance from the Nerdie Blaq bots.', 40, 140); ctx.fillText('Historical archive: last recorded 5 June 2026. Not live.', 40, 190); ctx.fillText('Loads when the City Service connects.', 40, 240); return; }
-    ctx.fillText(`Historical · last recorded ${m.lastRecorded}`, 40, 140);
+    if (m?.status !== 'ok') { ctx.fillText('Trading signals, outcomes and bot performance from the Nerdie Blaq bots.', 40, 140); ctx.fillText('Historical archive unavailable. No placeholder values shown.', 40, 190); return; }
+    ctx.fillText(`HISTORICAL · NOT LIVE · last recorded ${m.lastRecorded}`, 40, 140);
     (m.lines || []).slice(0, 8).forEach((line, i) => ctx.fillText(line, 40, 210 + i * 46));
   }
   refreshDisplays() {

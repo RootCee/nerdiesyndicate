@@ -23,8 +23,9 @@ export const STOREFRONT_BUSINESSES = Object.freeze({
   'west-mixed-north-2': SHOWCASE_BUSINESSES['west-mixed-north-2'],
   // Ammo: an enterable gun and ammo shop (gun-shop-layout.js); open, restocking is free for now
   'west-mixed-north-3': Object.freeze({ id: 'nerdie-arms', name: 'Ammo', category: 'Gun & Ammo Shop', status: 'open', spaceId: 'nerdie-arms', kind: 'shop' }),
-  'west-industrial-south-0': Object.freeze({ id: 'hardware-store', name: 'Hardware Store', category: 'Hardware Store', status: 'coming-soon' }),
-  'west-industrial-south-1': Object.freeze({ id: 'auto-shop', name: 'Auto Shop', category: 'Auto Shop', status: 'coming-soon' }),
+  // Milestone 2.2: the first operational city-owned business.
+  'west-industrial-south-0': Object.freeze({ id: 'corner-market', name: 'Corner Market', category: 'Grocery & Essentials', status: 'open', kind: 'shop' }),
+  'west-industrial-south-1': Object.freeze({ id: 'city-wholesaler', name: 'City Wholesaler', category: 'Wholesale Supply', status: 'staff-only' }),
   'west-industrial-south-2': Object.freeze({ id: 'laundromat', name: 'Laundromat', category: 'Laundromat', status: 'coming-soon' }),
   'west-industrial-south-3': Object.freeze({ id: 'sneaker-shop', name: 'Sneaker Shop', category: 'Sneaker Shop', status: 'coming-soon' }),
 });
@@ -92,7 +93,10 @@ export function cityPois(plan = createCityPlan()) {
       category: business.category, status: business.status, x: building.x, z: building.z, entry: { x: entry.x, z: entry.z }, buildingId: building.id,
       // Step straight out of the door before turning, clear of wider neighbours.
       approach: [{ x: entry.x + FRONT_NORMALS[entry.facing][0] * STEP_OUT, z: entry.z + FRONT_NORMALS[entry.facing][1] * STEP_OUT }],
-      description: business.status === 'wallet' ? BANK_COPY.description : business.status === 'open' ? `${business.category}. Restock ammo at the counter. Safe zone.` : `${business.category}. Coming soon.`,
+      description: business.status === 'wallet' ? BANK_COPY.description
+        : business.status === 'staff-only' ? `${business.category}. Staff operations only.`
+          : business.status === 'open' ? (business.id === 'nerdie-arms' ? `${business.category}. Restock ammo at the counter. Safe zone.` : `${business.category}. Open for business.`)
+            : `${business.category}. Coming soon.`,
     });
   }
   return pois.map((poi) => Object.freeze({ ...poi, entry: Object.freeze(poi.entry), approach: Object.freeze(poi.approach || []) }));

@@ -19,6 +19,7 @@ import { NPC_COMBAT_RULES, assessThreat, strikeProfile, weaponClass } from './np
 import { isInsideSafeZone } from './multiplayer-spaces.js';
 import { cityShotOccluded, publicCityShotOccluded, targetDistance } from './multiplayer-combat.js';
 import { bodyHit, residentBodyOptions } from './hit-regions.js';
+import { hourAt } from './city-clock.js';
 
 export const NPC_SIM_RULES = Object.freeze({
   tickMs: 200,
@@ -45,7 +46,7 @@ export class CityNpcSimulation {
   // reactions: M6.7B1 awareness and reactions (off = exactly M6.7A behaviour).
   // combat: M6.7B2 self-defense (requires reactions).
   // structureOcclusion: M6.8A, shots at residents use the same city structures as player shots.
-  constructor({ seed = 'room', identities = null, maxActive = NPC_POPULATION.startActive, population = NPC_POPULATION.max, plan = createCityPlan(), rules = NPC_SIM_RULES, reactions = false, combat = false, structureOcclusion = false } = {}) {
+  constructor({ seed = 'room', identities = null, schedules = null, cityClock = null, maxActive = NPC_POPULATION.startActive, population = NPC_POPULATION.max, plan = createCityPlan(), rules = NPC_SIM_RULES, reactions = false, combat = false, structureOcclusion = false } = {}) {
     this.reactions = reactions === true; this.combat = this.reactions && combat === true; this.panicQueue = []; this.strikes = [];
     // true: the static structures; a function: the room's live test (M6.8B open faces included).
     this.structureOcclusion = typeof structureOcclusion === 'function' ? structureOcclusion : structureOcclusion === true ? cityShotOccluded : null;
@@ -53,10 +54,13 @@ export class CityNpcSimulation {
     this.maxActive = Math.max(0, Math.min(NPC_POPULATION.maxActive, maxActive | 0));
     // Bank P1.2: a room given the city's permanent identities shows those residents; otherwise it seeds its own (unchanged)
     this.identities = Array.isArray(identities) && identities.length ? identities.slice(0, NPC_POPULATION.max) : seedPopulation(seed, population);
+    this.schedules = new Map((Array.isArray(schedules) ? schedules : []).map((s) => [s.gameId, s]));
+    this.cityClock = cityClock?.enabled ? cityClock : null;
     this.graph = null; this.hard = null; this.pois = cityPois(plan).filter((p) => !p.spaceId || p.kind === 'apartment');
     this.residents = this.identities.map((identity, index) => ({ index, identity, x: 0, z: 0, yaw: 0, speed: 0, anim: NPC_ANIM.idle, route: null, step: 0, waitUntil: 0, stuckFor: 0, active: false, lastDormantAt: 0, placed: false, memory: [], aware: null,
       personality: personalityOf(identity), behavior: NPC_BEHAVIOR.calm, behaviorUntil: 0, threat: null, reaction: null, pending: null, threats: [], greeted: new Map(), greetTarget: null, fleeing: false,
-      health: NPC_COMBAT_RULES.maxHealth, lastDamageAt: 0, downUntil: 0, defeatedAt: 0, protectionUntil: 0, fight: null, lastAttack: null, allyAttack: null, strikeUntil: 0 }));
+      health: NPC_COMBAT_RULES.maxHealth, lastDamageAt: 0, downUntil: 0, defeatedAt: 0, protectionUntil: 0, fight: null, lastAttack: null, allyAttack: null, strikeUntil: 0,
+      economicActivity: 'stroll', economicLocation: null }));
     this.viewers = new Map(); // playerId -> Map(index -> { at, sig })
     this.metrics = { ticks: 0, active: 0, relocations: 0, routes: 0, routeFailures: 0, failureReasons: {}, walkBacks: 0, replans: 0, bytes: 0, messages: 0,
       reactions: { startled: 0, alert: 0, flee: 0, fleeRouteFailures: 0, panicked: 0, remembered: 0, greet: 0, wary: 0 },
@@ -91,12 +95,30 @@ export class CityNpcSimulation {
   }
   #reset(r, p) { Object.assign(r, { x: p.x, z: p.z, route: null, lastRoute: null, step: 0, speed: 0, anim: NPC_ANIM.idle, waitUntil: 0, stuckFor: 0, placed: true, behavior: NPC_BEHAVIOR.calm, threat: null, pending: null, fleeing: false, health: NPC_COMBAT_RULES.maxHealth, downUntil: 0, defeatedAt: 0, fight: null, lastAttack: null, allyAttack: null }); }
 
+  #scheduledPoi(r, now) {
+    const schedule = this.schedules.get(r.identity.id);
+    if (!schedule || !this.cityClock) return null;
+    const minute = Math.floor(hourAt(now, this.cityClock) * 60), work = schedule.employment;
+    let locationId = schedule.homeLocationId || 'north-court', activity = 'home';
+    if (work) {
+      const start = work.shiftStartMinute, end = start + work.shiftDurationMinutes;
+      if (minute >= Math.max(0, start - 60) && minute < start) { locationId = work.workplaceId; activity = 'commute'; }
+      else if (minute >= start && minute < end) { locationId = work.workplaceId; activity = 'work'; }
+      else if (minute >= end && minute < Math.min(1_440, end + 120)) { locationId = 'corner-market'; activity = 'shop'; }
+      else if (minute >= 1_140 && minute < 1_320) { locationId = 'central-park'; activity = 'social'; }
+    } else if (minute >= 720 && minute < 1_140) { locationId = 'central-park'; activity = 'leisure'; }
+    r.economicActivity = activity; r.economicLocation = locationId;
+    return this.pois.find((p) => p.id === locationId) || null;
+  }
+
   // Next destination: a business, bank, or apartment door for 'visit'
   // residents sometimes, otherwise a sidewalk point 30-120 m away.
   #plan(r, now) {
     const g = this.#ensureGraph();
     let goal = null, approach = [], visit = false;
-    if (r.identity.routine === 'visit' && this.random() < 0.5) {
+    const scheduled = this.#scheduledPoi(r, now);
+    if (scheduled) { goal = scheduled.entry; approach = scheduled.approach || []; visit = true; }
+    if (!goal && r.identity.routine === 'visit' && this.random() < 0.5) {
       const near = this.pois.filter((p) => dist(p.entry, r) < 150);
       if (near.length) { const poi = near[Math.floor(this.random() * near.length)]; goal = poi.entry; approach = poi.approach || []; visit = true; }
     }
@@ -539,5 +561,5 @@ export class CityNpcSimulation {
   }
 
   // Test and diagnostics view (never sent to clients).
-  snapshot() { return this.residents.map((r) => ({ id: r.identity.id, x: r.x, z: r.z, active: r.active, anim: r.anim, speed: r.speed, memory: r.memory.length, aware: r.aware?.playerId || null, personality: r.personality, behavior: r.behavior, threats: r.threats.length, health: r.health, fightTarget: r.fight?.targetId || null })); }
+  snapshot() { return this.residents.map((r) => ({ id: r.identity.id, x: r.x, z: r.z, active: r.active, anim: r.anim, speed: r.speed, memory: r.memory.length, aware: r.aware?.playerId || null, personality: r.personality, behavior: r.behavior, threats: r.threats.length, health: r.health, fightTarget: r.fight?.targetId || null, economicActivity: r.economicActivity, economicLocation: r.economicLocation })); }
 }

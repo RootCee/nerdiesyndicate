@@ -52,7 +52,7 @@ export class BankReader {
 }
 
 const ECONOMY_ROWS = [['issued', 'sNERDIE issued'], ['treasury', 'Treasury'], ['population', 'Residents'], ['employed', 'Employed'], ['wagesPaid', 'Wages paid'], ['rentCollected', 'Rent collected'],
-  ['activeBusinesses', 'Active businesses'], ['businessRevenue', 'Business revenue'], ['citySpending', 'City spending'], ['savings', 'Aggregate savings']];
+  ['activeBusinesses', 'Active businesses'], ['businessSales', 'Business sales'], ['businessOperatingExpenses', 'Business expenses'], ['cityOperatingExpenses', 'City expenses'], ['savings', 'Aggregate savings']];
 
 export class BankPanel {
   constructor({ cityService = null, onOpen = () => {}, document: doc = globalThis.document } = {}) {
@@ -83,12 +83,13 @@ export class BankPanel {
     if (v.kind === 'board') {
       const e = this.cityService?.economy?.() || { status: 'offline' };
       if (e.status !== 'ok') return `<p>The City Economy Board shows the city's real simulated economy, straight from the bank ledger: sNERDIE issued, the treasury, residents and jobs, wages, rent, business revenue, city spending and savings.</p><div class="bp-warn"><p>The City Service is not connected in this build, so no figures are shown. Nothing here is ever a placeholder number.</p></div>`;
-      return `<p class="bp-note">Simulated NERDIE (sNERDIE) · as of ${esc(new Date(e.asOf).toUTCString())}</p><div class="bp-grid">${ECONOMY_ROWS.map(([k, label]) => `<div class="bp-stat"><b>${esc(label)}</b><span>${esc(e.stats?.[k] ?? '—')}</span></div>`).join('')}</div>`;
+      const events = (e.stats?.recentEvents || []).slice(0, 5);
+      return `${e.demo ? `<div class="bp-warn"><p>${esc(e.demo.label)} · phase ${e.demo.phase + 1} of 4 · ${e.demo.complete ? 'complete cycle' : 'advancing automatically'} · persisted across reloads. No hosted database writes.</p></div>` : ''}<p class="bp-note">Simulated NERDIE (sNERDIE) · as of ${esc(new Date(e.asOf).toUTCString())}</p><div class="bp-grid">${ECONOMY_ROWS.map(([k, label]) => `<div class="bp-stat"><b>${esc(label)}</b><span>${esc(e.stats?.[k] ?? '—')}</span></div>`).join('')}</div>${events.length ? `<p class="bp-note">Recent city economic events</p>${events.map((event) => `<p>${esc(String(event.kind || '').replaceAll('_', ' '))} · ${esc(event.location_id || 'city')} · city minute ${esc(event.city_minute)}</p>`).join('')}` : ''}`;
     }
     if (v.kind === 'market') {
       const m = this.cityService?.market?.() || { status: 'offline' };
-      if (m.status !== 'ok') return `<p>Market intelligence from the Nerdie Blaq trading bots: prices, trends and indicators, signals and their confidence, how past signals turned out, and bot performance.</p><div class="bp-warn"><p>This is a historical archive: the bots last recorded data on 5 June 2026. It loads here when the City Service connects, and is always labelled as historical, never live.</p></div>`;
-      return `<p class="bp-note">Historical · last recorded ${esc(m.lastRecorded)}</p>${(m.lines || []).map((l) => `<p>${esc(l)}</p>`).join('')}`;
+      if (m.status !== 'ok') return `<p>Market intelligence from the Nerdie Blaq trading bots: trends and indicators, signals and their confidence, past outcomes, and bot performance.</p><div class="bp-warn"><p>The historical archive was last audited on 5 June 2026 and is unavailable in this session. No market values are shown; it is never live and never substitutes placeholder prices.</p></div>`;
+      return `${m.stale ? '<div class="bp-warn"><p>Historical archive — these are not live prices or current trading recommendations.</p></div>' : ''}<p class="bp-note">Historical · last recorded ${esc(m.lastRecorded)}</p>${(m.lines || []).map((l) => `<p>${esc(l)}</p>`).join('')}`;
     }
     return `<p>The Founder Executive Suite is reserved for the founder's oversight of the treasury, residents, businesses, payroll, ledger integrity and security alerts.</p><div class="bp-warn"><p>Administration never happens inside the game. The founder's dashboard is a separate application with its own secure sign-in.</p></div>`;
   }

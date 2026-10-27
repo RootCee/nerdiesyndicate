@@ -11,9 +11,9 @@ if (!sourceRoot) {
   throw new Error('Usage: node scripts/sync-mafia-wars-preview.mjs /absolute/path/to/game/source');
 }
 
-const expectedCommit = 'cc7e935fe590a1f8132268aa466c9c4881361066';
-// Bank Milestone 2.1 uses an isolated server that validates the new bank space; production is unaffected.
-const previewMultiplayerService = 'https://nerdie-city-bank-m2-1-preview.buddieroots.workers.dev';
+const expectedCommit = '121563c8c9c2d7c411065b097e9339b72a8b156a';
+// Bank Milestone 2.2 uses an isolated server with permanent residents and schedules; production is unaffected.
+const previewMultiplayerService = 'https://nerdie-city-bank-m2-2-preview.buddieroots.workers.dev';
 const runtimeFiles = ['index.html', 'version.txt'];
 const characterFiles = ['blue_zip.glb', 'navy.glb', 'red_hoodie.glb', 'red_jersey.glb'];
 const npcFiles = ['npc_women.glb', 'npc_men.glb', 'npc_clips_women.glb', 'npc_clips_men.glb', 'LICENSES.md'];

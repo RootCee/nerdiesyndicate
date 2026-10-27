@@ -12,7 +12,17 @@ export class CityServiceClient {
   get connected() { return !!this.endpoint; }
   // Synchronous snapshots for the displays; a stale entry triggers one background refresh.
   economy() { return this.#snapshot('/v1/economy', ECONOMY_TTL_MS, (body) => ({ status: 'ok', asOf: body.stats?.asOf || body.loadedAt, stats: body.stats, population: body.population, currency: body.currency })); }
-  market() { return this.#snapshot('/v1/market', MARKET_TTL_MS, (body) => ({ status: 'ok', ...body })); }
+  market() { return this.#snapshot('/v1/market', MARKET_TTL_MS, (body) => {
+    if (body?.status !== 'ok') return { status: 'offline', mode: 'historical', stale: true };
+    const recorded = body.latestAt ? new Date(body.latestAt).toUTCString() : 'unknown';
+    const signalLines = (body.signals || []).slice(0, 4).map((s) => `${s.asset} · ${String(s.signal).toUpperCase()} · RSI ${s.rsi ?? '—'} · recorded ${new Date(s.created_at).toISOString().slice(0, 10)}`);
+    const performance = body.performance?.[0];
+    const outcome = body.outcomes?.[0];
+    const lines = [performance ? `BOT PERFORMANCE · ${performance.signals} signals · ${performance.win_rate}% win rate · historical` : null,
+      outcome ? `LATEST OUTCOME · ${outcome.asset} ${outcome.status} · recorded ${new Date(outcome.closed_at || outcome.created_at).toISOString().slice(0, 10)}` : null,
+      ...signalLines].filter(Boolean);
+    return { ...body, status: 'ok', lastRecorded: recorded, lines, ticker: `HISTORICAL MARKET ARCHIVE · LAST RECORD ${recorded} · NOT LIVE PRICES · ` };
+  }); }
   #snapshot(path, ttl, shape) {
     if (!this.endpoint || !this.fetch) return { status: 'offline' };
     const hit = this.cache.get(path);

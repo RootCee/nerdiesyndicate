@@ -49,6 +49,7 @@ import { ChessClient } from './chess-client.js';
 import { LibraryPanel } from './library-panel.js';
 import { BankPanel } from './bank-panel.js';
 import { CityServiceClient } from './city-service-client.js';
+import { EconomyDemoService, economyDemoAllowed } from './economy-demo-service.js';
 import { relativeBearing } from './city-map-view.js';
 import { buildNavGraph, findRoute, routeProgress } from './city-navigation.js';
 import { cityPois } from './city-pois.js';
@@ -59,9 +60,9 @@ import { NpcRenderer, NPC_RENDER_RULES } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=bank-m2.1-dev1';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=bank-m2.2-dev1';
 
-const GAME_BUILD_ID = 'bank-m2.1-dev1';
+const GAME_BUILD_ID = 'bank-m2.2-dev1';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -214,7 +215,7 @@ const libraryPanel = new LibraryPanel({ mobile: Q.mobile, onOpen: (open) => {
   if (open) { input.moveX = input.moveY = 0; input.fire = input.ads = input.sprint = false; document.exitPointerLock?.(); } else if (MATCH.started && !MATCH.over && !TOUCH) requestLock();
 } });
 // Phase 2.1 the Nerdie City Bank: read-only City Service figures (offline until a service is approved) and the bank panel
-const cityService = new CityServiceClient();
+const cityService = economyDemoAllowed(location) ? new EconomyDemoService() : new CityServiceClient();
 const bankPanel = new BankPanel({ cityService, onOpen: (open) => {
   if (open) { input.moveX = input.moveY = 0; input.fire = input.ads = input.sprint = false; document.exitPointerLock?.(); } else if (MATCH.started && !MATCH.over && !TOUCH) requestLock();
 } });
