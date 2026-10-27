@@ -20,6 +20,7 @@ import { isInsideSafeZone } from './multiplayer-spaces.js';
 import { cityShotOccluded, publicCityShotOccluded, targetDistance } from './multiplayer-combat.js';
 import { bodyHit, residentBodyOptions } from './hit-regions.js';
 import { hourAt } from './city-clock.js';
+import { scheduledPlace } from './resident-schedule.js';
 
 export const NPC_SIM_RULES = Object.freeze({
   tickMs: 200,
@@ -40,13 +41,17 @@ export const NPC_SIM_RULES = Object.freeze({
 export const NPC_ANIM = Object.freeze({ idle: 0, walk: 1, notice: 2, sit: 3 }); // sit: M7.1D chess (seated on a stool)
 
 const hard = (obstacles) => obstacles.filter((r) => !r.soft);
+// A scheduled resident this close to their place has arrived (#placeAt spreads them up to ~7 m around it).
+const SCHEDULE_ARRIVED_M = 8;
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 
 export class CityNpcSimulation {
   // reactions: M6.7B1 awareness and reactions (off = exactly M6.7A behaviour).
   // combat: M6.7B2 self-defense (requires reactions).
   // structureOcclusion: M6.8A, shots at residents use the same city structures as player shots.
-  constructor({ seed = 'room', identities = null, schedules = null, cityClock = null, maxActive = NPC_POPULATION.startActive, population = NPC_POPULATION.max, plan = createCityPlan(), rules = NPC_SIM_RULES, reactions = false, combat = false, structureOcclusion = false } = {}) {
+  // scheduleMinute: (nowMs) => minute of the economic day. Given, schedules follow it (the bank's real
+  // Pacific day) instead of the sky's fast cycle, so a resident is where the ledger says they are.
+  constructor({ seed = 'room', identities = null, schedules = null, cityClock = null, scheduleMinute = null, maxActive = NPC_POPULATION.startActive, population = NPC_POPULATION.max, plan = createCityPlan(), rules = NPC_SIM_RULES, reactions = false, combat = false, structureOcclusion = false } = {}) {
     this.reactions = reactions === true; this.combat = this.reactions && combat === true; this.panicQueue = []; this.strikes = [];
     // true: the static structures; a function: the room's live test (M6.8B open faces included).
     this.structureOcclusion = typeof structureOcclusion === 'function' ? structureOcclusion : structureOcclusion === true ? cityShotOccluded : null;
@@ -55,8 +60,10 @@ export class CityNpcSimulation {
     // Bank P1.2: a room given the city's permanent identities shows those residents; otherwise it seeds its own (unchanged)
     this.identities = Array.isArray(identities) && identities.length ? identities.slice(0, NPC_POPULATION.max) : seedPopulation(seed, population);
     this.schedules = new Map((Array.isArray(schedules) ? schedules : []).map((s) => [s.gameId, s]));
-    this.cityClock = cityClock?.enabled ? cityClock : null;
+    this.cityClock = cityClock?.enabled ? cityClock : null; this.scheduleMinute = typeof scheduleMinute === 'function' ? scheduleMinute : null;
     this.graph = null; this.hard = null; this.pois = cityPois(plan).filter((p) => !p.spaceId || p.kind === 'apartment');
+    // Scheduled destinations include workplaces with an interior (the bank, Ammo): staff wait at the street door.
+    this.schedulePois = new Map(cityPois(plan).map((p) => [p.id, p]));
     this.residents = this.identities.map((identity, index) => ({ index, identity, x: 0, z: 0, yaw: 0, speed: 0, anim: NPC_ANIM.idle, route: null, step: 0, waitUntil: 0, stuckFor: 0, active: false, lastDormantAt: 0, placed: false, memory: [], aware: null,
       personality: personalityOf(identity), behavior: NPC_BEHAVIOR.calm, behaviorUntil: 0, threat: null, reaction: null, pending: null, threats: [], greeted: new Map(), greetTarget: null, fleeing: false,
       health: NPC_COMBAT_RULES.maxHealth, lastDamageAt: 0, downUntil: 0, defeatedAt: 0, protectionUntil: 0, fight: null, lastAttack: null, allyAttack: null, strikeUntil: 0,
@@ -97,18 +104,22 @@ export class CityNpcSimulation {
 
   #scheduledPoi(r, now) {
     const schedule = this.schedules.get(r.identity.id);
-    if (!schedule || !this.cityClock) return null;
-    const minute = Math.floor(hourAt(now, this.cityClock) * 60), work = schedule.employment;
-    let locationId = schedule.homeLocationId || 'north-court', activity = 'home';
-    if (work) {
-      const start = work.shiftStartMinute, end = start + work.shiftDurationMinutes;
-      if (minute >= Math.max(0, start - 60) && minute < start) { locationId = work.workplaceId; activity = 'commute'; }
-      else if (minute >= start && minute < end) { locationId = work.workplaceId; activity = 'work'; }
-      else if (minute >= end && minute < Math.min(1_440, end + 120)) { locationId = 'corner-market'; activity = 'shop'; }
-      else if (minute >= 1_140 && minute < 1_320) { locationId = 'central-park'; activity = 'social'; }
-    } else if (minute >= 720 && minute < 1_140) { locationId = 'central-park'; activity = 'leisure'; }
+    if (!schedule || (!this.scheduleMinute && !this.cityClock)) return null;
+    if (this.minuteAt?.now !== now) this.minuteAt = { now, minute: this.scheduleMinute ? this.scheduleMinute(now) : Math.floor(hourAt(now, this.cityClock) * 60) }; // once per tick
+    const minute = this.minuteAt.minute;
+    const { activity, locationId } = scheduledPlace(schedule.employment, minute, schedule.homeLocationId || 'north-court');
     r.economicActivity = activity; r.economicLocation = locationId;
-    return this.pois.find((p) => p.id === locationId) || null;
+    return this.schedulePois.get(locationId) || null;
+  }
+  // A free spot around a scheduled place (staff and visitors gather by the door, neighbours around the
+  // court), so residents who belong there are already there when a player arrives.
+  #placeAt(r, poi) {
+    const g = this.#ensureGraph(), spread = poi.kind === 'apartment' || poi.kind === 'park' ? 6 : 3;
+    for (let tries = 0; tries < 12; tries++) {
+      const a = this.random() * Math.PI * 2, d = 0.8 + this.random() * spread, p = { x: poi.entry.x + Math.cos(a) * d, z: poi.entry.z + Math.sin(a) * d };
+      if (!insideObstacle(p, g.obstacles, 0.35)) { this.#reset(r, p); this.metrics.relocations++; return true; }
+    }
+    this.#reset(r, { x: poi.entry.x, z: poi.entry.z }); this.metrics.relocations++; return true;
   }
 
   // Next destination: a business, bank, or apartment door for 'visit'
@@ -117,6 +128,8 @@ export class CityNpcSimulation {
     const g = this.#ensureGraph();
     let goal = null, approach = [], visit = false;
     const scheduled = this.#scheduledPoi(r, now);
+    // Already where the schedule says: stay (work the shift, shop, hang out) and check again shortly.
+    if (scheduled && dist(scheduled.entry, r) <= SCHEDULE_ARRIVED_M) { r.visit = true; r.waitUntil = now + this.rules.visitIdleMs * (1 + this.random()); return; }
     if (scheduled) { goal = scheduled.entry; approach = scheduled.approach || []; visit = true; }
     if (!goal && r.identity.routine === 'visit' && this.random() < 0.5) {
       const near = this.pois.filter((p) => dist(p.entry, r) < 150);
@@ -490,10 +503,17 @@ export class CityNpcSimulation {
     // Place on first use, then relocate residents nobody is near (out of sight).
     let relocations = 0;
     for (const r of this.residents) {
-      if (!r.placed) { this.#reset(r, this.#streetPoint()); r.lastDormantAt = now; }
+      const place = this.#scheduledPoi(r, now);
+      if (!r.placed) { if (place) this.#placeAt(r, place); else this.#reset(r, this.#streetPoint()); r.lastDormantAt = now; }
       const nearest = Math.min(...players.map((p) => dist(p, r)));
       r.nearest = nearest;
-      if (!r.held && nearest > rules.relocateRadius && relocations < rules.relocationsPerTick && this.#placeNear(r, players)) { relocations++; r.nearest = Math.min(...players.map((p) => dist(p, r))); }
+      if (r.held || nearest <= rules.relocateRadius || relocations >= rules.relocationsPerTick) continue;
+      // Out of everyone's sight. A scheduled resident belongs at their place (and stays once there); when
+      // that place is in a player's view they appear out of sight and walk in. Others come near players.
+      let moved = false;
+      if (place) { if (dist(place.entry, r) > SCHEDULE_ARRIVED_M) moved = this.#outOfSight(place.entry, players) ? this.#placeAt(r, place) : this.#placeNear(r, players); }
+      else moved = this.#placeNear(r, players);
+      if (moved) { relocations++; r.nearest = Math.min(...players.map((p) => dist(p, r))); }
     }
     // Activate the residents nearest to players.
     // (residents holding a chess seat near a player come first: they must stay visible at the table)

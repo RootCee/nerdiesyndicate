@@ -2,6 +2,7 @@
 // suite notice. The model (BankReader) is plain data the tests drive; the panel draws it when there is a
 // document. It shows only what the requester may see: today every visitor is a temporary player, so tellers
 // give bank information and city-level figures, never anyone's personal account.
+import { economicMinuteOfDay, scheduledPlace } from './resident-schedule.js';
 const STYLE = `
 #bankPanel{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;background:rgba(5,3,10,.66);font-family:'Barlow Condensed',system-ui,sans-serif;color:#f3eefc;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))}
 #bankPanel.on{display:flex}
@@ -78,6 +79,11 @@ const clockTime = (minute) => { const m = ((minute % 1440) + 1440) % 1440, h = M
 const cityWhen = (minute) => (minute == null ? '—' : `Day ${Math.floor(minute / 1440)} · ${clockTime(minute)}`);
 const shiftText = (job) => `${clockTime(job.shiftStartMinute)}–${clockTime(job.shiftStartMinute + job.shiftDurationMinutes)}`;
 const words = (s) => esc(String(s ?? '').replaceAll('_', ' ').replaceAll('-', ' '));
+// Where a resident is right now, by the same schedule the city's residents follow (real Pacific time).
+const PLACES = Object.freeze({ 'nerdie-city-bank': 'Nerdie City Bank', 'city-hall': 'City Hall', 'academy-library': 'the Library', 'nerdie-arms': 'Ammo', 'central-park': 'Central Park', 'corner-market': 'Corner Market', 'north-court': 'North Court' });
+const place = (id) => (PLACES[id] ? esc(PLACES[id]) : words(id));
+const ACTIVITY_WORDS = Object.freeze({ home: 'At home in', commute: 'On the way to work at', work: 'Working at', shop: 'Shopping at', social: 'Hanging out at', leisure: 'Relaxing at' });
+const nowText = (r, minute) => { const at = scheduledPlace(r.job, minute); return `${esc(ACTIVITY_WORDS[at.activity] || at.activity)} ${place(at.locationId)}`; };
 const wealth = (r) => Number(r.checking || 0) + Number(r.savings || 0);
 export const RESIDENT_SORTS = Object.freeze({
   no: { label: 'No.', compare: (a, b) => a.residentNo - b.residentNo },
@@ -92,8 +98,8 @@ const FOUNDER_START = Object.freeze({ status: 'idle', data: null, error: null, t
 export class BankPanel {
   // founderAccess: { signIn(), refresh(): Promise<overview body>, residents(): Promise<{ residents }>,
   // resident(id): Promise<{ history }> } or null. residents/resident are optional (older builds).
-  constructor({ cityService = null, founderAccess = null, onOpen = () => {}, document: doc = globalThis.document } = {}) {
-    Object.assign(this, { cityService, founderAccess, onOpen, doc }); this.reader = new BankReader(); this.isOpen = false;
+  constructor({ cityService = null, founderAccess = null, onOpen = () => {}, document: doc = globalThis.document, now = () => Date.now() } = {}) {
+    Object.assign(this, { cityService, founderAccess, onOpen, doc, now }); this.reader = new BankReader(); this.isOpen = false;
     this.founder = { ...FOUNDER_START };
   }
   // Actions: signin, refresh, tab:overview|residents, sort:<RESIDENT_SORTS key>, resident:<res_0001>, back.
@@ -133,14 +139,14 @@ export class BankPanel {
   #residentsHtml() {
     const f = this.founder, list = [...(f.residents || [])].sort(RESIDENT_SORTS[f.sort]?.compare || RESIDENT_SORTS.no.compare);
     if (!list.length) return '<p>No residents loaded yet. Press Refresh.</p>';
-    const onShift = list.filter((r) => r.job?.onShiftNow).length, employed = list.filter((r) => r.job).length;
+    const minute = economicMinuteOfDay(this.now()), onShift = list.filter((r) => r.job?.onShiftNow).length, employed = list.filter((r) => r.job).length;
     const sorts = `<div class="bp-actions"><span class="bp-note" style="align-self:center">Sort</span>${Object.entries(RESIDENT_SORTS).map(([id, s]) => `<button type="button" class="bp-b${f.sort === id ? ' on' : ''}" data-founder="sort:${id}" aria-pressed="${f.sort === id}">${esc(s.label)}</button>`).join('')}</div>`;
     const rows = list.map((r) => {
       const chips = `${r.job?.onShiftNow ? '<span class="bp-chip">ON SHIFT</span>' : ''}${r.housing?.status === 'arrears' ? '<span class="bp-chip warn">RENT ARREARS</span>' : ''}`;
-      const job = r.job ? `${esc(r.job.title)} · ${words(r.job.workplaceId)} · ${shiftText(r.job)}` : 'No permanent job (municipal temp work rotation)';
+      const job = r.job ? `${esc(r.job.title)} · ${place(r.job.workplaceId)} · ${shiftText(r.job)}` : 'No permanent job (municipal temp work rotation)';
       return `<button type="button" class="bp-res" data-founder="resident:${esc(r.residentId)}" aria-label="${esc(r.name)}, open history">
         <span class="no">${esc(r.residentNo)}</span>
-        <span class="who"><b>${esc(r.name)}${chips}</b><small>${job}</small><small>Now: ${words(r.state?.activity || 'home')} · ${words(r.state?.locationId || '')}</small></span>
+        <span class="who"><b>${esc(r.name)}${chips}</b><small>${job}</small><small>${nowText(r, minute)}</small></span>
         <span class="money">${n(r.checking)} checking<small>${n(r.savings)} savings · ${n(r.lifetime?.wages)} earned</small></span>
       </button>`;
     }).join('');
@@ -149,7 +155,7 @@ export class BankPanel {
   // One resident: who they are, their totals, balance over time, daily records, activity and ledger lines.
   #residentHtml(h) {
     const r = h.resident || {}, days = h.days || [], activity = (h.activity || []).slice(0, 25), ledger = (h.ledger || []).slice(0, 25), l = r.lifetime || {};
-    const job = r.job ? `${esc(r.job.title)} at ${words(r.job.workplaceId)} · ${shiftText(r.job)} · ${n(r.job.wage)} a shift${r.job.onShiftNow ? '<span class="bp-chip">ON SHIFT</span>' : ''}` : 'No permanent job · municipal temp work rotation';
+    const job = r.job ? `${esc(r.job.title)} at ${place(r.job.workplaceId)} · ${shiftText(r.job)} · ${n(r.job.wage)} a shift${r.job.onShiftNow ? '<span class="bp-chip">ON SHIFT</span>' : ''}` : 'No permanent job · municipal temp work rotation';
     const stats = [['Checking', n(r.checking)], ['Savings', n(r.savings)], ['Lifetime wages', n(l.wages)], ['Shifts · temp shifts', `${n(l.shifts)} · ${n(l.tempShifts)}`],
       ['Spent · purchases', `${n(l.spent)} · ${n(l.purchases)}`], ['Rent paid · arrears', `${n(l.rentPaid)} · ${n(l.rentArrears)}`], ['Hunger · spending mood', `${n(r.state?.hunger)} · ${n(r.state?.discretionary)}`], ['Days on record', n(l.daysRecorded)]];
     const oldestFirst = [...days].reverse(), values = oldestFirst.map((d) => Number(d.checking) + Number(d.savings));
@@ -164,7 +170,7 @@ export class BankPanel {
     const detail = (details) => Object.entries(details || {}).map(([k, v]) => `${words(k)} ${esc(typeof v === 'object' ? JSON.stringify(v) : v)}`).join(' · ');
     return `<div class="bp-actions"><button type="button" class="bp-b" data-founder="back">← All residents</button></div>
       <h3>${esc(r.name)} · resident ${esc(r.residentNo)}</h3>
-      <p class="bp-note">${job}<br>Home ${words(r.housing?.propertyId)} (${words(r.housing?.status)}) · now ${words(r.state?.activity)} at ${words(r.state?.locationId)}</p>
+      <p class="bp-note">${job}<br>${nowText(r, economicMinuteOfDay(this.now()))} · home ${words(r.housing?.propertyId)} (${words(r.housing?.status)})</p>
       <div class="bp-grid bp-grid-2">${stats.map(([k, v]) => `<div class="bp-stat"><b>${esc(k)}</b><span>${v}</span></div>`).join('')}</div>
       <h3>Balance over time</h3>${chart}
       <h3>Daily record</h3>${dayRows ? `<div class="bp-scroll"><table class="bp-table"><thead><tr><th>Day</th><th>Checking</th><th>Savings</th><th>Earned</th><th>Spent</th><th>Shifts</th><th>Rent</th><th>Hunger</th></tr></thead><tbody>${dayRows}</tbody></table></div>` : '<p class="bp-note">No daily records yet: the first is taken at the end of today (11:59 PM Pacific).</p>'}

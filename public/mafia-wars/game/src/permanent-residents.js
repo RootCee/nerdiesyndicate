@@ -2,6 +2,7 @@
 // of the registry bootstrap: identities are generated from the same immutable
 // seed, while schedules contain no account balances or private history.
 import { seedResidents } from './npc-population.js';
+import { economicMinuteOfDay } from './resident-schedule.js';
 
 export const PERMANENT_RESIDENT_SEED = 'nerdie-city-genesis-v1';
 export const PERMANENT_RESIDENT_COUNT = 36;
@@ -28,6 +29,9 @@ export const PERMANENT_RESIDENT_SCHEDULES = Object.freeze(PERMANENT_RESIDENT_IDE
   });
 }));
 
+// Residents keep their schedules on the economic clock, the one the ledger pays shifts by (real Pacific
+// time); the sky keeps its own faster cycle.
+export { economicMinuteOfDay };
 export function permanentNpcOptions(enabled = false) {
-  return enabled ? { identities: PERMANENT_RESIDENT_IDENTITIES, schedules: PERMANENT_RESIDENT_SCHEDULES, seed: PERMANENT_RESIDENT_SEED } : {};
+  return enabled ? { identities: PERMANENT_RESIDENT_IDENTITIES, schedules: PERMANENT_RESIDENT_SCHEDULES, seed: PERMANENT_RESIDENT_SEED, scheduleMinute: economicMinuteOfDay } : {};
 }
