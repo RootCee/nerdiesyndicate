@@ -54,9 +54,47 @@ export class BankReader {
 const ECONOMY_ROWS = [['issued', 'sNERDIE issued'], ['treasury', 'Treasury'], ['population', 'Residents'], ['employed', 'Employed'], ['wagesPaid', 'Wages paid'], ['rentCollected', 'Rent collected'],
   ['activeBusinesses', 'Active businesses'], ['businessSales', 'Business sales'], ['businessOperatingExpenses', 'Business expenses'], ['cityOperatingExpenses', 'City expenses'], ['savings', 'Aggregate savings']];
 
+const n = (v) => (v == null ? '—' : esc(Number(v).toLocaleString('en-US')));
+
 export class BankPanel {
-  constructor({ cityService = null, onOpen = () => {}, document: doc = globalThis.document } = {}) {
-    Object.assign(this, { cityService, onOpen, doc }); this.reader = new BankReader(); this.isOpen = false;
+  // founderAccess: { signIn(): Promise<overview body>, refresh(): Promise<overview body> } or null.
+  constructor({ cityService = null, founderAccess = null, onOpen = () => {}, document: doc = globalThis.document } = {}) {
+    Object.assign(this, { cityService, founderAccess, onOpen, doc }); this.reader = new BankReader(); this.isOpen = false;
+    this.founder = { status: 'idle', data: null, error: null };
+  }
+  async founderAction(kind) {
+    if (!this.founderAccess || this.founder.status === 'working') return;
+    this.founder = { ...this.founder, status: 'working', error: null }; this.render();
+    try {
+      const data = kind === 'refresh' && this.founder.data ? await this.founderAccess.refresh() : await this.founderAccess.signIn();
+      this.founder = { status: 'ok', data, error: null };
+    } catch (error) {
+      this.founder = { status: 'error', data: null, error: error?.message || 'Founder sign-in did not complete.' };
+    }
+    this.render();
+  }
+  #founderHtml() {
+    const f = this.founder;
+    if (!this.founderAccess) return `<p>The Founder Executive Suite is reserved for the founder's oversight of the treasury, residents, businesses, payroll, ledger integrity and security alerts.</p><div class="bp-warn"><p>Founder sign-in is not available in this build.</p></div>`;
+    if (f.status === 'working') return `<p>Waiting for your wallet…</p><p class="bp-note">Approve the sign-in message in your wallet. It does not move funds or approve any transaction.</p>`;
+    if (f.status === 'ok' && f.data) {
+      const o = f.data.overview || {}, e = o.economy || {}, rent = o.rent || {}, sim = o.simulation || {};
+      const temp = (o.tempWork || []).reduce((sum, p) => sum + (p.daily_slots || 0), 0);
+      const alerts = (o.alerts || []).filter(Boolean);
+      const day = sim.last_processed_minute != null ? Math.floor(sim.last_processed_minute / 1440) : null;
+      const stats = [['Treasury', n(e.treasury)], ['sNERDIE issued', n(e.issued)], ['Ledger integrity', o.integrity?.ok ? 'Verified' : 'PROBLEM'], ['Ledger entries', n(e.entries)],
+        ['Residents', n(e.population)], ['Employed', n(e.employed)], ['Temp work slots a day', n(temp)], ['Wages paid', n(e.wagesPaid)],
+        ['Rent paid · arrears', `${n(rent.paid)} · ${n(rent.arrears)}`], ['Business sales', n(e.businessSales)], ['Aggregate savings', n(e.savings)], ['Economic day', day == null ? '—' : n(day)]];
+      return `<p class="bp-note">Signed in as ${esc(f.data.founder)} · session ends ${esc(new Date(f.data.sessionExpiresAt).toLocaleTimeString())}</p>
+        ${alerts.length ? `<div class="bp-warn"><p>Alerts: ${alerts.map((a) => esc(String(a).replaceAll('_', ' '))).join(', ')}</p></div>` : '<p class="bp-note">No alerts.</p>'}
+        ${o.integrity && !o.integrity.ok ? `<div class="bp-warn"><p>Integrity problems: ${esc((o.integrity.problems || []).join('; '))}</p></div>` : ''}
+        <div class="bp-grid">${stats.map(([k, v]) => `<div class="bp-stat"><b>${esc(k)}</b><span>${v}</span></div>`).join('')}</div>
+        <div class="bp-actions"><button type="button" class="bp-b" data-founder="refresh">Refresh</button></div>`;
+    }
+    return `<p>The Founder Executive Suite is reserved for the founder's oversight of the treasury, residents, businesses, payroll, ledger integrity and security alerts.</p>
+      ${f.status === 'error' ? `<div class="bp-warn"><p>${esc(f.error)}</p></div>` : ''}
+      <div class="bp-actions"><button type="button" class="bp-b on" data-founder="signin">Sign in with founder wallet</button></div>
+      <p class="bp-note">Connect your wallet with MY WALLET first. Your wallet will ask you to sign a one-time message; it never moves funds. Only the founder wallet is accepted.</p>`;
   }
   get open() { return this.isOpen; }
   openStation(station) { if (!this.reader.open(station)) return; this.isOpen = true; this.#ensureDom(); this.root?.classList.add('on'); this.render(); this.onOpen(true); }
@@ -69,7 +107,10 @@ export class BankPanel {
     d.body.appendChild(root); this.root = root;
     this.el = { kicker: root.querySelector('.bp-kicker'), title: root.querySelector('h2'), main: root.querySelector('.bp-main') };
     root.querySelector('.bp-x').addEventListener('click', () => this.close());
-    root.addEventListener('click', (e) => { const t = e.target.closest('[data-topic]'); if (t) { this.reader.topic(t.dataset.topic); this.render(); } });
+    root.addEventListener('click', (e) => {
+      const t = e.target.closest('[data-topic]'); if (t) { this.reader.topic(t.dataset.topic); this.render(); }
+      const f = e.target.closest('[data-founder]'); if (f) this.founderAction(f.dataset.founder);
+    });
     for (const type of ['keydown', 'keyup']) root.addEventListener(type, (e) => { if (e.code !== 'Escape') e.stopPropagation(); });
   }
   // The panel's HTML for the current view (also used by the tests, without a document).
@@ -91,7 +132,7 @@ export class BankPanel {
       if (m.status !== 'ok') return `<p>Market intelligence from the Nerdie Blaq trading bots: trends and indicators, signals and their confidence, past outcomes, and bot performance.</p><div class="bp-warn"><p>The historical archive was last audited on 5 June 2026 and is unavailable in this session. No market values are shown; it is never live and never substitutes placeholder prices.</p></div>`;
       return `${m.stale ? '<div class="bp-warn"><p>Historical archive — these are not live prices or current trading recommendations.</p></div>' : ''}<p class="bp-note">Historical · last recorded ${esc(m.lastRecorded)}</p>${(m.lines || []).map((l) => `<p>${esc(l)}</p>`).join('')}`;
     }
-    return `<p>The Founder Executive Suite is reserved for the founder's oversight of the treasury, residents, businesses, payroll, ledger integrity and security alerts.</p><div class="bp-warn"><p>Administration never happens inside the game. The founder's dashboard is a separate application with its own secure sign-in.</p></div>`;
+    return this.#founderHtml();
   }
   render() {
     if (!this.el || !this.reader.view) return;

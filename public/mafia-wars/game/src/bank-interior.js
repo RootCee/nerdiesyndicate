@@ -12,7 +12,7 @@ const hexCss = (h) => `#${h.toString(16).padStart(6, '0')}`;
 export const BANK_STATION_LABEL = Object.freeze({
   teller: 'TELLER', wallet: 'WALLET KIOSK', market: 'MARKET INTELLIGENCE', board: 'CITY ECONOMY BOARD', restricted: 'FOUNDER EXECUTIVE SUITE · RESTRICTED',
 });
-const STATION_VERB = Object.freeze({ teller: 'TALK', wallet: 'OPEN WALLET', market: 'VIEW', board: 'VIEW', restricted: 'INFO' });
+const STATION_VERB = Object.freeze({ teller: 'TALK', wallet: 'OPEN WALLET', market: 'VIEW', board: 'VIEW', restricted: 'ENTER' });
 
 function dataTexture(w, h, paint, repeat = [1, 1]) {
   const data = new Uint8Array(w * h * 4);

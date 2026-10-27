@@ -60,9 +60,9 @@ import { NpcRenderer, NPC_RENDER_RULES } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=bank-m2.2-rel1';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=bank-m2.2-rel2';
 
-const GAME_BUILD_ID = 'bank-m2.2-rel1';
+const GAME_BUILD_ID = 'bank-m2.2-rel2';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -110,8 +110,10 @@ Q.roadPaint = qs.get('roadPaint') !== '0';
 setLowMemoryAssets(Q.lowMemory);
 const $ = (id) => document.getElementById(id);
 const canvas = $('gl');
+let latestWalletState = null; // the website's last wallet report (founder sign-in uses it)
 const walletBridge = setupCityWalletBridge({
   onWalletState(state) {
+    latestWalletState = state;
     const button = $('cityBankButton');
     const walletHud = $('walletHud');
     const balance = $('walletBalance');
@@ -216,7 +218,19 @@ const libraryPanel = new LibraryPanel({ mobile: Q.mobile, onOpen: (open) => {
 } });
 // Phase 2.1 the Nerdie City Bank: read-only City Service figures (offline until a service is approved) and the bank panel
 const cityService = economyDemoAllowed(location) ? new EconomyDemoService() : new CityServiceClient();
-const bankPanel = new BankPanel({ cityService, onOpen: (open) => {
+// Founder Executive Suite: the connected founder wallet signs a one-time challenge (through the website),
+// then the suite shows the oversight figures for a 30-minute session. Only the founder wallet is accepted.
+const founderAccess = cityService.founderSignIn ? {
+  async signIn() {
+    const wallet = latestWalletState;
+    if (!wallet?.connected || !wallet.address) throw new Error('Connect your wallet with MY WALLET, then sign in.');
+    if (wallet.chainId !== 8453) throw new Error('Switch your wallet to Base, then sign in.');
+    if (!cityService.founderSignedIn) await cityService.founderSignIn({ address: wallet.address, sign: (message) => walletBridge.signFounderChallenge(message) });
+    return cityService.founderOverview();
+  },
+  refresh: () => cityService.founderOverview(),
+} : null;
+const bankPanel = new BankPanel({ cityService, founderAccess, onOpen: (open) => {
   if (open) { input.moveX = input.moveY = 0; input.fire = input.ads = input.sprint = false; document.exitPointerLock?.(); } else if (MATCH.started && !MATCH.over && !TOUCH) requestLock();
 } });
 const waypointBeacon = new THREE.Mesh(

@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useLocation } from 'react-router-dom';
-import { useAccount, useReadContract, useSwitchChain } from 'wagmi';
+import { useAccount, useReadContract, useSignMessage, useSwitchChain } from 'wagmi';
 import { BASE_CHAIN_ID, CONTRACTS } from '../lib/contracts';
 import {
+  createFounderSignatureMessage,
   createGameWalletMessage,
   createGameWalletState,
+  isFounderSignInText,
+  isFounderSignRequest,
   isGameWalletRequest,
   isTrustedGameWalletEvent,
 } from '../lib/gameWalletBridge';
@@ -96,16 +99,27 @@ export default function MafiaWarsBank() {
     if (walletOpen) drawerRef.current?.removeAttribute('inert');
     else drawerRef.current?.setAttribute('inert', '');
   }, [walletOpen]);
+  const { signMessageAsync } = useSignMessage();
+  // Founder Executive Suite: sign only the City Service's founder sign-in text for this site and wallet.
+  const signFounderChallenge = useCallback(async (gameWindow: Window, requestId: string, message: string) => {
+    const reply = (result: { signature: `0x${string}` } | { error: string }) => gameWindow.postMessage(createFounderSignatureMessage(requestId, result), window.location.origin);
+    if (!walletAddress) return reply({ error: 'Connect your wallet with MY WALLET, then sign in.' });
+    if (!isFounderSignInText(message, window.location.host, walletAddress)) return reply({ error: 'That sign-in request was not recognised, so nothing was signed.' });
+    try { reply({ signature: await signMessageAsync({ account: walletAddress, message }) }); }
+    catch { reply({ error: 'The wallet did not sign. Nothing was changed.' }); }
+  }, [signMessageAsync, walletAddress]);
   useEffect(() => {
     const onMessage = (event: MessageEvent<unknown>) => {
       const gameWindow = iframeRef.current?.contentWindow;
-      if (!gameWindow || !isTrustedGameWalletEvent(event, window.location.origin, gameWindow) || !isGameWalletRequest(event.data)) return;
+      if (!gameWindow || !isTrustedGameWalletEvent(event, window.location.origin, gameWindow)) return;
+      if (isFounderSignRequest(event.data)) { void signFounderChallenge(gameWindow, event.data.payload.requestId, event.data.payload.message); return; }
+      if (!isGameWalletRequest(event.data)) return;
       if (event.data.type === 'request-state') sendWalletState();
       if (event.data.type === 'open-bank') setWalletOpen(true);
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [sendWalletState]);
+  }, [sendWalletState, signFounderChallenge]);
 
   return (
     <main className="fixed inset-0 z-[60] overflow-hidden bg-black text-neutral-100">

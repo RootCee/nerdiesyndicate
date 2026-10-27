@@ -28,6 +28,30 @@ export class CityServiceClient {
       ...signalLines].filter(Boolean);
     return { ...body, status: 'ok', lastRecorded: recorded, lines, ticker: `HISTORICAL MARKET ARCHIVE · LAST RECORD ${recorded} · NOT LIVE PRICES · ` };
   }); }
+  // Founder Executive Suite: challenge -> the founder wallet signs (through the website) -> 30-minute pass ->
+  // oversight figures. The pass lives only in memory; reloading the game signs out.
+  async founderSignIn({ address, sign }) {
+    if (!this.endpoint || !this.fetch) throw new Error('The City Service is not connected.');
+    const post = async (path, body) => {
+      const r = await this.fetch(`${this.endpoint}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify(body) });
+      if (r.status === 403 || r.status === 401) throw new Error('This wallet is not authorized for the Founder Executive Suite.');
+      if (!r.ok) throw new Error(`Founder sign-in is unavailable (HTTP ${r.status}).`);
+      return r.json();
+    };
+    const challenge = await post('/v1/founder/challenge', { address });
+    const signature = await sign(challenge.message);
+    const session = await post('/v1/founder/session', { address, nonce: challenge.nonce, signature });
+    this.founderSession = { token: session.token, founder: session.founder, expiresAt: this.now() + session.expiresInMinutes * 60_000 };
+    return this.founderSession;
+  }
+  get founderSignedIn() { return !!this.founderSession && this.founderSession.expiresAt > this.now(); }
+  async founderOverview() {
+    if (!this.founderSignedIn) throw new Error('Sign in with the founder wallet first.');
+    const r = await this.fetch(`${this.endpoint}/v1/founder/overview`, { method: 'GET', headers: { accept: 'application/json', authorization: `Bearer ${this.founderSession.token}` } });
+    if (r.status === 401) { this.founderSession = null; throw new Error('Your founder session ended. Sign in again.'); }
+    if (!r.ok) throw new Error(`The founder overview is unavailable (HTTP ${r.status}).`);
+    return r.json();
+  }
   #snapshot(path, ttl, shape) {
     if (!this.endpoint || !this.fetch) return { status: 'offline' };
     const hit = this.cache.get(path);

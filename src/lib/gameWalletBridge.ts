@@ -87,6 +87,46 @@ export function isGameWalletState(value: unknown): value is GameWalletMessage & 
     && validBalance;
 }
 
+// ---- Founder Executive Suite sign-in. The game asks the site to sign the City Service's one-time
+// challenge with the connected wallet. The site signs nothing but this exact sign-in text, for its own
+// domain and the connected address, so the bridge can never be used to sign anything else.
+export interface FounderSignRequest {
+  channel: typeof GAME_WALLET_BRIDGE_CHANNEL;
+  version: typeof GAME_WALLET_BRIDGE_VERSION;
+  type: 'sign-founder-challenge';
+  payload: { requestId: string; message: string };
+}
+
+export function isFounderSignRequest(value: unknown): value is FounderSignRequest {
+  if (typeof value !== 'object' || value === null) return false;
+  const message = value as Record<string, unknown>;
+  const payload = message.payload as Record<string, unknown> | undefined;
+  return message.channel === GAME_WALLET_BRIDGE_CHANNEL
+    && message.version === GAME_WALLET_BRIDGE_VERSION
+    && message.type === 'sign-founder-challenge'
+    && Object.keys(message).every((key) => ['channel', 'version', 'type', 'payload'].includes(key))
+    && typeof payload === 'object' && payload !== null
+    && Object.keys(payload).every((key) => ['requestId', 'message'].includes(key))
+    && typeof payload.requestId === 'string' && /^[a-z0-9-]{4,64}$/.test(payload.requestId)
+    && typeof payload.message === 'string' && payload.message.length <= 1024;
+}
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+export function isFounderSignInText(message: string, host: string, address: string): boolean {
+  const pattern = new RegExp(
+    `^${escapeRegExp(host)} wants you to sign in with your Ethereum account:\\n(0x[0-9a-fA-F]{40})\\n\\n`
+    + 'Nerdie City Bank: Founder Executive Suite access\\. This signature does not move funds or approve any transaction\\.\\n\\n'
+    + `URI: https://${escapeRegExp(host)}\\nVersion: 1\\nChain ID: 8453\\nNonce: [0-9a-f]{32}$`,
+  );
+  const match = pattern.exec(message);
+  return !!match && match[1].toLowerCase() === address.toLowerCase();
+}
+
+export function createFounderSignatureMessage(requestId: string, result: { signature: `0x${string}` } | { error: string }) {
+  return { channel: GAME_WALLET_BRIDGE_CHANNEL, version: GAME_WALLET_BRIDGE_VERSION, type: 'founder-signature' as const, payload: { requestId, ...result } };
+}
+
 export function isTrustedGameWalletEvent(
   event: Pick<MessageEvent, 'origin' | 'source'>,
   expectedOrigin: string,

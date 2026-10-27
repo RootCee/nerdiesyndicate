@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  createFounderSignatureMessage,
+  isFounderSignInText,
+  isFounderSignRequest,
   createGameWalletMessage,
   createGameWalletState,
   isGameWalletRequest,
@@ -61,4 +64,27 @@ test('trusts bridge events only from the expected origin and iframe source', () 
   assert.equal(isTrustedGameWalletEvent({ origin: 'https://nerdieblaq.xyz', source: iframeWindow }, 'https://nerdieblaq.xyz', iframeWindow), true);
   assert.equal(isTrustedGameWalletEvent({ origin: 'https://attacker.example', source: iframeWindow }, 'https://nerdieblaq.xyz', iframeWindow), false);
   assert.equal(isTrustedGameWalletEvent({ origin: 'https://nerdieblaq.xyz', source: {} as MessageEventSource }, 'https://nerdieblaq.xyz', iframeWindow), false);
+});
+
+// Founder Executive Suite: the exact text the City Service issues (city-service/src/founder-auth.js).
+const FOUNDER = '0xA0719F02A733472EF82ff24BC182e583cAea6D45';
+const founderText = (host: string, address: string, nonce = 'a'.repeat(32)) => `${host} wants you to sign in with your Ethereum account:\n${address}\n\n`
+  + 'Nerdie City Bank: Founder Executive Suite access. This signature does not move funds or approve any transaction.\n\n'
+  + `URI: https://${host}\nVersion: 1\nChain ID: 8453\nNonce: ${nonce}`;
+
+test('the site signs only the founder sign-in text, for its own domain and the connected wallet', () => {
+  assert.equal(isFounderSignInText(founderText('nerdieblaq.xyz', FOUNDER), 'nerdieblaq.xyz', FOUNDER.toLowerCase()), true);
+  assert.equal(isFounderSignInText(founderText('evil.example', FOUNDER), 'nerdieblaq.xyz', FOUNDER), false, 'another site');
+  assert.equal(isFounderSignInText(founderText('nerdieblaq.xyz', '0x000000000000000000000000000000000000dEaD'), 'nerdieblaq.xyz', FOUNDER), false, 'another wallet');
+  assert.equal(isFounderSignInText(founderText('nerdieblaq.xyz', FOUNDER) + '\nApprove transfer of all tokens', 'nerdieblaq.xyz', FOUNDER), false, 'extra text');
+  assert.equal(isFounderSignInText(founderText('nerdieblaq.xyz', FOUNDER, 'nothex'), 'nerdieblaq.xyz', FOUNDER), false, 'bad nonce');
+  assert.equal(isFounderSignInText('Transfer 1000 NERDIE', 'nerdieblaq.xyz', FOUNDER), false);
+});
+
+test('founder signature requests and replies have a strict shape', () => {
+  const request = { channel: 'nerdie-city-wallet', version: 1, type: 'sign-founder-challenge', payload: { requestId: 'abc-123', message: 'x' } };
+  assert.equal(isFounderSignRequest(request), true);
+  assert.equal(isFounderSignRequest({ ...request, extra: 1 }), false);
+  assert.equal(isFounderSignRequest({ ...request, payload: { requestId: 'abc-123', message: 'x'.repeat(2000) } }), false);
+  assert.deepEqual(createFounderSignatureMessage('abc-123', { error: 'no' }), { channel: 'nerdie-city-wallet', version: 1, type: 'founder-signature', payload: { requestId: 'abc-123', error: 'no' } });
 });
