@@ -3,7 +3,6 @@
 // odd on one side and even on the other, like a real city. Pure: the bank panel and resident cards read it.
 import { createCityPlan, APARTMENT_SITE } from './city-layout.js';
 import { STREET_NAMES } from './city-pois.js';
-import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 
 const NORMALS = Object.freeze({ north: [0, 1], south: [0, -1], east: [1, 0], west: [-1, 0] });
 // Road segments share a street's name ('central-cross-1' is Central Cross).
@@ -40,6 +39,7 @@ export function apartmentLabel(propertyId) {
 // A resident's home address, e.g. "Apt 101, North Court Apartments, 207 Main Street".
 export function residentAddress(propertyId) {
   const apt = apartmentLabel(propertyId); if (!apt) return null;
-  const door = MULTIPLAYER_SPACES[APARTMENT_SITE.id].entry, street = streetAddress(door, 'west');
+  // North Court's street door: 1.4 m in front of its west facade (multiplayer-spaces.js apartmentSpace)
+  const door = { x: APARTMENT_SITE.x - APARTMENT_SITE.width / 2 - 1.4, z: APARTMENT_SITE.z }, street = streetAddress(door, 'west');
   return `${apt}, ${APARTMENT_SITE.name}${street ? `, ${street.text}` : ''}`;
 }

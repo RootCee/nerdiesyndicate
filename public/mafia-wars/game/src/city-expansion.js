@@ -1,5 +1,5 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
-import { MAP, addCollider, mapRects } from './world.js';
+import { MAP, addCollider, removeColliders, mapRects } from './world.js';
 import { createCityPlan, chunkVisible, FRONT_NORMALS } from './city-layout.js';
 import { HybridApartmentSystem } from './apartment-system.js';
 import { HybridHouseSystem } from './house-system.js';
@@ -22,6 +22,7 @@ import { ACADEMY_CHUNKS, ACADEMY_GATE, ACADEMY_AXIS_Z, LIBRARY, LIBRARY_FOOT } f
 import { LibrarySystem } from './library-system.js';
 import { BankInteriorSystem } from './bank-interior.js';
 import { bankBuilding } from './bank-layout.js';
+import { GenericInteriorSystem } from './generic-interiors.js';
 
 const material = (color, roughness = 0.88, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
 const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
@@ -316,8 +317,10 @@ export function buildCityExpansion(scene, Q = {}) {
   addCollider(MAP.minX - 2, MAP.minZ - 2, MAP.maxX + 2, MAP.minZ, 0, 12, { boundary: true });
   addCollider(MAP.minX - 2, MAP.maxZ, MAP.maxX + 2, MAP.maxZ + 2, 0, 12, { boundary: true });
 
+  // Stage 2: every other building can be entered (interiors are built on entry, removed on exit)
+  const interiors = new GenericInteriorSystem(scene, { addCollider, removeColliders, mobile: plan.profile.key === 'mobile' });
   const city = {
-    plan, ground, chunks, apartment, house, originalHouse, duplicatedHouse, combatVenue, bank, gunShop, library, bankInterior, infrastructure, mode: 'free-roam',
+    plan, ground, chunks, apartment, house, originalHouse, duplicatedHouse, combatVenue, bank, gunShop, library, bankInterior, interiors, infrastructure, mode: 'free-roam',
     // M7.2: the clock tower's hands follow the city clock (hours 0..24)
     academyClock: { hands: clockHands, hours: null },
     setAcademyClock(hours) {
@@ -386,6 +389,7 @@ export function buildCityExpansion(scene, Q = {}) {
         bank: bank?.site.id || null,
         library: library?.site.id || null,
         bankInterior: bankInterior?.site.id || null,
+        enterableBuildings: interiors.entries.length,
         bounds: { ...MAP },
       };
     },

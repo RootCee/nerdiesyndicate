@@ -74,6 +74,8 @@ export const lamps = [];       // {x,y,z, warm}
 export const windowsLit = [];
 export const collisionBroadphaseStats = { lastCandidates: 0, maxCandidates: 0 };
 export function addCollider(minX, minZ, maxX, maxZ, minY, maxY, extra = {}) { const c = { minX, maxX, minY, maxY, minZ, maxZ, ...extra }; colliders.push(c); return c; }
+// Stage 2: an interior built on entry removes its colliders on the way out.
+export function removeColliders(list) { const gone = new Set(list); for (let i = colliders.length - 1; i >= 0; i--) if (gone.has(colliders[i])) colliders.splice(i, 1); }
 const solid = addCollider;
 export const houseDescs = [];   // destructible houses (see destruction.js addHouse)
 let curWindows = null;
