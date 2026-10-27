@@ -1,12 +1,18 @@
-// Phase 2.1: the game's read-only view of the City Service (city-service/ in this repo). No build points at
-// a City Service yet (CITY_SERVICE_ENDPOINT is null), so everything reads as "offline" and the bank shows an
-// honest not-connected state instead of figures. When the service is deployed and approved, set the endpoint
-// here. Requests are GET only, cached, and polled at most once a minute (never per frame).
+// Phase 2.1: the game's read-only view of the City Service (city-service/ in this repo). Production
+// (CITY_SERVICE_ENDPOINT) stays null until the founder approves the production promotion, so the live site
+// shows an honest not-connected state. Preview sites (*.vercel.app) read the separate review City Service,
+// the same single City Service, open only to preview sites during review. Requests are GET only, cached, and polled at most once a minute.
 export const CITY_SERVICE_ENDPOINT = null;
+export const REVIEW_CITY_SERVICE_ENDPOINT = 'https://nerdie-city-service.buddieroots.workers.dev';
+export function resolveCityServiceEndpoint(locationLike = globalThis.location) {
+  const host = String(locationLike?.hostname || '').toLowerCase();
+  if (host.endsWith('.vercel.app')) return REVIEW_CITY_SERVICE_ENDPOINT;
+  return CITY_SERVICE_ENDPOINT;
+}
 const ECONOMY_TTL_MS = 60_000, MARKET_TTL_MS = 5 * 60_000;
 
 export class CityServiceClient {
-  constructor({ endpoint = CITY_SERVICE_ENDPOINT, fetchImpl = globalThis.fetch?.bind(globalThis), now = () => Date.now() } = {}) {
+  constructor({ endpoint = resolveCityServiceEndpoint(), fetchImpl = globalThis.fetch?.bind(globalThis), now = () => Date.now() } = {}) {
     this.endpoint = endpoint; this.fetch = fetchImpl; this.now = now; this.cache = new Map(); this.pending = new Map();
   }
   get connected() { return !!this.endpoint; }
