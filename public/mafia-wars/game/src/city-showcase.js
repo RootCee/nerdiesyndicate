@@ -2,7 +2,7 @@ import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { KitBatch, facade, fbox, fpoint, windowUnit, waterTank, roofUnits, signMaterial, PALETTE } from './city-showcase-kit.js';
 import { SHOWCASE_HEROES, SHOWCASE_BUSINESSES } from './city-showcase-layout.js';
 import { STOREFRONT_BUSINESSES } from './city-pois.js';
-import { CIVIC_STAIRS, HOUSE_STOOP, entrySteps, flightDepth } from './entry-steps.js';
+import { CIVIC_STAIRS, HOUSE_STOOP, LIBRARY_STAIRS, entrySteps, flightDepth } from './entry-steps.js';
 import { GUN_SHOP_BUILDING_ID } from './gun-shop-layout.js';
 
 // M7.0B1 North Market showcase buildings. Every design keeps its building's footprint, height,
@@ -591,8 +591,191 @@ function midrise(batch, kit, b, parent, { mobile = false } = {}) {
   if (r() < 0.5) batch.box(m.concrete, b.x - b.width * 0.25, b.height + 1.2, b.z + b.depth * 0.2, 2.6, 2.4, 2.6);
 }
 
+// ------------------------------------------------- M7.2 the Nerdie Blaq Academy
+// A name board in the Academy's colours: stone, gold rules, and the name in charcoal or cream.
+function academySign(text, { bg = 0xd8cfbf, fg = hexCss(PALETTE.charcoal), sub = '' } = {}) {
+  const draw = (ctx, w, h) => {
+    ctx.fillStyle = hexCss(bg); ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = hexCss(PALETTE.gold); ctx.fillRect(w * 0.05, h * 0.1, w * 0.9, 5); ctx.fillRect(w * 0.05, h * 0.88, w * 0.9, 5);
+    ctx.fillStyle = fg; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = `700 ${sub ? 96 : 110}px Barlow, sans-serif`; ctx.fillText(text, w / 2, h * (sub ? 0.4 : 0.5), w * 0.86);
+    if (sub) { ctx.font = '500 46px Barlow, sans-serif'; ctx.fillText(sub, w / 2, h * 0.73, w * 0.8); }
+  };
+  PREVIEW.set(draw, bg); return draw;
+}
+// The Syndicate crest: a gold ring, the NB monogram, a laurel line. Used on the Library's pediment and the gate.
+SIGN_ART.crest = (ctx, w, h) => {
+  ctx.fillStyle = hexCss(PALETTE.purple); ctx.fillRect(0, 0, w, h);
+  ctx.beginPath(); ctx.arc(w / 2, h / 2, w * 0.42, 0, Math.PI * 2); ctx.lineWidth = 16; ctx.strokeStyle = hexCss(PALETTE.gold); ctx.stroke();
+  ctx.beginPath(); ctx.arc(w / 2, h / 2, w * 0.34, 0, Math.PI * 2); ctx.lineWidth = 4; ctx.stroke();
+  ctx.fillStyle = '#f0d28a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '700 150px Barlow, sans-serif'; ctx.fillText('NB', w / 2, h * 0.47);
+  ctx.font = '600 30px Barlow, sans-serif'; ctx.fillText('ACADEMY · EST. 2025', w / 2, h * 0.72);
+};
+PREVIEW.set(SIGN_ART.crest, PALETTE.purple);
+SIGN_ART.library = academySign('NERDIE BLAQ ACADEMY LIBRARY');
+SIGN_ART.academyGate = academySign('NERDIE BLAQ ACADEMY', { bg: PALETTE.green, fg: '#efd08a', sub: 'KNOWLEDGE · OWNERSHIP · COMMUNITY' });
+// a clock face: cream dial, gold ring, twelve hour marks (the hands are separate meshes the city turns)
+SIGN_ART.clockFace = (ctx, w, h) => {
+  ctx.fillStyle = '#16181c'; ctx.fillRect(0, 0, w, h);
+  ctx.beginPath(); ctx.arc(w / 2, h / 2, w * 0.48, 0, Math.PI * 2); ctx.fillStyle = '#efe6cf'; ctx.fill(); ctx.lineWidth = 14; ctx.strokeStyle = hexCss(PALETTE.gold); ctx.stroke();
+  ctx.fillStyle = hexCss(PALETTE.charcoal); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '600 44px Barlow, sans-serif';
+  const numerals = ['XII', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI'];
+  for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; ctx.fillText(numerals[i], w / 2 + Math.sin(a) * w * 0.36, h / 2 - Math.cos(a) * h * 0.36); ctx.fillRect(w / 2 + Math.sin(a) * w * 0.44 - 3, h / 2 - Math.cos(a) * h * 0.44 - 3, 6, 6); }
+  ctx.font = '500 26px Barlow, sans-serif'; ctx.fillStyle = hexCss(PALETTE.purple); ctx.fillText('NERDIE BLAQ', w / 2, h * 0.66);
+};
+PREVIEW.set(SIGN_ART.clockFace, 0xefe6cf);
+const HALL_SIGNS = new Map();
+const hallSign = (b) => HALL_SIGNS.get(b.id) || HALL_SIGNS.set(b.id, academySign(b.sign, { bg: b.accent === 'purple' ? PALETTE.purple : PALETTE.green, fg: '#efd08a' })).get(b.id);
+
+// The Library: a stone hall on a 1.2 m plinth up broad stairs, an engaged portico of eight columns
+// under the name and the crest, tall arched windows on every side, and a glass dome over the
+// reading room that glows at night.
+function library(batch, kit, b, parent) {
+  const m = kit.m, f = facade(b, b.front), base = LIBRARY_STAIRS.height;
+  batch.box(m.stone, b.x, b.height / 2, b.z, b.width, b.height, b.depth);
+  batch.box(m.concrete, b.x, base / 2, b.z, b.width + 0.4, base, b.depth + 0.4);
+  course(batch, kit, b, base + 0.02, m.gold); course(batch, kit, b, 7.2, m.trim);
+  const flight = entrySteps(b);
+  for (const st of flight) batch.box(st.part === 'step' ? m.stone : m.concrete, (st.minX + st.maxX) / 2, st.top / 2, (st.minZ + st.maxZ) / 2, st.maxX - st.minX, st.top, st.maxZ - st.minZ);
+  for (const st of flight.filter((x) => x.part === 'cheek')) batch.box(m.trim, (st.minX + st.maxX) / 2, st.top + 0.03, (st.minZ + st.maxZ) / 2, st.maxX - st.minX + 0.1, 0.06, st.maxZ - st.minZ + 0.1);
+  for (const sd of [-1, 1]) { // lanterns at the foot of each cheek wall
+    const [x, z] = fpoint(f, sd * (LIBRARY_STAIRS.width + LIBRARY_STAIRS.cheek) / 2, flightDepth(LIBRARY_STAIRS) - 0.3);
+    batch.cyl(m.frame, x, LIBRARY_STAIRS.cheekHeight + 0.6, z, 0.07, 1.2, 8); batch.box(m.lamp, x, LIBRARY_STAIRS.cheekHeight + 1.3, z, 0.34, 0.42, 0.34); batch.box(m.charcoal, x, LIBRARY_STAIRS.cheekHeight + 1.56, z, 0.44, 0.08, 0.44);
+  }
+  // portico: eight engaged columns over the central 20 m, bronze doors in the middle bay
+  const cols = [-10.5, -7.5, -4.5, -1.5, 1.5, 4.5, 7.5, 10.5];
+  for (const a of cols) {
+    fbox(batch, m.trim, f, a, base + 0.2, 0.1, 1.1, 0.4, 0.62);
+    const [x, z] = fpoint(f, a, 0.02); batch.cyl(m.trim, x, base + 0.4 + 4.3, z, 0.46, 8.6, 18, 0.4); // engaged: within 0.5 m of the wall
+    fbox(batch, m.trim, f, a, base + 9.15, 0.1, 1.15, 0.3, 0.62); fbox(batch, m.lamp, f, a, base + 0.45, 0.42, 0.36, 0.06, 0.14);
+  }
+  for (let i = 0; i + 1 < cols.length; i++) {
+    const a = (cols[i] + cols[i + 1]) / 2;
+    if (Math.abs(a) < 0.1) {
+      fbox(batch, m.gold, f, a, base + 2.1, 0.06, 2.5, 4.2, 0.08); fbox(batch, m.charcoal, f, a, base + 2.05, 0.1, 2.2, 4.0, 0.06);
+      fbox(batch, m.gold, f, a, base + 2.05, 0.14, 0.05, 4.0, 0.04); for (const s2 of [-1, 1]) fbox(batch, m.gold, f, a + s2 * 0.32, base + 1.8, 0.16, 0.05, 0.7, 0.06);
+      fbox(batch, m.glassWarm, f, a, base + 5.2, 0.06, 2.2, 1.4, 0.04); arch(batch, m.glassWarm, f, a, base + 5.9, 0.06, 1.1, 0.04); arch(batch, m.trim, f, a, base + 5.9, 0.03, 1.28, 0.1);
+      continue;
+    }
+    fbox(batch, m.glassWarm, f, a, base + 3.9, 0.03, 1.6, 5.2, 0.04); arch(batch, m.glassWarm, f, a, base + 6.5, 0.03, 0.8, 0.04); arch(batch, m.trim, f, a, base + 6.5, 0.02, 0.95, 0.12);
+    for (const k of [-1, 1]) fbox(batch, m.gold, f, a + k * 0.27, base + 3.9, 0.06, 0.05, 5.2, 0.05);
+    for (const y of [base + 2.6, base + 4.6]) fbox(batch, m.gold, f, a, y, 0.06, 1.6, 0.05, 0.05);
+    fbox(batch, m.trim, f, a, base + 1.2, 0.12, 2.0, 0.12, 0.26);
+  }
+  // entablature with the name, the pediment and the crest
+  fbox(batch, m.stone, f, 0, base + 9.9, 0.25, 23.2, 1.3, 0.5);
+  for (const y of [base + 9.28, base + 10.53]) fbox(batch, m.gold, f, 0, y, 0.51, 23.2, 0.05, 0.02);
+  signPlane(parent, drawn(kit, SIGN_ART.library, { w: 1280, h: 140, day: 0.1, night: 0.85 }), f, 0, base + 9.9, 0.515, 17, 1.0, 'showcase-library-sign');
+  const tri = new THREE.Shape([new THREE.Vector2(-11.8, 0), new THREE.Vector2(11.8, 0), new THREE.Vector2(0, 2.4)]);
+  const [px, pz] = fpoint(f, 0, 0.5), rotY = Math.atan2(f.nx, f.nz);
+  batch.add(m.stone, new THREE.ShapeGeometry(tri).rotateY(rotY).translate(px, b.height - 0.05, pz));
+  batch.add(m.stone, new THREE.ExtrudeGeometry(tri, { depth: 0.5, bevelEnabled: false }).translate(0, 0, -0.5).rotateY(rotY).translate(px, b.height - 0.05, pz));
+  signPlane(parent, drawn(kit, SIGN_ART.crest, { w: 512, h: 512, day: 0.15, night: 0.9 }), f, 0, b.height + 0.95, 0.53, 1.6, 1.6, 'showcase-library-crest');
+  // purple banners on the outer pylons, then the wings' arched windows; arched windows on the other sides
+  const emblem = drawn(kit, SIGN_ART.emblem, { w: 256, h: 512, day: 0.1, night: 0.7 });
+  for (const sd of [-1, 1]) {
+    signPlane(parent, emblem, f, sd * 12.6, base + 5.0, 0.06, 1.4, 2.8, `showcase-library-banner-${sd < 0 ? 'l' : 'r'}`); fbox(batch, m.gold, f, sd * 12.6, base + 6.5, 0.06, 1.5, 0.06, 0.1);
+    for (const a of [15.2, 18.8]) { fbox(batch, m.glassWarm, f, sd * a, base + 3.6, 0.03, 1.6, 4.4, 0.04); arch(batch, m.glassWarm, f, sd * a, base + 5.8, 0.03, 0.8, 0.04); arch(batch, m.trim, f, sd * a, base + 5.8, 0.02, 0.95, 0.12); fbox(batch, m.trim, f, sd * a, base + 1.3, 0.12, 2.0, 0.12, 0.26); windowUnit(batch, kit, f, sd * a, 9.6, 1.4, 1.6, { glass: m.glassWarm, surround: m.trim }); }
+  }
+  for (const side of ['north', 'south', 'east']) {
+    const g = facade(b, side), n = side === 'east' ? 10 : 9;
+    for (let i = 0; i < n; i++) {
+      const a = (i - (n - 1) / 2) * (g.length / n);
+      fbox(batch, i % 2 ? m.glassWarm : m.glassCool, g, a, base + 3.6, 0.03, 1.6, 4.4, 0.04); arch(batch, i % 2 ? m.glassWarm : m.glassCool, g, a, base + 5.8, 0.03, 0.8, 0.04); arch(batch, m.trim, g, a, base + 5.8, 0.02, 0.95, 0.12);
+      fbox(batch, m.trim, g, a, base + 1.3, 0.12, 2.0, 0.12, 0.26); windowUnit(batch, kit, g, a, 9.6, 1.4, 1.6, { glass: i % 3 ? m.glass : m.glassWarm, surround: m.trim });
+    }
+  }
+  cornice(batch, kit, b, b.height - 0.35, m.trim, 0.5, 0.36);
+  parapet(batch, kit, b, m.stone, 0.7, 0.35);
+  // the reading-room dome: a drum of arched lights, glass panes between gold ribs, a lantern
+  const dx = b.x + 1, dz = b.z, top = b.height;
+  batch.cyl(m.stone, dx, top + 1.5, dz, 7.4, 3.0, 32); batch.cyl(m.trim, dx, top + 3.15, dz, 7.7, 0.3, 32);
+  for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; batch.add(m.glassWarm, new THREE.BoxGeometry(0.06, 1.8, 1.6).translate(7.42, 0, 0).rotateY(-a).translate(dx, top + 1.5, dz)); }
+  batch.add(m.glassWarm, new THREE.SphereGeometry(7.5, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2).translate(dx, top + 3.3, dz));
+  for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; batch.add(m.gold, new THREE.TorusGeometry(7.54, 0.09, 4, 24, Math.PI / 2).rotateY(-a).translate(dx, top + 3.3, dz)); }
+  batch.add(m.gold, new THREE.TorusGeometry(7.55 * Math.cos(Math.PI / 6) + 0.03, 0.11, 4, 40).rotateX(Math.PI / 2).translate(dx, top + 3.3 + 7.55 * Math.sin(Math.PI / 6), dz)); // a ring a third of the way up
+  batch.cyl(m.trim, dx, top + 11.3, dz, 1.1, 1.4, 12); batch.cyl(m.glassWarm, dx, top + 11.3, dz, 1.12, 1.0, 12);
+  batch.cyl(m.gold, dx, top + 12.25, dz, 1.2, 0.5, 12, 0.1); batch.blob(m.gold, dx, top + 12.8, dz, 0.3, 1);
+}
+
+// A collegiate hall: red brick with stone quoins and dressings, three floors of sash windows, an
+// entrance pavilion with a pediment and the hall's name, a slate roof and a cupola.
+function academyHall(batch, kit, b, parent, { mobile = false } = {}) {
+  const m = kit.m, f = facade(b, b.front), accent = b.accent === 'purple' ? m.purple : m.green;
+  batch.box(m.brick, b.x, b.height / 2, b.z, b.width, b.height, b.depth);
+  batch.box(m.concrete, b.x, 0.45, b.z, b.width + 0.24, 0.9, b.depth + 0.24);
+  course(batch, kit, b, 4.0, m.trim); course(batch, kit, b, 8.0, m.trim);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) { // stone quoins at the corners (plain corner strips on mobile)
+    if (mobile) { batch.box(m.trim, b.x + sx * (b.width / 2 - 0.3), b.height / 2, b.z + sz * (b.depth / 2 + 0.04), 0.7, b.height - 1, 0.1); batch.box(m.trim, b.x + sx * (b.width / 2 + 0.04), b.height / 2, b.z + sz * (b.depth / 2 - 0.3), 0.1, b.height - 1, 0.7); continue; }
+    for (let k = 0; k < 10; k++) { const w = k % 2 ? 0.9 : 0.6; batch.box(m.trim, b.x + sx * (b.width / 2 - w / 2 + 0.04), 1.0 + k * 1.08, b.z + sz * (b.depth / 2 + 0.04), w, 0.5, 0.1); batch.box(m.trim, b.x + sx * (b.width / 2 + 0.04), 1.0 + k * 1.08, b.z + sz * (b.depth / 2 - w / 2 + 0.04), 0.1, 0.5, w); }
+  }
+  for (const side of ['north', 'south', 'east', 'west']) {
+    const g = facade(b, side), front = side === b.front, bays = Math.round(g.length / 3.6), span = g.length / bays;
+    for (let floor = 0; floor < 3; floor++) for (let i = 0; i < bays; i++) {
+      const a = -g.length / 2 + span * (i + 0.5);
+      if (front && Math.abs(a) < 4.2) continue; // the entrance pavilion
+      const glass = (i + floor) % 3 ? m.glass : m.glassWarm;
+      if (mobile && !front) { fbox(batch, glass, g, a, 2.2 + floor * 4.0, 0.03, 1.25, 2.0, 0.04); fbox(batch, m.trim, g, a, 3.29 + floor * 4.0, 0.08, 1.57, 0.18, 0.16); continue; } // away from the quad: glass and a lintel
+      windowUnit(batch, kit, g, a, 2.2 + floor * 4.0, 1.25, 2.0, { glass, surround: m.trim, mullion: !mobile });
+    }
+  }
+  // entrance pavilion: stone face, four pilasters, doors with a fanlight, the name board, a pediment
+  fbox(batch, m.stone, f, 0, b.height / 2, 0.15, 8.4, b.height, 0.3);
+  for (const a of [-3.6, -1.3, 1.3, 3.6]) fbox(batch, m.trim, f, a, b.height / 2, 0.36, 0.6, b.height - 0.4, 0.14);
+  fbox(batch, m.charcoal, f, 0, 1.75, 0.34, 1.9, 3.1, 0.06); fbox(batch, m.gold, f, 0, 1.75, 0.38, 0.05, 3.1, 0.04); arch(batch, m.glassWarm, f, 0, 3.3, 0.33, 0.95, 0.04); arch(batch, m.trim, f, 0, 3.3, 0.32, 1.1, 0.12);
+  for (const fl of [1, 2]) windowUnit(batch, kit, f, 0, 2.2 + fl * 4.0, 1.4, 2.1, { glass: m.glassWarm, surround: m.trim });
+  signPlane(parent, drawn(kit, hallSign(b), { w: 1024, h: 150, res: 0.7, day: 0.15, night: 0.9 }), f, 0, 4.75, 0.46, 7.0, 1.0, `showcase-${b.id}-sign`);
+  for (const sd of [-1, 1]) { fbox(batch, accent, f, sd * 5.4, 6.2, 0.08, 1.0, 3.2, 0.05); fbox(batch, m.gold, f, sd * 5.4, 7.85, 0.09, 1.1, 0.06, 0.08); fbox(batch, m.lamp, f, sd * 1.5, 3.0, 0.42, 0.24, 0.36, 0.2); }
+  cornice(batch, kit, b, b.height - 0.25, m.trim, 0.35, 0.32);
+  gableRoof(batch, kit, b, m.roofCharcoal, m.brick, 3.4, 0.4);
+  const tri = new THREE.Shape([new THREE.Vector2(-4.4, 0), new THREE.Vector2(4.4, 0), new THREE.Vector2(0, 1.9)]), [px, pz] = fpoint(f, 0, 0.42), rotY = Math.atan2(f.nx, f.nz);
+  batch.add(m.stone, new THREE.ExtrudeGeometry(tri, { depth: 0.4, bevelEnabled: false }).translate(0, 0, -0.4).rotateY(rotY).translate(px, b.height + 0.05, pz));
+  disc(batch, accent, f, 0, b.height + 0.85, 0.44, 0.5, 0.05); disc(batch, m.gold, f, 0, b.height + 0.85, 0.43, 0.6, 0.04);
+  // the cupola on the ridge
+  const cx = b.x, cz = b.z, top = b.height + 3.4;
+  batch.box(m.trim, cx, top + 0.9, cz, 2.2, 1.8, 2.2); for (const side of ['north', 'south', 'east', 'west']) { const g = facade({ x: cx, z: cz, width: 2.2, depth: 2.2 }, side); arch(batch, m.glassWarm, g, 0, top + 1.1, 0.02, 0.45, 0.04); }
+  batch.add(m.green, new THREE.ConeGeometry(1.7, 1.8, 8).rotateY(Math.PI / 8).translate(cx, top + 2.7, cz)); batch.blob(m.gold, cx, top + 3.75, cz, 0.18, 1);
+}
+
+// The clock tower: a stone shaft with brick panels, a clock face on each side (live hands), an open
+// belfry, and a copper spire. The hands go on parent.userData.clockHands for the city to turn.
+function clockTower(batch, kit, b, parent) {
+  const m = kit.m, H = b.height, shaftTop = H - 12; // a 7.4 m copper spire over the belfry
+  batch.box(m.stone, b.x, shaftTop / 2, b.z, b.width, shaftTop, b.depth);
+  batch.box(m.concrete, b.x, 0.5, b.z, b.width + 0.6, 1.0, b.depth + 0.6);
+  for (const side of ['north', 'south', 'east', 'west']) {
+    const g = facade(b, side);
+    fbox(batch, m.brick, g, 0, shaftTop / 2 - 1.5, 0.03, b.width - 2.2, shaftTop - 6, 0.06);
+    for (const y of [4.5, 8.5, 12]) windowUnit(batch, kit, g, 0, y, 0.8, 1.8, { glass: y === 8.5 ? m.glassWarm : m.glass, surround: m.trim, mullion: false });
+    if (side === b.front) { fbox(batch, m.charcoal, g, 0, 1.6, 0.05, 1.6, 2.8, 0.06); arch(batch, m.trim, g, 0, 3.0, 0.04, 0.9, 0.12); fbox(batch, m.lamp, g, 0, 3.4, 0.2, 0.3, 0.2, 0.2); }
+  }
+  course(batch, kit, b, shaftTop - 4.1, m.trim);
+  // clock stage: a face on each side at shaftTop - 2, hands turned by the city's clock
+  const faceY = shaftTop - 2, faceMat = drawn(kit, SIGN_ART.clockFace, { w: 512, h: 512, day: 0.25, night: 1.2 }), handMat = new THREE.MeshStandardMaterial({ color: 0x1c1d22, roughness: 0.5, metalness: 0.6 });
+  parent.userData.clockHands ||= [];
+  for (const side of ['north', 'south', 'east', 'west']) {
+    const g = facade(b, side);
+    disc(batch, m.gold, g, 0, faceY, 0.05, 2.0, 0.1);
+    signPlane(parent, faceMat, g, 0, faceY, 0.11, 3.6, 3.6, `academy-clock-face-${side}`);
+    const [x, z] = fpoint(g, 0, 0.14);
+    for (const [kind, len, width] of [['hour', 1.0, 0.16], ['minute', 1.5, 0.1]]) {
+      const pivot = new THREE.Group(); pivot.position.set(x, faceY, z); pivot.rotation.y = Math.atan2(g.nx, g.nz); pivot.name = `academy-clock-${kind}-${side}`;
+      const hand = new THREE.Mesh(new THREE.BoxGeometry(width, len, 0.04).translate(0, len / 2 - 0.12, kind === 'minute' ? 0.03 : 0), handMat); hand.castShadow = false; pivot.add(hand);
+      parent.add(pivot); parent.userData.clockHands.push({ kind, pivot });
+    }
+  }
+  // belfry: corner piers, open arches, a bell; cornice and the copper spire with a gold finial
+  const belfry = shaftTop, bh = 4.2;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) batch.box(m.stone, b.x + sx * (b.width / 2 - 0.6), belfry + bh / 2, b.z + sz * (b.depth / 2 - 0.6), 1.2, bh, 1.2);
+  for (const side of ['north', 'south', 'east', 'west']) { const g = facade(b, side); fbox(batch, m.stone, g, 0, belfry + bh - 0.4, -0.3, b.width - 2.4, 0.8, 0.6); arch(batch, m.stone, g, 0, belfry + bh - 0.8, -0.3, (b.width - 2.4) / 2, 0.6); fbox(batch, m.trim, g, 0, belfry + 0.9, -0.2, b.width - 2.4, 0.12, 0.4); }
+  batch.box(m.stone, b.x, belfry - 0.05, b.z, b.width, 0.1, b.depth);
+  batch.add(m.gold, new THREE.CylinderGeometry(0.35, 0.85, 1.3, 14, 1, true).translate(b.x, belfry + 2.3, b.z)); batch.box(m.frame, b.x, belfry + 3.1, b.z, 0.12, 0.3, 2.4);
+  batch.box(m.trim, b.x, belfry + bh + 0.2, b.z, b.width + 0.6, 0.4, b.depth + 0.6);
+  batch.add(m.green, new THREE.ConeGeometry(b.width * 0.6, H - belfry - bh - 0.4, 4).rotateY(Math.PI / 4).translate(b.x, belfry + bh + 0.4 + (H - belfry - bh - 0.4) / 2, b.z));
+  batch.cyl(m.gold, b.x, H + 0.6, b.z, 0.06, 1.2, 6); batch.blob(m.gold, b.x, H + 0.1, b.z, 0.26, 1);
+}
+
 export const SHOWCASE_DESIGNS = Object.freeze({ [SHOWCASE_HEROES.bank]: bank, [SHOWCASE_HEROES.boutique]: threads, [SHOWCASE_HEROES.lounge]: lounge, [GUN_SHOP_BUILDING_ID]: arms });
-export function showcaseBuilding(batch, kit, b, parent, opts = {}) { (SHOWCASE_DESIGNS[b.id] || (b.kind === 'house' ? house : b.kind === 'warehouse' ? warehouse : b.kind === 'civic' ? cityHall : b.kind === 'pavilion' ? pavilion : b.kind === 'bleachers' ? bleachers : midrise))(batch, kit, b, parent, opts); }
+export function showcaseBuilding(batch, kit, b, parent, opts = {}) { (SHOWCASE_DESIGNS[b.id] || (b.kind === 'house' ? house : b.kind === 'warehouse' ? warehouse : b.kind === 'civic' ? cityHall : b.kind === 'library' ? library : b.kind === 'academy-hall' ? academyHall : b.kind === 'clock-tower' ? clockTower : b.kind === 'pavilion' ? pavilion : b.kind === 'bleachers' ? bleachers : midrise))(batch, kit, b, parent, opts); }
 
 // ------------------------------------------------------------- North Court
 // The apartment's exterior. HybridApartmentSystem keeps its colliders, door, entry, and interior.

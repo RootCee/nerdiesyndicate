@@ -18,7 +18,7 @@ function texture(w, h, paint, tile) {
   t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; t.anisotropy = 4; t.needsUpdate = true; t.userData.tile = tile;
   return t;
 }
-function parkMaterials(kit) {
+export function parkMaterials(kit) {
   const std = (color, o = {}) => { const m = new THREE.MeshStandardMaterial({ color, roughness: o.roughness ?? 0.85, metalness: o.metalness ?? 0, map: o.map || null, transparent: !!o.opacity, opacity: o.opacity ?? 1, depthWrite: !o.opacity, side: o.side ?? THREE.FrontSide }); if (o.map) m.userData.tile = o.map.userData.tile; m.name = `park-${o.name}`; return m; };
   // mowed turf: alternating light and dark stripes, 4 m each
   const turf = texture(64, 64, (x) => { const k = x < 32 ? 10 : -6; return [72 + k, 122 + k * 1.4, 64 + k]; }, [8, 8]);
@@ -50,7 +50,7 @@ function segment(b, mat, x0, z0, x1, z1, y0, y1, thick) {
   const len = Math.hypot(x1 - x0, z1 - z0), g = new THREE.BoxGeometry(len, y1 - y0, thick).rotateY(-Math.atan2(z1 - z0, x1 - x0));
   b.add(mat, g.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2));
 }
-function tree(b, P, kit, x, z, r) {
+export function tree(b, P, kit, x, z, r) {
   const s = 0.85 + r() * 0.45;
   b.cyl(kit.m.trunk, x, 1.5 * s, z, 0.16 * s, 3 * s, 7, 0.11 * s);
   const leaf = [P.leafA, P.leafB, P.leafC];

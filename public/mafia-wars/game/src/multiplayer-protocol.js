@@ -20,8 +20,7 @@ export const MULTIPLAYER_LIMITS = Object.freeze({
   maxCombatMessagesPerSecond: 20,
   maxSpaceUpdatesPerSecond: 3,
   maxSpeed: 8.5,
-  maxAcceleration: 32,
-  bounds: Object.freeze({ minX: -140, maxX: 244, minZ: -148, maxZ: 148 }),
+  bounds: Object.freeze({ minX: -140, maxX: 420, minZ: -148, maxZ: 148 }), // M7.2: the city reaches x 420 (the Academy)
 });
 
 // Server-assigned indices keep joins separated without moving anyone already in

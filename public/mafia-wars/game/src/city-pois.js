@@ -1,4 +1,5 @@
 import { CITY_HALL, CITY_HALL_ENTRY, PARK } from './city-park-layout.js';
+import { academyPois } from './academy-layout.js';
 // M6.6 location registry: the single list of places the map, waypoints, and
 // interactions share. Every coordinate is derived from the existing source of
 // truth (city-layout.js site records, the server's MULTIPLAYER_SPACES entrance
@@ -39,9 +40,11 @@ export const BANK_COPY = Object.freeze({
 export const STREET_NAMES = Object.freeze({
   main: 'Main Street', 'west-avenue': 'West Avenue', 'east-avenue': 'East Avenue', 'hood-duplicate-main': 'East Block Main',
   'central-cross': 'Central Cross', 'north-cross': 'North Cross', 'north-market': 'North Market', 'south-cross': 'South Cross', 'south-market': 'South Market',
+  'academy-avenue': 'Academy Avenue',
 });
 export const DISTRICT_NAMES = Object.freeze({
   'central-park': 'Nerdie Central Park', 'civic-center': 'Civic Center',
+  'academy-north': 'Nerdie Blaq Academy', 'academy-south': 'Nerdie Blaq Academy', 'academy-library': 'Nerdie Blaq Academy', 'academy-green': 'Academy Green',
   north: 'North Blocks', south: 'South Blocks', 'east-residential-north': 'East Market', 'east-residential-south': 'East Side',
   'west-mixed-north': 'West Market', 'west-industrial-south': 'Industrial South', 'hood-duplicate-neighborhood': '184 East Block',
 });
@@ -72,6 +75,8 @@ export function cityPois(plan = createCityPlan()) {
     { id: APARTMENT_SITE.id, name: APARTMENT_SITE.name, kind: 'apartment', status: 'open', x: APARTMENT_SITE.x, z: APARTMENT_SITE.z, entry: fromSpace(APARTMENT_SITE.id), spaceId: APARTMENT_SITE.id, description: 'Apartment interior. Safe zone.' },
     { id: ENTERABLE_HOUSE_SITE.id, name: ENTERABLE_HOUSE_SITE.name, kind: 'house', status: 'open', x: ENTERABLE_HOUSE_SITE.x, z: ENTERABLE_HOUSE_SITE.z, entry: fromSpace(ENTERABLE_HOUSE_SITE.id), spaceId: ENTERABLE_HOUSE_SITE.id, description: 'Enterable house. Safe zone.' },
     { id: DUPLICATED_ENTERABLE_HOUSE_SITE.id, name: DUPLICATED_ENTERABLE_HOUSE_SITE.name, kind: 'house', status: 'open', x: DUPLICATED_ENTERABLE_HOUSE_SITE.x, z: DUPLICATED_ENTERABLE_HOUSE_SITE.z, entry: fromSpace(DUPLICATED_ENTERABLE_HOUSE_SITE.id), spaceId: DUPLICATED_ENTERABLE_HOUSE_SITE.id, description: 'Enterable house. Safe zone.' },
+    // M7.2: the Nerdie Blaq Academy and its Library
+    ...academyPois(),
     ...ORIGINAL_EXPANSION_HOUSES.filter((site) => site.enterable).map((site) => ({
       id: site.id, name: site.name, kind: 'house', status: 'open', x: site.x, z: site.z, entry: fromSpace(site.id), spaceId: site.id, description: 'Enterable house. Safe zone.',
     })),

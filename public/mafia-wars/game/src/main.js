@@ -46,6 +46,7 @@ import { crosshairShotDirection, aimRaised, directionToAim } from './aim.js';
 import { bodyHit, playerBodyOptions, playerFacing, residentBodyOptions } from './hit-regions.js';
 import { createCityMap } from './city-map.js';
 import { ChessClient } from './chess-client.js';
+import { LibraryPanel } from './library-panel.js';
 import { relativeBearing } from './city-map-view.js';
 import { buildNavGraph, findRoute, routeProgress } from './city-navigation.js';
 import { cityPois } from './city-pois.js';
@@ -56,9 +57,9 @@ import { NpcRenderer, NPC_RENDER_RULES } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m7.1d-dev2';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=m7.2-dev1';
 
-const GAME_BUILD_ID = 'm7.1d-dev2';
+const GAME_BUILD_ID = 'm7.2-dev1';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -206,6 +207,10 @@ let cityInteriorName = '', cityInteriorId = '', mapDots = [], mapSnitch = false;
 const chessClient = new ChessClient({ send: (body) => multiplayer?.sendChess(body), mobile: Q.mobile, onOpen: (open) => {
   if (open) { input.moveX = input.moveY = 0; input.fire = input.ads = input.sprint = false; document.exitPointerLock?.(); } else if (MATCH.started && !MATCH.over && !TOUCH) requestLock();
 } });
+// M7.2 the Academy Library's reading panel: like the chess panel it pauses movement and releases the mouse.
+const libraryPanel = new LibraryPanel({ mobile: Q.mobile, onOpen: (open) => {
+  if (open) { input.moveX = input.moveY = 0; input.fire = input.ads = input.sprint = false; document.exitPointerLock?.(); } else if (MATCH.started && !MATCH.over && !TOUCH) requestLock();
+} });
 const waypointBeacon = new THREE.Mesh(
   new THREE.CylinderGeometry(0.45, 0.45, 26, 16, 1, true),
   new THREE.MeshBasicMaterial({ color: 0xf2d28b, transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }),
@@ -340,6 +345,7 @@ function showShopReject(message) {
 function updateDayNight() {
   if (!dayNight) return;
   const state = dayNight.update(Date.now() + multiplayerServerOffset, { interior: interiorSceneState.active, seconds: time });
+  city?.setAcademyClock?.(state.hour ?? 19.5); // M7.2: the clock tower (the fixed dusk look reads half past seven)
   if (Math.abs(state.night - nightApplied) < 0.004) return;
   nightApplied = state.night; lampLevel = state.night;
   city?.setNightLevel(state.night); setWorldNightLevel(state.night);
@@ -695,7 +701,8 @@ function startGame(mode = selectedMode, options = {}) {
   practiceResupply.setEnabled(practiceCombat);
   setCombatLobby(false);
   score.red = score.blue = 0; MATCH.left = MATCH.time; MATCH.over = false; MATCH.started = true; for (const n in ab) ab[n].have = 0; snitchUntil = 0;
-  for (const interior of [city?.gunShop, city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = false; interior.interior.visible = false; }
+  for (const interior of [city?.gunShop, city?.library, city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = false; interior.interior.visible = false; }
+  libraryPanel.close();
   setInteriorRenderLayer(false);
   while (bots.length) ctx.remove(bots[bots.length - 1]);
   player.team = combat ? 'blue' : null;
@@ -830,7 +837,7 @@ function setLocalSafeZone(active) {
 }
 function interiorForSpace(spaceId) {
   if (!city) return null;
-  return spaceId === 'nerdie-arms' ? city.gunShop : spaceId === 'north-court' ? city.apartment : spaceId === 'east-73' ? city.house : spaceId === 'hood-cross-west' ? city.originalHouse : spaceId === 'hood-duplicate-west-5' ? city.duplicatedHouse : null;
+  return spaceId === 'nerdie-arms' ? city.gunShop : spaceId === 'academy-library' ? city.library : spaceId === 'north-court' ? city.apartment : spaceId === 'east-73' ? city.house : spaceId === 'hood-cross-west' ? city.originalHouse : spaceId === 'hood-duplicate-west-5' ? city.duplicatedHouse : null;
 }
 function applyLocalContext(context, revision = localContextRevision + 1, state = null, safeZone = null) {
   if (!context || revision < localContextRevision) return;
@@ -840,7 +847,8 @@ function applyLocalContext(context, revision = localContextRevision + 1, state =
   if (spaceId !== 'city') npcRenderer.clear(); // residents are city-only
   if ((spaceId === 'underground') !== (priorSpace === 'underground')) syncStructures();
   setLocalSafeZone(typeof safeZone === 'boolean' ? safeZone : MULTIPLAYER_SPACES[spaceId]?.safeZone === true);
-  for (const interior of [city?.gunShop, city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = interior === target; interior.interior.visible = interior === target; }
+  for (const interior of [city?.gunShop, city?.library, city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = interior === target; interior.interior.visible = interior === target; }
+  if (target !== city?.library) libraryPanel.close();
   setInteriorRenderLayer(!!target);
   if (state && ['x', 'y', 'z'].every((key) => Number.isFinite(state[key]))) {
     if (spaceId === 'underground' || priorSpace === 'underground') {
@@ -1033,7 +1041,7 @@ function configureMultiplayerClient() {
     else if (message.type === 'shop') { hud.callout('AMMO RESTOCKED', 'ALL RESERVES FULL · FREE'); sfx.ding(); }
     else if (message.type === 'reject' && message.chess) chessClient.onReject(message);
     else if (message.type === 'reject') { showShopReject(message); if (message.context) applyLocalContext(message.context, message.contextRevision || localContextRevision, message.state, message.safeZone); if (message.combat) applyLocalCombat(message.combat); }
-    else if (message.type === 'correction' && message.state) player.pos.lerp(new THREE.Vector3(message.state.x, message.state.y, message.state.z), 0.35);
+    else if (message.type === 'correction' && message.state) applyServerCorrection(message.state);
   });
   const connectWith = async (credentials, label) => {
     multiplayer.credentials = credentials; multiplayerPlayerCount = credentials.playerCount || 1; $('mpCode').blur();
@@ -1314,12 +1322,27 @@ addEventListener('keydown', (e) => {
   if (e.target && e.target.tagName === 'INPUT') return;
   if (e.code === 'Escape' && $('avatarPanel')?.classList.contains('on')) { $('avatarPanel').classList.remove('on'); $('avatarToggle').setAttribute('aria-expanded', 'false'); if (MATCH.started && !MATCH.over) requestLock(); return; }
   if (e.code === 'Escape' && chessClient.open) { chessClient.close(); return; }
+  if (e.code === 'Escape' && libraryPanel.open) { libraryPanel.close(); return; }
   if (e.code === 'Escape' && combatLobbyOpen) { setCombatLobby(false); return; }
   if (e.code === 'KeyX' && practiceCombat && MATCH.started) { returnToCity(); return; }
   if (e.code === 'Escape' && cityMap?.isOpen) { setCityMap(false); return; }
   if (e.code === 'KeyM' && e.shiftKey) { setMuted(!isMuted()); hud.callout(isMuted() ? 'SOUND OFF' : 'SOUND ON', 'PRESS [SHIFT+M]'); }
   else if (e.code === 'KeyM' && !e.repeat) setCityMap(!cityMap?.isOpen);
 });
+// M7.2: the server's correction is where it last accepted us, which trails the player by the network
+// delay, so small gaps are left for the next accepted move to close. Real disagreements are blended in
+// over a few frames instead of yanking the camera; only a teleport-sized gap snaps.
+const pendingCorrection = new THREE.Vector3();
+function applyServerCorrection(state) {
+  const gap = Math.hypot(state.x - player.pos.x, state.y - player.pos.y, state.z - player.pos.z);
+  if (gap > 6) { player.pos.set(state.x, state.y, state.z); pendingCorrection.set(0, 0, 0); }
+  else if (gap > 1.5) pendingCorrection.set(state.x - player.pos.x, state.y - player.pos.y, state.z - player.pos.z);
+}
+function blendServerCorrection(dt) {
+  if (pendingCorrection.lengthSq() < 1e-4) return;
+  const step = pendingCorrection.clone().multiplyScalar(Math.min(1, dt * 12));
+  player.pos.add(step); pendingCorrection.sub(step);
+}
 const labelItems = [], dots = [];
 function loop(now) {
   renderDiagnostics.frame(now);
@@ -1328,7 +1351,7 @@ function loop(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now; time += dt;
   fpsAcc += dt; fpsN++; if (fpsAcc > 0.5) { hud.fps(Math.round(fpsN / fpsAcc)); fpsAcc = 0; fpsN = 0; }
   const look = poll();
-  if (!MATCH.started || combatLobbyOpen || cityMap?.isOpen || chessClient.open || (!input.locked && !TOUCH && !MATCH.over && MATCH.started)) { look.dx = look.dy = 0; }
+  if (!MATCH.started || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open || (!input.locked && !TOUCH && !MATCH.over && MATCH.started)) { look.dx = look.dy = 0; }
   if (!MATCH.started) { // idle camera drift on the title
     player.yaw += dt * 0.03; player.update(dt, { moveX: 0, moveY: 0 }, { dx: 0, dy: 0 }, time); input.camera = false;
   } else {
@@ -1342,8 +1365,9 @@ function loop(now) {
     if (input.ab) { if (isCombatMode(MATCH.mode)) useAbility(input.ab); input.ab = 0; }
     if (input.camera) { input.camera = false; if (!combatLobbyOpen) toggleCamera(); }
     if (input.map) { input.map = false; setCityMap(!cityMap?.isOpen); }
-    if (cityMap?.isOpen || chessClient.open) { input.fire = false; input.ads = false; input.jump = false; input.interact = false; input.reload = false; }
-    player.update(dt, MATCH.over || combatLobbyOpen || cityMap?.isOpen || chessClient.open ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
+    if (cityMap?.isOpen || chessClient.open || libraryPanel.open) { input.fire = false; input.ads = false; input.jump = false; input.interact = false; input.reload = false; }
+    player.update(dt, MATCH.over || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
+    blendServerCorrection(dt);
     if (multiplayerActive && Number.isFinite(localCombat?.health)) {
       player.hp = localCombat.health; player.dead = localCombat.dead === true;
     }
@@ -1362,7 +1386,9 @@ function loop(now) {
     } else if (city && MATCH.mode === GAME_MODES.FREE_ROAM) {
       // Ammo (the gun shop) first: while inside it (or stepping through its door) the other interiors stand still
       const gunShopState = city.gunShop ? city.gunShop.update(player, input, time) : { active: false, transitioned: false, prompt: '' };
-      const apartmentState = gunShopState.active || gunShopState.transitioned ? { active: false, transitioned: false, prompt: '' } : city.apartment.update(player, input, time);
+      // M7.2 the Academy Library, next: its stations open the reading panel
+      const libraryState = gunShopState.active || gunShopState.transitioned || !city.library || libraryPanel.open ? { active: !!city.library?.active, transitioned: false, prompt: '' } : city.library.update(player, input, time);
+      const apartmentState = gunShopState.active || gunShopState.transitioned || libraryState.active || libraryState.transitioned ? { active: false, transitioned: false, prompt: '' } : city.apartment.update(player, input, time);
       const originalHouseState = apartmentState.active || apartmentState.transitioned
         ? { active: false, transitioned: false, prompt: '' }
         : city.originalHouse.update(player, input, time);
@@ -1372,10 +1398,10 @@ function loop(now) {
       const houseState = apartmentState.active || apartmentState.transitioned || originalHouseState.active || originalHouseState.transitioned || duplicatedHouseState.active || duplicatedHouseState.transitioned
         ? { active: false, transitioned: false, prompt: '' }
         : city.house.update(player, input, time);
-      const interiorActive = gunShopState.active || apartmentState.active || originalHouseState.active || duplicatedHouseState.active || houseState.active;
-      const interiorSite = gunShopState.active ? city.gunShop.site : apartmentState.active ? city.apartment.site : originalHouseState.active ? city.originalHouse.site : duplicatedHouseState.active ? city.duplicatedHouse.site : houseState.active ? city.house.site : null;
+      const interiorActive = gunShopState.active || libraryState.active || apartmentState.active || originalHouseState.active || duplicatedHouseState.active || houseState.active;
+      const interiorSite = gunShopState.active ? city.gunShop.site : libraryState.active ? city.library.site : apartmentState.active ? city.apartment.site : originalHouseState.active ? city.originalHouse.site : duplicatedHouseState.active ? city.duplicatedHouse.site : houseState.active ? city.house.site : null;
       cityInteriorName = interiorSite?.name || ''; cityInteriorId = interiorSite?.id || '';
-      const venueState = interiorActive || apartmentState.transitioned || originalHouseState.transitioned || duplicatedHouseState.transitioned || houseState.transitioned
+      const venueState = interiorActive || libraryState.transitioned || apartmentState.transitioned || originalHouseState.transitioned || duplicatedHouseState.transitioned || houseState.transitioned
         ? { prompt: '', requestedLobby: false }
         : city.combatVenue.update(player, !!input.interact, time, combatLobbyOpen);
       if (venueState.requestedLobby) {
@@ -1383,27 +1409,28 @@ function loop(now) {
         else setCombatLobby(true);
       }
       // M6.6 bank: opens the existing wallet only (no deposits, loans, or balances).
-      const bankState = interiorActive || venueState.prompt || apartmentState.transitioned || originalHouseState.transitioned || duplicatedHouseState.transitioned || houseState.transitioned || !city.bank
+      const bankState = interiorActive || venueState.prompt || libraryState.transitioned || apartmentState.transitioned || originalHouseState.transitioned || duplicatedHouseState.transitioned || houseState.transitioned || !city.bank
         ? { prompt: '', opened: false, mobileLabel: '' }
         : city.bank.update(player, !!input.interact, time);
       if (bankState.opened) { walletBridge.openBank(); hud.callout('NERDIE CITY BANK', 'WALLET ONLY · BANKING SERVICES COMING SOON'); }
       // M7.1D chess tables (open city only; the server checks the seat and everything after it)
       if (chessClient.open && (!multiplayerActive || (localContext.space?.id || 'city') !== 'city')) chessClient.reset();
-      const chessState = interiorActive || venueState.prompt || bankState.prompt || apartmentState.transitioned || originalHouseState.transitioned || duplicatedHouseState.transitioned || houseState.transitioned
+      const chessState = interiorActive || venueState.prompt || bankState.prompt || libraryState.transitioned || apartmentState.transitioned || originalHouseState.transitioned || duplicatedHouseState.transitioned || houseState.transitioned
         ? { prompt: '', mobileLabel: '' }
         : chessClient.update(player, !!input.interact, multiplayerActive && multiplayer?.state === 'connected');
-      const prompt = gunShopState.prompt || apartmentState.prompt || originalHouseState.prompt || duplicatedHouseState.prompt || houseState.prompt || venueState.prompt || bankState.prompt || chessState.prompt;
+      const prompt = gunShopState.prompt || libraryState.prompt || apartmentState.prompt || originalHouseState.prompt || duplicatedHouseState.prompt || houseState.prompt || venueState.prompt || bankState.prompt || chessState.prompt;
       const activeHouseState = [originalHouseState, duplicatedHouseState, houseState].find((state) => state.prompt) || houseState;
-      const mobileLabel = gunShopState.mobileLabel ? gunShopState.mobileLabel : venueState.prompt ? 'ENTER COMBAT' : bankState.prompt ? bankState.mobileLabel : chessState.prompt ? chessState.mobileLabel : activeHouseState.prompt && !activeHouseState.blocked ? (activeHouseState.active ? 'EXIT HOUSE' : 'ENTER HOUSE') : '';
+      const mobileLabel = gunShopState.mobileLabel ? gunShopState.mobileLabel : libraryState.mobileLabel ? libraryState.mobileLabel : venueState.prompt ? 'ENTER COMBAT' : bankState.prompt ? bankState.mobileLabel : chessState.prompt ? chessState.mobileLabel : activeHouseState.prompt && !activeHouseState.blocked ? (activeHouseState.active ? 'EXIT HOUSE' : 'ENTER HOUSE') : '';
       hud.prompt(prompt, interiorActive, mobileLabel);
       input.interact = false;
       if (gunShopState.action) handleGunShopAction(gunShopState);
-      const transition = gunShopState.transitioned ? { type: 'shop', spaceId: 'nerdie-arms', state: gunShopState } : apartmentState.transitioned ? { type: 'apartment', spaceId: 'north-court', state: apartmentState } : originalHouseState.transitioned ? { type: 'house', spaceId: 'hood-cross-west', state: originalHouseState } : duplicatedHouseState.transitioned ? { type: 'house', spaceId: 'hood-duplicate-west-5', state: duplicatedHouseState } : houseState.transitioned ? { type: 'house', spaceId: 'east-73', state: houseState } : null;
+      if (libraryState.open) libraryPanel.openStation(libraryState.open);
+      const transition = gunShopState.transitioned ? { type: 'shop', spaceId: 'nerdie-arms', state: gunShopState } : libraryState.transitioned ? { type: 'library', spaceId: 'academy-library', state: libraryState } : apartmentState.transitioned ? { type: 'apartment', spaceId: 'north-court', state: apartmentState } : originalHouseState.transitioned ? { type: 'house', spaceId: 'hood-cross-west', state: originalHouseState } : duplicatedHouseState.transitioned ? { type: 'house', spaceId: 'hood-duplicate-west-5', state: duplicatedHouseState } : houseState.transitioned ? { type: 'house', spaceId: 'east-73', state: houseState } : null;
       if (transition) {
         setInteriorRenderLayer(transition.state.active);
         setCameraMode(thirdCamera.enabled); // re-snap after the teleport, keeping the player's view
         console.log(`${transition.type} transition:`, transition.state.active ? 'inside' : 'outside');
-        hud.callout(transition.state.active ? transition.state.name.toUpperCase() : 'BACK ON THE BLOCK', transition.state.active ? (transition.type === 'shop' ? 'GUNS · AMMO · SAFE ZONE' : transition.type === 'house' ? 'PRIVATE HOUSE INTERIOR' : 'APARTMENT INTERIOR PROTOTYPE') : 'EXPLORE THE CITY');
+        hud.callout(transition.state.active ? transition.state.name.toUpperCase() : 'BACK ON THE BLOCK', transition.state.active ? (transition.type === 'shop' ? 'GUNS · AMMO · SAFE ZONE' : transition.type === 'library' ? 'GUIDES · PRACTICE EXAMS · SAFE ZONE' : transition.type === 'house' ? 'PRIVATE HOUSE INTERIOR' : 'APARTMENT INTERIOR PROTOTYPE') : 'EXPLORE THE CITY');
         if (multiplayerActive) multiplayer?.updateSpace(transition.spaceId, transition.state.active ? 'enter' : 'exit');
       }
       city.update(player);

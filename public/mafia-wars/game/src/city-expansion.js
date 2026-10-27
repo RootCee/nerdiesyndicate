@@ -17,6 +17,9 @@ import { GunShopSystem } from './gun-shop.js';
 import { buildPark, buildCivicPlaza, addParkColliders } from './city-park.js';
 import { PARK, CIVIC_FIXTURES, COURTS, FOOTBALL, BASEBALL, CHESS_PLAZA, PARK_PATHS, CIVIC_PATHS, PATH_WIDTH, CITY_HALL_ENTRY } from './city-park-layout.js';
 import { GUN_SHOP_BUILDING_ID, gunShopSite } from './gun-shop-layout.js';
+import { buildAcademyGrounds, addAcademyColliders, academyMapRects } from './academy.js';
+import { ACADEMY_CHUNKS, ACADEMY_GATE, ACADEMY_AXIS_Z, LIBRARY, LIBRARY_FOOT } from './academy-layout.js';
+import { LibrarySystem } from './library-system.js';
 
 const material = (color, roughness = 0.88, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
 const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
@@ -194,7 +197,7 @@ export function buildCityExpansion(scene, Q = {}) {
   const streetlights = buildStreetlights(infrastructure, ground.streetlights, mats);
 
   const chunks = [];
-  let apartment = null, house = null, originalHouse = null, duplicatedHouse = null, combatVenue = null, bank = null, gunShop = null;
+  let apartment = null, house = null, originalHouse = null, duplicatedHouse = null, combatVenue = null, bank = null, gunShop = null, library = null;
   for (const district of plan.districts) {
     const group = new THREE.Group(); group.name = `city-chunk-${district.id}`; scene.add(group);
     const batch = kit ? new KitBatch() : null;
@@ -236,6 +239,8 @@ export function buildCityExpansion(scene, Q = {}) {
     // M7.1A: Nerdie Central Park and the City Hall plaza (drawn with the kit; their colliders are added below either way)
     if (kit && district.id === PARK.id) showcaseStats.triangles += buildPark(kit, group, { mobile: plan.profile.key === 'mobile' }).triangles;
     if (kit && district.id === 'civic-center') showcaseStats.triangles += buildCivicPlaza(kit, group).triangles;
+    // M7.2: the Academy Library's interior (its facade is the showcase design)
+    if (district.buildings.some((b) => b.id === LIBRARY.id)) library = new LibrarySystem(scene, { ...LIBRARY }, { addCollider, mobile: plan.profile.key === 'mobile', kit });
     if (district.buildings.some((b) => b.id === GUN_SHOP_BUILDING_ID)) gunShop = new GunShopSystem(scene, gunShopSite(plan), { addCollider, mobile: plan.profile.key === 'mobile', kit });
     if (district.buildings.some((b) => b.id === BANK_BUILDING_ID)) bank = new BankSystem(group, bankSite(plan), { mobile: plan.profile.key === 'mobile', visuals: !kit || !inShowcase(bankSite(plan).x, bankSite(plan).z) });
     if (district.id === 'west-industrial-south') {
@@ -252,6 +257,12 @@ export function buildCityExpansion(scene, Q = {}) {
   mapRects.push({ x: PARK.minX, z: PARK.minZ, w: PARK.maxX - PARK.minX, h: PARK.maxZ - PARK.minZ, type: 'park' });
   for (const r of [BASEBALL.fair, ...COURTS, FOOTBALL]) mapRects.push({ x: r.minX, z: r.minZ, w: r.maxX - r.minX, h: r.maxZ - r.minZ, type: 'field' });
   for (const p of [...PARK_PATHS, ...CIVIC_PATHS]) { const h = PATH_WIDTH / 2; mapRects.push(p.axis === 'x' ? { x: p.c - h, z: p.a0, w: PATH_WIDTH, h: p.a1 - p.a0, type: 'walk' } : { x: p.a0, z: p.c - h, w: p.a1 - p.a0, h: PATH_WIDTH, type: 'walk' }); }
+  // M7.2: the Academy grounds (drawn with the kit into the campus chunks), fixtures, and map
+  const academyGroups = Object.fromEntries(chunks.filter((c) => ACADEMY_CHUNKS.some((a) => a.id === c.id)).map((c) => [c.id, c.group]));
+  if (kit) showcaseStats.triangles += buildAcademyGrounds(kit, academyGroups, { mobile: plan.profile.key === 'mobile' }).triangles;
+  addAcademyColliders(addCollider);
+  mapRects.push(...academyMapRects());
+  const clockHands = Object.values(academyGroups).flatMap((g) => g.userData.clockHands || []);
   const pl = CIVIC_FIXTURES.plaza; mapRects.push({ x: pl.minX, z: pl.minZ, w: pl.maxX - pl.minX, h: pl.maxZ - pl.minZ, type: 'walk' });
   mapRects.push({ x: CHESS_PLAZA.minX, z: CHESS_PLAZA.minZ, w: CHESS_PLAZA.maxX - CHESS_PLAZA.minX, h: CHESS_PLAZA.maxZ - CHESS_PLAZA.minZ, type: 'walk' });
 
@@ -271,7 +282,8 @@ export function buildCityExpansion(scene, Q = {}) {
   const lightSites = ground.streetlights.map((l) => ({ x: l.x, z: l.z, lx: l.x + l.armX * 1.35, ly: 4.4, lz: l.z + l.armZ * 1.35, color: 0xffc57a, intensity: 28 }));
   // M7.0B1: the showcase's entrances (bank, 3 Piece, The Blaq Note, North Court) join the pool at night
   // (M7.1A adds the chess plaza, the park gates, and City Hall's doors)
-  if (kit) for (const [x, y, z] of [[-65, 3.6, 85.2], [-65, 3.2, 107.2], [-65, 2.9, 54.6], [18.2, 2.7, 112], [(CHESS_PLAZA.minX + CHESS_PLAZA.maxX) / 2, 3.6, (CHESS_PLAZA.minZ + CHESS_PLAZA.maxZ) / 2], [118.5, 3.6, 96], [193.5, 3.6, 53.5], [CITY_HALL_ENTRY.x - 1.2, 4.2, CITY_HALL_ENTRY.z]]) lightSites.push({ x, z, lx: x, ly: y, lz: z, color: 0xffd2a0, intensity: 22 });
+  // (M7.2 adds the Academy gate and the Library's stair foot)
+  if (kit) for (const [x, y, z] of [[ACADEMY_GATE.x - 1, 5.4, ACADEMY_AXIS_Z], [LIBRARY_FOOT + 1.5, 3.2, LIBRARY.z], [-65, 3.6, 85.2], [-65, 3.2, 107.2], [-65, 2.9, 54.6], [18.2, 2.7, 112], [(CHESS_PLAZA.minX + CHESS_PLAZA.maxX) / 2, 3.6, (CHESS_PLAZA.minZ + CHESS_PLAZA.maxZ) / 2], [118.5, 3.6, 96], [193.5, 3.6, 53.5], [CITY_HALL_ENTRY.x - 1.2, 4.2, CITY_HALL_ENTRY.z]]) lightSites.push({ x, z, lx: x, ly: y, lz: z, color: 0xffd2a0, intensity: 22 });
   function updateCityLights(focus = null) {
     if (focus) {
       if (lightFocus.picked && (focus.x - lightFocus.x) ** 2 + (focus.z - lightFocus.z) ** 2 < 1) return;
@@ -301,7 +313,14 @@ export function buildCityExpansion(scene, Q = {}) {
   addCollider(MAP.minX - 2, MAP.maxZ, MAP.maxX + 2, MAP.maxZ + 2, 0, 12, { boundary: true });
 
   const city = {
-    plan, ground, chunks, apartment, house, originalHouse, duplicatedHouse, combatVenue, bank, gunShop, infrastructure, mode: 'free-roam',
+    plan, ground, chunks, apartment, house, originalHouse, duplicatedHouse, combatVenue, bank, gunShop, library, infrastructure, mode: 'free-roam',
+    // M7.2: the clock tower's hands follow the city clock (hours 0..24)
+    academyClock: { hands: clockHands, hours: null },
+    setAcademyClock(hours) {
+      if (!Number.isFinite(hours) || (city.academyClock.hours !== null && Math.abs(hours - city.academyClock.hours) < 1 / 120)) return;
+      city.academyClock.hours = hours;
+      for (const { kind, pivot } of clockHands) pivot.children[0].rotation.z = -((kind === 'hour' ? (hours % 12) / 12 : hours % 1)) * Math.PI * 2;
+    },
     // M7.0A2: the shared clock's night level (1 = lit, the original dusk look; 0 = daylight, all off)
     nightLevel: 1,
     setStreetlightLevel(level) { streetlights.setLevel(level); updateCityLights(); },
@@ -361,6 +380,7 @@ export function buildCityExpansion(scene, Q = {}) {
         roadPaintTriangles: roadPaint?.triangles || 0,
         combatVenue: combatVenue?.site.id || null,
         bank: bank?.site.id || null,
+        library: library?.site.id || null,
         bounds: { ...MAP },
       };
     },

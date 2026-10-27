@@ -7,6 +7,8 @@ const SIDES = { east: [1, 0], west: [-1, 0], north: [0, 1], south: [0, -1] };
 // showcase houses stand on a 0.6 m foundation; City Hall on a 1.2 m plinth
 export const HOUSE_STOOP = Object.freeze({ height: 0.6, width: 2.0, landing: 1.0, rise: 0.2, tread: 0.35 });
 export const CIVIC_STAIRS = Object.freeze({ height: 1.2, width: 9, landing: 1.2, rise: 0.3, tread: 0.4, cheek: 0.5, cheekHeight: 1.5 });
+// M7.2: the Academy Library's broad front stairs (a 1.2 m plinth like City Hall's, in 0.2 m steps)
+export const LIBRARY_STAIRS = Object.freeze({ height: 1.2, width: 12, landing: 2.6, rise: 0.2, tread: 0.4, cheek: 0.6, cheekHeight: 1.4 });
 
 // along-facade offset of a showcase house's door (beside the garage on houses with one)
 export function houseDoorOffset(b) {
@@ -36,9 +38,9 @@ export function stairFlight(b, side, a, spec) {
 // how far the flight reaches out from the facade
 export const flightDepth = (spec) => spec.landing + (Math.round(spec.height / spec.rise) - 1) * spec.tread;
 
-// Front steps for a district building: showcase houses get a stoop, City Hall its stairs.
+// Front steps for a district building: showcase houses get a stoop, City Hall and the Library their stairs.
 export function entrySteps(b) {
   const steps = b.kind === 'house' ? stairFlight(b, b.front, houseDoorOffset(b), HOUSE_STOOP)
-    : b.kind === 'civic' ? stairFlight(b, b.front, 0, CIVIC_STAIRS) : [];
+    : b.kind === 'civic' ? stairFlight(b, b.front, 0, CIVIC_STAIRS) : b.kind === 'library' ? stairFlight(b, b.front, 0, LIBRARY_STAIRS) : [];
   return steps.map((s, i) => Object.freeze({ ...s, id: `${b.id}-steps-${i}` }));
 }

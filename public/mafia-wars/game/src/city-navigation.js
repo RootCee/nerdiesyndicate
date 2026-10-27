@@ -10,6 +10,7 @@ import { cityGroundLayout } from './city-ground-layout.js';
 import { showcaseFurniture } from './city-showcase-layout.js';
 import { entrySteps } from './entry-steps.js';
 import { CHESS_AISLES, CIVIC_PATHS, PARK_PATHS, parkFixtures, parkSoftZones } from './city-park-layout.js';
+import { ACADEMY_PATHS, academyFixtures } from './academy-layout.js';
 import { createCityPlan } from './city-layout.js';
 
 // Mirrors world.js: ROAD_HALF 4.5, SIDEWALK 2, LOT 8, HOUSE_FRONT 14,
@@ -57,9 +58,9 @@ export function buildNavObstacles(plan = createCityPlan()) {
   const out = [];
   for (const district of plan.districts) {
     for (const b of district.buildings) out.push(around(b.x, b.z, b.width, b.depth, { id: b.id }));
-    // M7.1B: residents walk to the foot of City Hall's stairs, not up them (house stoops stay
+    // M7.1B: residents walk to the foot of City Hall's (and M7.2 the Library's) stairs, not up them (house stoops stay
     // walkable: each sits on its door's approach)
-    for (const b of district.buildings) if (b.kind === 'civic') for (const s of entrySteps(b)) out.push(rect(s.minX, s.minZ, s.maxX, s.maxZ, { id: s.id }));
+    for (const b of district.buildings) if (b.kind === 'civic' || b.kind === 'library') for (const s of entrySteps(b)) out.push(rect(s.minX, s.minZ, s.maxX, s.maxZ, { id: s.id }));
     for (const v of district.vehicles || []) out.push(around(v.x, v.z, 1.9, 4.2));
   }
   // M7.0A: the streetlight poles city-expansion.js draws (and collides with), from the shared ground layout
@@ -71,6 +72,8 @@ export function buildNavObstacles(plan = createCityPlan()) {
   // the playing fields are soft zones residents keep off until park activities lead them on
   for (const f of parkFixtures()) out.push(rect(f.minX, f.minZ, f.maxX, f.maxZ, { id: f.id }));
   for (const z of parkSoftZones()) out.push(rect(z.minX, z.minZ, z.maxX, z.maxZ, { id: z.id, soft: true }));
+  // M7.2: the Academy's fountain, benches, lamps, gate pillars and street wall
+  for (const f of academyFixtures()) out.push(rect(f.minX, f.minZ, f.maxX, f.maxZ, { id: f.id }));
   const { apartment, combatVenue, enterableHouse, duplicatedEnterableHouse } = plan;
   out.push(around(apartment.x, apartment.z, apartment.width, apartment.depth, { id: apartment.id }));
   out.push(around(combatVenue.x, combatVenue.z, combatVenue.width, combatVenue.depth, { id: combatVenue.id }));
@@ -121,6 +124,8 @@ export function walkLines(plan = createCityPlan()) {
   for (const s of [-1, 1]) add('x', s * BLOCK.alley, -45, 45, `original-alley:${s}`);
   // M7.1A: Central Park's paths, the chess plaza aisle and the City Hall plaza walks
   for (const p of [...PARK_PATHS, ...CIVIC_PATHS, ...CHESS_AISLES]) add(p.axis, p.c, p.a0, p.a1, p.id);
+  // M7.2: the Academy's walks, the fountain plaza and the campus loop
+  for (const p of ACADEMY_PATHS) add(p.axis, p.c, p.a0, p.a1, p.id);
   return lines;
 }
 
