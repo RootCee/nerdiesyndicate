@@ -108,7 +108,7 @@ export class CityNpcSimulation {
     if (!schedule || (!this.scheduleMinute && !this.cityClock)) return null;
     if (this.minuteAt?.now !== now) this.minuteAt = { now, minute: this.scheduleMinute ? this.scheduleMinute(now) : Math.floor(hourAt(now, this.cityClock) * 60) }; // once per tick
     const minute = this.minuteAt.minute;
-    const { activity, locationId } = scheduledPlace(schedule.employment, minute, schedule.homeLocationId || 'north-court');
+    const { activity, locationId } = scheduledPlace(schedule.employment, minute, schedule.homeLocationId || 'north-court', r.index);
     r.economicActivity = activity; r.economicLocation = locationId;
     return this.schedulePois.get(locationId) || null;
   }

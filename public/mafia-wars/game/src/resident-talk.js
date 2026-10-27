@@ -68,7 +68,7 @@ export const TALK_TOPICS = Object.freeze([
 // chess: { hello } | null }; minute: the economic minute of the day; day: a day key (YYYY-MM-DD) for stable choices.
 export function residentConversation(resident, minute, day = '') {
   const voice = VOICES[resident.personality] || VOICES.peaceful, job = resident.job;
-  const at = scheduledPlace(job, minute), seed = (topic) => `${resident.index}:${day}:${topic}`;
+  const at = scheduledPlace(job, minute, 'north-court', resident.index), seed = (topic) => `${resident.index}:${day}:${topic}`;
   const fill = (line) => line.replaceAll('{name}', resident.name)
     .replaceAll('{place}', at.locationId === job?.workplaceId ? placeName(job.workplaceId) : placeName(at.locationId))
     .replaceAll('{until}', job ? clock(job.shiftStartMinute + job.shiftDurationMinutes) : '')

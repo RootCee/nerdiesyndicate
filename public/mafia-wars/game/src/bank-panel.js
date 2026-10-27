@@ -84,7 +84,7 @@ const words = (s) => esc(String(s ?? '').replaceAll('_', ' ').replaceAll('-', ' 
 const PLACES = Object.freeze({ 'nerdie-city-bank': 'Nerdie City Bank', 'city-hall': 'City Hall', 'academy-library': 'the Library', 'nerdie-arms': 'Ammo', 'central-park': 'Central Park', 'corner-market': 'Corner Market', 'north-court': 'North Court' });
 const place = (id) => (PLACES[id] ? esc(PLACES[id]) : words(id));
 const ACTIVITY_WORDS = Object.freeze({ home: 'At home in', commute: 'On the way to work at', work: 'Working at', shop: 'Shopping at', social: 'Hanging out at', leisure: 'Relaxing at' });
-const nowText = (r, minute) => { const at = scheduledPlace(r.job, minute); return `${esc(ACTIVITY_WORDS[at.activity] || at.activity)} ${place(at.locationId)}`; };
+const nowText = (r, minute) => { const at = scheduledPlace(r.job, minute, 'north-court', r.residentNo - 1); return `${esc(ACTIVITY_WORDS[at.activity] || at.activity)} ${place(at.locationId)}`; };
 const wealth = (r) => Number(r.checking || 0) + Number(r.savings || 0);
 export const RESIDENT_SORTS = Object.freeze({
   no: { label: 'No.', compare: (a, b) => a.residentNo - b.residentNo },
