@@ -1,8 +1,7 @@
-// Phase 2.1: the game's read-only view of the City Service (city-service/ in this repo). Production
-// (CITY_SERVICE_ENDPOINT) stays null until the founder approves the production promotion, so the live site
-// shows an honest not-connected state. Preview sites (*.vercel.app) read the separate review City Service,
-// the same single City Service, open only to preview sites during review. Requests are GET only, cached, and polled at most once a minute.
-export const CITY_SERVICE_ENDPOINT = null;
+// The game's read-only view of the City Service (city-service/ in this repo): one City Director for the
+// Nerdie Blaq bank, promoted to production by the founder on 27 October 2026. Preview sites (*.vercel.app)
+// read the same service. Requests are GET only, cached, and polled at most once a minute.
+export const CITY_SERVICE_ENDPOINT = 'https://nerdie-city-service.buddieroots.workers.dev';
 export const REVIEW_CITY_SERVICE_ENDPOINT = 'https://nerdie-city-service.buddieroots.workers.dev';
 export function resolveCityServiceEndpoint(locationLike = globalThis.location) {
   const host = String(locationLike?.hostname || '').toLowerCase();
