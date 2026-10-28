@@ -11,6 +11,8 @@
 //   - Neon Plaza, the open square at Main Street and Neon Boulevard.
 //
 // Pure data: the city plan, the ground (roads, sidewalks, streetlights), the catalog and the tests read it.
+import { LICENSE_CLASSES, SHOP_DEPTH, assignLicenses, mergeToCount, shopRow } from './lot-district.js';
+
 const r2 = (v) => Math.round(v * 100) / 100;
 
 export const NEON_MARKET = Object.freeze({ id: 'neon-market', name: 'Neon Market', minX: -140, maxX: 140, minZ: 148, maxZ: 356 });
@@ -38,7 +40,7 @@ export const NEON_PLAZA = Object.freeze({ id: 'neon-plaza', name: 'Neon Plaza', 
 // height, 75.2 m leaves the top homes a full ceiling and a shallow roof/parapet above them.
 export const NEON_TOWER = Object.freeze({ id: 'neon-tower', name: 'Neon Tower', kind: 'neon-tower', x: 36, z: 196, width: 26, depth: 28, height: 75.2, floors: 22, apartments: 120, penthouses: 6, fixedFront: 'west' });
 
-const SHOP_DEPTH = 12, LOT = 11, SHOP_HEIGHTS = [8.4, 9.2, 8.8, 10];
+const LOT = 11, SHOP_HEIGHTS = [8.4, 9.2, 8.8, 10];
 // Which sides of each block carry shopfronts ('s' faces the street south of the block, and so on), and
 // where the lofts stand. Block ids: neon-<row><col>, a1 at the south-west.
 const BLOCKS = {
@@ -49,61 +51,26 @@ const LOFT = { width: 14, depth: 14 };
 
 // License classes in Neon Market (the token ids on the Business NFT contract): its 110 licenses.
 export const NEON_LICENSES = Object.freeze({ financial: 25, entertainment: 35, retail: 40, tech: 5, manufacturing: 5 });
-export const LICENSE_CLASSES = Object.freeze({
-  retail: Object.freeze({ tokenId: 1, label: 'Retail Business' }),
-  tech: Object.freeze({ tokenId: 2, label: 'Tech Startup' }),
-  entertainment: Object.freeze({ tokenId: 3, label: 'Entertainment Venue' }),
-  manufacturing: Object.freeze({ tokenId: 4, label: 'Manufacturing Unit' }),
-  financial: Object.freeze({ tokenId: 5, label: 'Financial Institution' }),
-});
-
-function shopRow(blockId, block, side, sides) {
-  const [x0, x1] = block.x, [z0, z1] = block.z, horizontal = side === 's' || side === 'n';
-  // vertical rows run between the horizontal rows at either end (the corners belong to those)
-  const a0 = horizontal ? x0 : z0 + (sides.includes('s') ? SHOP_DEPTH : 0), a1 = horizontal ? x1 : z1 - (sides.includes('n') ? SHOP_DEPTH : 0);
-  const n = Math.max(1, Math.round((a1 - a0) / (block.lot || LOT))), w = (a1 - a0) / n, front = { s: 'south', n: 'north', e: 'east', w: 'west' }[side];
-  // edges on a 1/16 m grid (exact in binary, so centre +/- half width lands exactly), 1/32 m between neighbours
-  const edge = (i) => (i === n ? a1 : a0 + Math.round(w * i * 16) / 16), GAP = 1 / 32;
-  return Array.from({ length: n }, (_, i) => {
-    const c = (edge(i) + edge(i + 1)) / 2, len = edge(i + 1) - edge(i) - GAP, deep = SHOP_DEPTH - GAP;
-    const x = horizontal ? c : side === 'w' ? x0 + SHOP_DEPTH / 2 : x1 - SHOP_DEPTH / 2, z = horizontal ? (side === 's' ? z0 + SHOP_DEPTH / 2 : z1 - SHOP_DEPTH / 2) : c;
-    return { id: `${blockId}-${side}${i}`, x, z, width: horizontal ? len : deep, depth: horizontal ? deep : len, front };
-  });
-}
+export { LICENSE_CLASSES };
 
 // Prime frontage first: Financial on Neon Boulevard and Main Street, Entertainment on Neon Cross and around the
 // plaza, Tech and Manufacturing on Neon Lane, Retail everywhere else.
 const STREET_OF = (b) => (b.front === 'south' && b.z < 200 ? 'boulevard' : b.front === 'east' && b.x > 125 ? 'lane' : (b.front === 'east' && b.x < 0) || (b.front === 'west' && b.x > 0 && b.x < 20) ? 'main' : (b.front === 'north' && b.z < 250) || (b.front === 'south' && b.z > 250 && b.z < 270) ? 'cross' : 'other');
 const PREFER = { boulevard: ['financial', 'entertainment', 'retail'], main: ['financial', 'retail', 'entertainment'], cross: ['entertainment', 'retail', 'financial'], lane: ['tech', 'manufacturing', 'retail'], other: ['retail', 'entertainment', 'tech', 'manufacturing', 'financial'] };
-function assignLicenses(lots) {
-  const left = { ...NEON_LICENSES };
-  for (const street of ['boulevard', 'main', 'lane', 'cross', 'other']) for (const lot of lots.filter((l) => STREET_OF(l) === street)) {
-    const cls = PREFER[street].find((c) => left[c] > 0) || Object.keys(left).find((c) => left[c] > 0); left[cls]--; lot.license = cls;
-  }
-}
-
 function build() {
   const blocks = [], lots = [], lofts = [];
   ROWS.forEach((z, r) => COLS.forEach((x, c) => {
     const id = `neon-${'ab'[r]}${c + 1}`, spec = BLOCKS[`${'ab'[r]}${c + 1}`], block = { id, x, z, ...spec };
     blocks.push(block);
-    for (const side of spec.sides || '') lots.push(...shopRow(id, block, side, spec.sides).map((l) => ({ ...l, blockId: id })));
+    for (const side of spec.sides || '') lots.push(...shopRow(id, block, side, spec.sides, LOT).map((l) => ({ ...l, blockId: id })));
     (spec.lofts || []).forEach(([lx, lz], i) => lofts.push({ id: `${id}-lofts-${i}`, blockId: id, x: lx, z: lz, ...LOFT }));
   }));
   // the plaza block keeps its south half open (the plaza): its side rows stop at the plaza
   const plaza = NEON_PLAZA, open = lots.filter((l) => l.blockId === 'neon-a2' && l.z < plaza.maxZ + SHOP_DEPTH / 2 && l.front !== 'north');
   for (const l of open) lots.splice(lots.indexOf(l), 1);
-  // exactly one lot per license: extra lots merge, two at a time, into wider anchor shopfronts (the longest rows first)
-  const target = Object.values(NEON_LICENSES).reduce((a, b) => a + b, 0);
-  while (lots.length > target) {
-    const rows = new Map(); for (const l of lots) { const k = `${l.blockId}:${l.front}`; rows.set(k, [...(rows.get(k) || []), l]); }
-    const row = [...rows.values()].sort((p, q) => q.length - p.length)[0], [a, b] = row.slice(-2);
-    const horizontal = a.front === 'south' || a.front === 'north', merged = horizontal
-      ? { ...a, x: (a.x - a.width / 2 + b.x + b.width / 2) / 2, width: b.x + b.width / 2 - (a.x - a.width / 2) }
-      : { ...a, z: (a.z - a.depth / 2 + b.z + b.depth / 2) / 2, depth: b.z + b.depth / 2 - (a.z - a.depth / 2) };
-    lots.splice(lots.indexOf(a), 2, merged);
-  }
-  assignLicenses(lots);
+  // exactly one lot per license
+  mergeToCount(lots, Object.values(NEON_LICENSES).reduce((a, b) => a + b, 0));
+  assignLicenses(lots, NEON_LICENSES, STREET_OF, PREFER, ['boulevard', 'main', 'lane', 'cross', 'other']);
   lots.forEach((l, i) => { l.lotId = `NM-${String(i + 1).padStart(3, '0')}`; l.height = SHOP_HEIGHTS[i % SHOP_HEIGHTS.length]; });
   return { blocks, lots, lofts };
 }

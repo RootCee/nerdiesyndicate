@@ -76,10 +76,10 @@ assert.equal((index.match(/id="tFire"/g) || []).length, 1);
 assert.doesNotMatch(index, /tFire2/);
 assert.match(index, /@media \(pointer: coarse\) and \(orientation: portrait\)/);
 assert.match(index, /id="mpDiagnosticsToggle"[^>]*hidden/);
-assert.match(index, /src="src\/main\.js\?build=bank-m2\.2-rel13"/);
+assert.match(index, /src="src\/main\.js\?build=bank-m2\.2-rel14"/);
 assert.match(main, /multiplayer-endpoint\.js\?build=m6\.3-cross-device-diagnostics-rc1/);
-assert.match(main, /wallet-bridge\.js\?build=bank-m2\.2-rel13/);
-assert.match(main, /const GAME_BUILD_ID = 'bank-m2\.2-rel13'/);
+assert.match(main, /wallet-bridge\.js\?build=bank-m2\.2-rel14/);
+assert.match(main, /const GAME_BUILD_ID = 'bank-m2\.2-rel14'/);
 // M6.5 Underground 6v6: results panel and server match state handling.
 assert.match(index, /id="ugResults"[^>]*role="dialog"/);
 assert.match(index, /id="ugStay"/); assert.match(index, /id="ugLeave"/);
@@ -140,9 +140,9 @@ assert.deepEqual(desktop.roads, mobile.roads);
 assert.deepEqual(desktop.districts, mobile.districts);
 assert.deepEqual(desktop.apartment, mobile.apartment);
 assert.deepEqual(desktop.combatVenue, mobile.combatVenue);
-// M7.2: the Civic Center, Central Park, and four Academy render districts; Stage 2: Neon Market's eight blocks
-assert.equal(desktop.districts.length, 13 + 8);
-assert.equal(desktop.districts.reduce((total, district) => total + district.buildings.length, 0) + 2, 74 + 110 + 6 + 1);
+// M7.2: the Civic Center, Central Park, and four Academy render districts; Stage 2 adds eight blocks each for Neon Market and Cyber HQ.
+assert.equal(desktop.districts.length, 13 + 8 + 8);
+assert.equal(desktop.districts.reduce((total, district) => total + district.buildings.length, 0) + 2, 74 + 110 + 6 + 1 + 95 + 20 + 1);
 assert.equal(desktop.districts.reduce((total, district) => total + district.vehicles.length, 0), 12);
 assert.deepEqual(CITY_BOUNDS, { minX: -140, maxX: 420, minZ: -148, maxZ: 356 });
 const mobileChunkRadius = (district) => mobile.profile.activeRadius + district.radius * 0.35;

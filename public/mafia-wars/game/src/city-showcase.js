@@ -833,8 +833,11 @@ function emptyShopMaterial(kit) {
   if (emptyShop?.kit !== kit) emptyShop = { kit, mat: drawn(kit, paintEmptyShop, { w: 512, h: 256, res: 0.5, day: 0.3, night: 0.9, preview: 0xe6e0d4 }) };
   return emptyShop.mat;
 }
+// Cyber HQ's lots: steel, concrete and dark glass studios and workshops
+const CYBER_BODIES = ['metal', 'concrete', 'charcoal', 'stone', 'metal'];
 function neonShop(batch, kit, b, parent, { mobile = false } = {}) {
-  const m = kit.m, look = LICENSE_LOOK[b.license] || LICENSE_LOOK.retail, f = facade(b, b.front), half = f.length / 2, body = m[NEON_BODIES[hashId(b.id) % NEON_BODIES.length]];
+  const bodies = b.style === 'cyber' ? CYBER_BODIES : NEON_BODIES;
+  const m = kit.m, look = LICENSE_LOOK[b.license] || LICENSE_LOOK.retail, f = facade(b, b.front), half = f.length / 2, body = m[bodies[hashId(b.id) % bodies.length]];
   batch.box(body, b.x, b.height / 2, b.z, b.width, b.height, b.depth);
   // glass shopfront and door
   fbox(batch, m.charcoal, f, 0, 0.25, 0.06, 2 * half - 0.4, 0.5, 0.12);
@@ -869,14 +872,14 @@ function neonTower(batch, kit, b, parent, { mobile = false } = {}) {
   fbox(batch, m.glassWarm, f, 0, 2.3, 0.12, Math.min(14, 2 * half - 4), 4.2, 0.04);
   fbox(batch, m.frame, f, 0, 1.3, 0.16, 2.6, 2.6, 0.08); fbox(batch, m.charcoal, f, 0, 4.7, 0.9, 10, 0.18, 1.8);
   for (let i = -2; i <= 2; i++) fbox(batch, m.lamp, f, i * 2, 4.6, 1.4, 0.3, 0.03, 0.3);
-  signPlane(parent, drawn(kit, (ctx, w, h) => { ctx.fillStyle = '#0c0c14'; ctx.fillRect(0, 0, w, h); ctx.fillStyle = '#7cecff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '700 120px Barlow, sans-serif'; ctx.fillText('NEON TOWER', w / 2, h * 0.45); ctx.fillStyle = '#ff7cc4'; ctx.fillRect(w * 0.15, h * 0.82, w * 0.7, 8); }, { w: 1024, h: 200, day: 0.3, night: 1.3 }), f, 0, 5.6, 0.2, 9, 1.6, 'showcase-neon-tower-sign');
+  signPlane(parent, drawn(kit, (ctx, w, h) => { ctx.fillStyle = '#0c0c14'; ctx.fillRect(0, 0, w, h); ctx.fillStyle = '#7cecff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '700 120px Barlow, sans-serif'; ctx.fillText((b.name || 'Neon Tower').toUpperCase(), w / 2, h * 0.45); ctx.fillStyle = '#ff7cc4'; ctx.fillRect(w * 0.15, h * 0.82, w * 0.7, 8); }, { w: 1024, h: 200, day: 0.3, night: 1.3 }), f, 0, 5.6, 0.2, 9, 1.6, `showcase-${b.id}-sign`);
 }
 
 export function showcaseBuilding(batch, kit, b, parent, opts = {}) {
   const from = kit.night.length, store = storeForBuilding(b.id), shared = kit.m;
   // a store gets its own copies of the lit trims and warm window glass (canopy lamps, neon, lit windows), so they go dark with it
   if (store) { kit.m = Object.create(shared); for (const k of ['lamp', 'neonPurple', 'neonGreen', 'glassWarm']) { const n = kit.night.find((x) => x.m === shared[k]), c = shared[k].clone(); kit.m[k] = c; kit.night.push({ m: c, day: n.day, night: n.night }); } }
-  try { (SHOWCASE_DESIGNS[b.id] || (b.kind === 'neon-shop' ? neonShop : b.kind === 'neon-tower' ? neonTower : b.kind === 'house' ? house : b.kind === 'warehouse' ? warehouse : b.kind === 'civic' ? cityHall : b.kind === 'library' ? library : b.kind === 'academy-hall' ? academyHall : b.kind === 'clock-tower' ? clockTower : b.kind === 'pavilion' ? pavilion : b.kind === 'bleachers' ? bleachers : midrise))(batch, kit, b, parent, opts); } finally { kit.m = shared; }
+  try { (SHOWCASE_DESIGNS[b.id] || (b.kind === 'neon-shop' ? neonShop : b.kind === 'neon-tower' || b.kind === 'cyber-tower' ? neonTower : b.kind === 'house' ? house : b.kind === 'warehouse' ? warehouse : b.kind === 'civic' ? cityHall : b.kind === 'library' ? library : b.kind === 'academy-hall' ? academyHall : b.kind === 'clock-tower' ? clockTower : b.kind === 'pavilion' ? pavilion : b.kind === 'bleachers' ? bleachers : midrise))(batch, kit, b, parent, opts); } finally { kit.m = shared; }
   // a store's own signs, shop windows and trims go dark when it closes (store-hours.js, kit.setClosed)
   if (store) for (let k = from; k < kit.night.length; k++) kit.night[k].store = store.id;
 }

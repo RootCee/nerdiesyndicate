@@ -1,6 +1,7 @@
 import { CITY_HALL, CIVIC_BLOCK, PARK, PARK_BLEACHERS, PARK_PAVILION } from './city-park-layout.js';
 import { ACADEMY_AVENUE, ACADEMY_CHUNKS, ACADEMY_HALLS, CLOCK_TOWER, LIBRARY } from './academy-layout.js';
 import { NEON_MARKET, NEON_ROADS, neonMarketDistricts } from './neon-market-layout.js';
+import { CYBER_ROADS, cyberHqDistricts } from './cyber-hq-layout.js';
 // Pure, deterministic city plan. Rendering code consumes this data so desktop
 // and mobile share one collision/layout topology while choosing different
 // visibility and detail budgets.
@@ -8,7 +9,7 @@ import { NEON_MARKET, NEON_ROADS, neonMarketDistricts } from './neon-market-layo
 // block east of the approved 280 m city. Its 120 m ground/street staging area
 // reaches x=244 without overlapping the existing x=112 residential row.
 // M7.2: the city grows east to x=420 for Academy Avenue and the Nerdie Blaq Academy (academy-layout.js).
-// Stage 2: and north to z=356 for Neon Market (neon-market-layout.js).
+// Stage 2: and north to z=356 for Neon Market and Cyber HQ (neon-market-layout.js, cyber-hq-layout.js).
 export const CITY_BOUNDS = Object.freeze({ minX: -140, maxX: 420, minZ: -148, maxZ: NEON_MARKET.maxZ });
 
 export const ORIGINAL_NEIGHBORHOOD_LAYOUT = Object.freeze({
@@ -250,6 +251,8 @@ export function createCityPlan(profileName = 'desktop') {
       { id: 'south-market', x: westToAvenue.x, z: -96, width: westToAvenue.width, depth: 9 },
       // Stage 2: Neon Market's streets (Neon Boulevard, Neon Cross, Neon Row, the avenues carried north)
       ...NEON_ROADS.map((r) => ({ ...r })),
+      // Stage 2: Cyber HQ's streets (east of Neon Market; Academy Avenue carried north)
+      ...CYBER_ROADS.map((r) => ({ ...r })),
     ],
     districts: [
       district('north', 100, 401), district('south', -100, 809),
@@ -264,6 +267,8 @@ export function createCityPlan(profileName = 'desktop') {
       ...ACADEMY_CHUNKS.map((c) => ({ id: c.id, kind: 'academy', center: { ...c.center }, radius: c.radius, buildings: ACADEMY_CHUNK_BUILDINGS[c.id].map((b) => ({ ...b })), vehicles: [] })),
       // Stage 2: Neon Market, one render chunk per block
       ...neonMarketDistricts(),
+      // Stage 2: Cyber HQ, one render chunk per block
+      ...cyberHqDistricts(),
       { id: DUPLICATED_ORIGINAL_NEIGHBORHOOD.id, kind: 'original-copy', center: { x: DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX, z: 0 }, radius: 58, buildings: [], vehicles: [] },
     ],
     apartment: { ...APARTMENT_SITE },

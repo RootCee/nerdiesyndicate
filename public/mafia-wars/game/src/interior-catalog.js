@@ -45,7 +45,7 @@ const SKIP = new Set(['west-mixed-north-1', 'west-mixed-north-3', 'academy-libra
 
 function templateFor(b, districtId) {
   if (SHOPS[b.id]) return SHOPS[b.id].template;
-  if (b.kind === 'neon-shop') return 'vacant'; // Stage 2: a Neon Market business lot, waiting for its business
+  if (b.kind === 'neon-shop') return 'vacant'; // Stage 2: a business lot waiting for its licensed operator
   if (b.kind === 'neon-tower') return 'tower';
   if (b.kind === 'house') return 'house';
   if (b.kind === 'mixed') return 'lofts';
@@ -371,7 +371,7 @@ export function interiorCatalog(plan = null) {
   for (const district of p.districts) for (const b of district.buildings) {
     if (SKIP.has(b.id) || b.id === house?.id) continue;
     const template = templateFor(b, district.id); if (!template) continue;
-    const door = doorOf(b), tier = TIER[template] || null;
+    const door = doorOf(b), tier = b.propertyTier || TIER[template] || null;
     out.push(Object.freeze({
       buildingId: b.id, spaceId: `bld-${b.id}`, districtId: district.id, template, name: SHOPS[b.id]?.name || b.name || FALLBACK_NAME[template] || 'Building',
       tier, value: tier ? PROPERTY_TIERS[tier].value : null, facing: door.facing, lotId: b.lotId || null, license: b.license || null,

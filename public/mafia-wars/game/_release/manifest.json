@@ -1,7 +1,7 @@
 {
   "name": "Nerdie City: Mafia Wars",
-  "channel": "bank-m2.2-rel13",
-  "sourceCommit": "b52fd4fcf9f030b99ea686a4d5177d6f45662f62",
+  "channel": "bank-m2.2-rel14",
+  "sourceCommit": "bdd8f3ddd68c165c33a0c680a32d44038d37e352",
   "sourceBranch": "codex/nerdie-city-m2-2",
   "entry": "/mafia-wars/game/?phys=0&multiplayer=1"
 }
