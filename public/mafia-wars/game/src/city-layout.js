@@ -2,6 +2,7 @@ import { CITY_HALL, CIVIC_BLOCK, PARK, PARK_BLEACHERS, PARK_PAVILION } from './c
 import { ACADEMY_AVENUE, ACADEMY_CHUNKS, ACADEMY_HALLS, CLOCK_TOWER, LIBRARY } from './academy-layout.js';
 import { NEON_MARKET, NEON_ROADS, neonMarketDistricts } from './neon-market-layout.js';
 import { CYBER_ROADS, cyberHqDistricts } from './cyber-hq-layout.js';
+import { DARK_ALLEY, DARK_ROADS, darkAlleyDistricts } from './dark-alley-layout.js';
 // Pure, deterministic city plan. Rendering code consumes this data so desktop
 // and mobile share one collision/layout topology while choosing different
 // visibility and detail budgets.
@@ -10,7 +11,8 @@ import { CYBER_ROADS, cyberHqDistricts } from './cyber-hq-layout.js';
 // reaches x=244 without overlapping the existing x=112 residential row.
 // M7.2: the city grows east to x=420 for Academy Avenue and the Nerdie Blaq Academy (academy-layout.js).
 // Stage 2: and north to z=356 for Neon Market and Cyber HQ (neon-market-layout.js, cyber-hq-layout.js).
-export const CITY_BOUNDS = Object.freeze({ minX: -140, maxX: 420, minZ: -148, maxZ: NEON_MARKET.maxZ });
+const LEGACY_CITY_MIN_X = -140;
+export const CITY_BOUNDS = Object.freeze({ minX: DARK_ALLEY.minX, maxX: 420, minZ: -148, maxZ: NEON_MARKET.maxZ });
 
 export const ORIGINAL_NEIGHBORHOOD_LAYOUT = Object.freeze({
   id: 'hood-original-neighborhood', centerX: 0, centerZ: 0,
@@ -192,7 +194,7 @@ function westMixedUse(id, centerZ, seedOffset, industrial = false) {
 
 function centralCrossSegments() {
   const blocks = [ORIGINAL_NEIGHBORHOOD_LAYOUT.footprint, DUPLICATED_ORIGINAL_NEIGHBORHOOD.footprint].sort((a, b) => a.minX - b.minX);
-  const spans = []; let cursor = CITY_BOUNDS.minX;
+  const spans = []; let cursor = LEGACY_CITY_MIN_X;
   for (const b of blocks) { if (b.minX > cursor) spans.push([cursor, b.minX]); cursor = b.maxX; }
   // M7.2: the eastmost span ends at Academy Avenue (it used to stop short at the old city edge, x 244)
   if (cursor < ACADEMY_AVENUE.x) spans.push([cursor, ACADEMY_AVENUE.x]);
@@ -227,7 +229,7 @@ const ACADEMY_CHUNK_BUILDINGS = Object.freeze({ 'academy-north': [ACADEMY_HALLS[
 
 export function createCityPlan(profileName = 'desktop') {
   const profile = CITY_PROFILES[profileName] || CITY_PROFILES.desktop;
-  const westToAvenue = { x: (CITY_BOUNDS.minX + ACADEMY_AVENUE.x) / 2, width: ACADEMY_AVENUE.x - CITY_BOUNDS.minX };
+  const westToAvenue = { x: (LEGACY_CITY_MIN_X + ACADEMY_AVENUE.x) / 2, width: ACADEMY_AVENUE.x - LEGACY_CITY_MIN_X };
   const plan = {
     bounds: { ...CITY_BOUNDS },
     profile,
@@ -246,13 +248,15 @@ export function createCityPlan(profileName = 'desktop') {
       { id: 'academy-avenue', x: ACADEMY_AVENUE.x, z: ACADEMY_AVENUE.z, width: ACADEMY_AVENUE.width, depth: ACADEMY_AVENUE.depth },
       { id: 'north-cross', x: westToAvenue.x, z: 48.5, width: westToAvenue.width, depth: 9 },
       // M7.1A: North Market ends at the park entrance (x 118); its dead-end east section became Central Park
-      { id: 'north-market', x: (CITY_BOUNDS.minX + PARK.minX - 2) / 2, z: 96, width: PARK.minX - 2 - CITY_BOUNDS.minX, depth: 9 },
+      { id: 'north-market', x: (LEGACY_CITY_MIN_X + PARK.minX - 2) / 2, z: 96, width: PARK.minX - 2 - LEGACY_CITY_MIN_X, depth: 9 },
       { id: 'south-cross', x: westToAvenue.x, z: -48.5, width: westToAvenue.width, depth: 9 },
       { id: 'south-market', x: westToAvenue.x, z: -96, width: westToAvenue.width, depth: 9 },
       // Stage 2: Neon Market's streets (Neon Boulevard, Neon Cross, Neon Row, the avenues carried north)
       ...NEON_ROADS.map((r) => ({ ...r })),
       // Stage 2: Cyber HQ's streets (east of Neon Market; Academy Avenue carried north)
       ...CYBER_ROADS.map((r) => ({ ...r })),
+      // Stage 2: Dark Alley extends the market grid west without stretching legacy roads through it.
+      ...DARK_ROADS.map((r) => ({ ...r })),
     ],
     districts: [
       district('north', 100, 401), district('south', -100, 809),
@@ -269,6 +273,7 @@ export function createCityPlan(profileName = 'desktop') {
       ...neonMarketDistricts(),
       // Stage 2: Cyber HQ, one render chunk per block
       ...cyberHqDistricts(),
+      ...darkAlleyDistricts(),
       { id: DUPLICATED_ORIGINAL_NEIGHBORHOOD.id, kind: 'original-copy', center: { x: DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX, z: 0 }, radius: 58, buildings: [], vehicles: [] },
     ],
     apartment: { ...APARTMENT_SITE },

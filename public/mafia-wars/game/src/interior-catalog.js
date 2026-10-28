@@ -45,7 +45,8 @@ const SKIP = new Set(['west-mixed-north-1', 'west-mixed-north-3', 'academy-libra
 
 function templateFor(b, districtId) {
   if (SHOPS[b.id]) return SHOPS[b.id].template;
-  if (b.kind === 'neon-shop') return b.style === 'cyber' ? 'cyber-studio' : 'vacant'; // distinct licensed business shells
+  if (b.kind === 'neon-shop') return b.style === 'cyber' ? 'cyber-studio' : b.style === 'dark-alley' ? 'dark-stall' : 'vacant'; // distinct licensed business shells
+  if (b.kind === 'casino') return 'casino-lobby';
   if (b.kind === 'neon-tower') return 'tower';
   if (b.kind === 'cyber-tower') return 'tower-lobby';
   if (b.kind === 'house') return 'house';
@@ -163,6 +164,24 @@ const TEMPLATES = {
     f('desk', 3.5, 0.8, 2.2, 0.9, 0.76), f('display', -2.8, 0.8, 2.4, 1.4, 1.0),
     deco('screen', 0, -7.95, 8.0, 0.1, 2.5, { y: 1.2 }), deco('lines', 0, 5.7, 17, 0.12, 0.01),
   ]),
+  // Dark Alley uses compact, rough-finished rooms with a clear central lane. The business type is
+  // reserved in the catalog record; owners can replace this neutral fit-out when they open.
+  'dark-stall': () => shop(16, 14, 4.8, 'loft', [
+    f('counter', 4.8, -5.4, 3.8, 0.9, 1.0), f('rack', -6.6, -1.2, 0.8, 7.2, 2.8),
+    f('display', 2.6, 0.2, 2.0, 1.2, 1.0), deco('screen', 0, -6.95, 6.0, 0.1, 2.0, { y: 1.1 }),
+  ]),
+  // Phase A opens the casino as a substantial public shell: lobby, poker floor, bar and cashier.
+  // Table logic and wagering remain deliberately absent until the casino gameplay phase.
+  'casino-lobby': () => {
+    const w = 32, d = 30;
+    return { w, d, h: 8.5, palette: 'lounge', rooms: ['Grand lobby', 'Poker floor', 'Casino bar', 'Cashier'], partitions: [wallX(5.2, -w / 2, w / 2, [[0, 3.2]])],
+      furniture: [
+        f('counter', 10.6, 10.8, 6.4, 1.1, 1.1), f('bar', -14.5, -3.0, 1.0, 12, 1.1),
+        ...[[-8, -7], [0, -7], [8, -7], [-8, 0], [0, 0], [8, 0]].map(([x, z]) => f('round-table', x, z, 2.4, 2.4, 0.82)),
+        f('sofa', -8, 10.0, 4.0, 1.0, 0.88), f('sofa', 8, 10.0, 4.0, 1.0, 0.88),
+        deco('rug', 0, 10.0, 11, 5, 0.01), deco('screen', 0, -14.95, 12, 0.1, 3.4, { y: 2.0 }),
+      ] };
+  },
   // The Blaq Note: a music lounge with a stage, a bar and tables.
   'music-venue': () => shop(20, 16, 6, 'lounge', [
     f('stage', 0, -6.2, 9, 3.4, 0.6, { step: true }), f('speaker', -4.8, -6.6, 0.9, 0.9, 1.8), f('speaker', 4.8, -6.6, 0.9, 0.9, 1.8), f('mic', 0, -5.4, 0.3, 0.3, 1.5),

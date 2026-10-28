@@ -18,6 +18,7 @@ const KIND_STYLE = Object.freeze({
   // M7.2 the Nerdie Blaq Academy
   library: { color: '#e8c55a', glyph: 'L', label: 'Library' },
   campus: { color: '#9fd8b8', glyph: 'A', label: 'Academy' },
+  casino: { color: '#f0d28a', glyph: 'C', label: 'Casino' },
 });
 const STATUS_LABEL = Object.freeze({ open: 'OPEN', wallet: 'WALLET ONLY', 'coming-soon': 'COMING SOON' });
 const ROUTE_FAILURE = Object.freeze({
@@ -134,7 +135,7 @@ export function createCityMap({ root, rects, bounds, plan, pois, getGraph, arena
   addEventListener('resize', () => { if (open) resize(); });
 
   // Quick list of places (handy on a phone): select and centre.
-  const order = ['bank', 'civic', 'park', 'campus', 'library', 'shop', 'arena', 'apartment', 'house', 'business'];
+  const order = ['bank', 'civic', 'park', 'campus', 'library', 'shop', 'casino', 'arena', 'apartment', 'house', 'business'];
   for (const poi of [...pois].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind))) {
     const button = document.createElement('button');
     button.type = 'button'; button.textContent = poi.name; button.dataset.poi = poi.id;

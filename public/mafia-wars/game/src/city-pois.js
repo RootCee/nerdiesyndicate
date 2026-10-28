@@ -13,6 +13,7 @@ import {
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { NEON_BLOCKS, NEON_STREET_NAMES } from './neon-market-layout.js';
 import { CYBER_BLOCKS, CYBER_STREET_NAMES } from './cyber-hq-layout.js';
+import { DARK_BLOCKS, DARK_CASINO, DARK_STREET_NAMES } from './dark-alley-layout.js';
 
 // Provisional storefront identities, keyed by city-plan building id. Status
 // 'coming-soon' means nothing can be bought or used there yet. To add or rename
@@ -46,7 +47,7 @@ export const STREET_NAMES = Object.freeze({
   main: 'Main Street', 'west-avenue': 'West Avenue', 'east-avenue': 'East Avenue', 'hood-duplicate-main': 'East Block Main',
   'central-cross': 'Central Cross', 'north-cross': 'North Cross', 'north-market': 'North Market', 'south-cross': 'South Cross', 'south-market': 'South Market',
   'academy-avenue': 'Academy Avenue',
-  ...NEON_STREET_NAMES, ...CYBER_STREET_NAMES,
+  ...NEON_STREET_NAMES, ...CYBER_STREET_NAMES, ...DARK_STREET_NAMES,
 });
 export const DISTRICT_NAMES = Object.freeze({
   'central-park': 'Nerdie Central Park', 'civic-center': 'Civic Center',
@@ -54,6 +55,7 @@ export const DISTRICT_NAMES = Object.freeze({
   north: 'North Blocks', south: 'South Blocks', 'east-residential-north': 'East Market', 'east-residential-south': 'East Side',
   'west-mixed-north': 'West Market', 'west-industrial-south': 'Industrial South', 'hood-duplicate-neighborhood': '184 East Block',
   ...Object.fromEntries(NEON_BLOCKS.map((b) => [b.id, 'Neon Market'])), ...Object.fromEntries(CYBER_BLOCKS.map((b) => [b.id, 'Cyber HQ'])),
+  ...Object.fromEntries(DARK_BLOCKS.map((b) => [b.id, 'Dark Alley'])),
 });
 
 // Storefront doors sit on the facade facing the street side of the building.
@@ -84,6 +86,7 @@ export function cityPois(plan = createCityPlan()) {
     { id: DUPLICATED_ENTERABLE_HOUSE_SITE.id, name: DUPLICATED_ENTERABLE_HOUSE_SITE.name, kind: 'house', status: 'open', x: DUPLICATED_ENTERABLE_HOUSE_SITE.x, z: DUPLICATED_ENTERABLE_HOUSE_SITE.z, entry: fromSpace(DUPLICATED_ENTERABLE_HOUSE_SITE.id), spaceId: DUPLICATED_ENTERABLE_HOUSE_SITE.id, description: 'Enterable house. Safe zone.' },
     // M7.2: the Nerdie Blaq Academy and its Library
     ...academyPois(),
+    { id: DARK_CASINO.id, name: DARK_CASINO.name, kind: 'casino', status: 'coming-soon', x: DARK_CASINO.x, z: DARK_CASINO.z, entry: fromSpace(`bld-${DARK_CASINO.id}`), spaceId: `bld-${DARK_CASINO.id}`, description: 'Casino lobby and poker floor reserved for the next build phase.' },
     ...ORIGINAL_EXPANSION_HOUSES.filter((site) => site.enterable).map((site) => ({
       id: site.id, name: site.name, kind: 'house', status: 'open', x: site.x, z: site.z, entry: fromSpace(site.id), spaceId: site.id, description: 'Enterable house. Safe zone.',
     })),

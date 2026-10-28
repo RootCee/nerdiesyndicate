@@ -836,7 +836,7 @@ function emptyShopMaterial(kit) {
 // Cyber HQ's lots: steel, concrete and dark glass studios and workshops
 const CYBER_BODIES = ['metal', 'concrete', 'charcoal', 'stone', 'metal'];
 function neonShop(batch, kit, b, parent, { mobile = false } = {}) {
-  const cyber = b.style === 'cyber', bodies = cyber ? CYBER_BODIES : NEON_BODIES;
+  const cyber = b.style === 'cyber', dark = b.style === 'dark-alley', bodies = cyber ? CYBER_BODIES : dark ? ['darkBrick', 'charcoal', 'brick', 'metal'] : NEON_BODIES;
   const m = kit.m, look = LICENSE_LOOK[b.license] || LICENSE_LOOK.retail, f = facade(b, b.front), half = f.length / 2, body = m[bodies[hashId(b.id) % bodies.length]];
   batch.box(body, b.x, b.height / 2, b.z, b.width, b.height, b.depth);
   // glass shopfront and door
@@ -858,7 +858,31 @@ function neonShop(batch, kit, b, parent, { mobile = false } = {}) {
     fbox(batch, m.metal, f, 0, 3.45, 0.85, Math.min(7.8, 2 * half - 1.2), 0.14, 1.7);
     fbox(batch, m.neonPurple, f, 0, Math.min(7.55, b.height - 0.72), 0.18, 2 * half - 1.2, 0.1, 0.06);
   }
+  if (dark) {
+    // Narrow steel awnings, mismatched shutters and warm/purple tubes keep the district visibly rougher
+    // and denser than Neon Market's clean two-storey retail rows.
+    fbox(batch, m.metal, f, 0, 3.55, 0.72, Math.max(3.8, 2 * half - 1.0), 0.14, 1.45);
+    for (const s of [-1, 1]) fbox(batch, s < 0 ? m.darkBrick : m.charcoal, f, s * (half - 0.38), b.height / 2, 0.16, 0.42, b.height - 0.5, 0.28);
+    fbox(batch, hashId(b.id) % 2 ? m.neonPurple : m.neonPink, f, 0, Math.min(5.65, b.height - 0.85), 0.18, Math.max(3.2, 2 * half - 1.5), 0.1, 0.06);
+  }
   fbox(batch, m[look.neon], f, 0, b.height - 0.25, 0.08, 2 * half, 0.06, 0.05);
+}
+
+function casino(batch, kit, b, parent) {
+  const m = kit.m, f = facade(b, b.front), half = f.length / 2;
+  batch.box(m.darkBrick, b.x, b.height / 2, b.z, b.width, b.height, b.depth);
+  batch.box(m.charcoal, b.x, 1.0, b.z, b.width + 0.4, 2.0, b.depth + 0.4);
+  for (const side of ['north', 'south', 'east', 'west']) {
+    const g = facade(b, side); fbox(batch, m.gold, g, 0, b.height - 1.0, 0.12, g.length - 1.2, 0.16, 0.08);
+    for (let a = -g.length / 2 + 3; a <= g.length / 2 - 3; a += 4.2) windowUnit(batch, kit, g, a, 8.0, 2.2, 3.0, { glass: m.glassWarm, surround: m.gold });
+  }
+  fbox(batch, m.glassWarm, f, 0, 3.0, 0.14, 8.0, 5.4, 0.06);
+  fbox(batch, m.gold, f, 0, 2.5, 0.18, 3.0, 5.0, 0.12);
+  fbox(batch, m.charcoal, f, 0, 5.9, 1.0, 15.0, 0.35, 2.0);
+  for (let i = -3; i <= 3; i++) fbox(batch, i % 2 ? m.neonPurple : m.lamp, f, i * 2, 5.72, 1.9, 0.24, 0.08, 0.24);
+  const sign = drawn(kit, (ctx, w, h) => { ctx.fillStyle = '#0b0710'; ctx.fillRect(0, 0, w, h); ctx.strokeStyle = '#c19a49'; ctx.lineWidth = 10; ctx.strokeRect(14, 14, w - 28, h - 28); ctx.fillStyle = '#f0d28a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '700 112px Barlow, sans-serif'; ctx.fillText('NERDIE CITY CASINO', w / 2, h * 0.44); ctx.fillStyle = '#c39bff'; ctx.font = '600 40px Barlow, sans-serif'; ctx.fillText('POKER · CASINO · NIGHTLIFE', w / 2, h * 0.82); }, { w: 1024, h: 220, day: 0.25, night: 1.3, preview: 0x24152f });
+  signPlane(parent, sign, f, 0, 7.0, 0.2, Math.min(18, 2 * half - 3), 2.2, 'showcase-dark-alley-casino-sign');
+  parapet(batch, kit, b, m.charcoal, 0.8, 0.45);
 }
 // The Neon Tower: twenty floors of glass between dark stone fins, a lit band every fourth floor, a neon crown,
 // and a double-height lobby with a canopy facing Main Street.
@@ -886,7 +910,7 @@ export function showcaseBuilding(batch, kit, b, parent, opts = {}) {
   const from = kit.night.length, store = storeForBuilding(b.id), shared = kit.m;
   // a store gets its own copies of the lit trims and warm window glass (canopy lamps, neon, lit windows), so they go dark with it
   if (store) { kit.m = Object.create(shared); for (const k of ['lamp', 'neonPurple', 'neonGreen', 'glassWarm']) { const n = kit.night.find((x) => x.m === shared[k]), c = shared[k].clone(); kit.m[k] = c; kit.night.push({ m: c, day: n.day, night: n.night }); } }
-  try { (SHOWCASE_DESIGNS[b.id] || (b.kind === 'neon-shop' ? neonShop : b.kind === 'neon-tower' || b.kind === 'cyber-tower' ? neonTower : b.kind === 'house' ? house : b.kind === 'warehouse' ? warehouse : b.kind === 'civic' ? cityHall : b.kind === 'library' ? library : b.kind === 'academy-hall' ? academyHall : b.kind === 'clock-tower' ? clockTower : b.kind === 'pavilion' ? pavilion : b.kind === 'bleachers' ? bleachers : midrise))(batch, kit, b, parent, opts); } finally { kit.m = shared; }
+  try { (SHOWCASE_DESIGNS[b.id] || (b.kind === 'neon-shop' ? neonShop : b.kind === 'casino' ? casino : b.kind === 'neon-tower' || b.kind === 'cyber-tower' ? neonTower : b.kind === 'house' ? house : b.kind === 'warehouse' ? warehouse : b.kind === 'civic' ? cityHall : b.kind === 'library' ? library : b.kind === 'academy-hall' ? academyHall : b.kind === 'clock-tower' ? clockTower : b.kind === 'pavilion' ? pavilion : b.kind === 'bleachers' ? bleachers : midrise))(batch, kit, b, parent, opts); } finally { kit.m = shared; }
   // a store's own signs, shop windows and trims go dark when it closes (store-hours.js, kit.setClosed)
   if (store) for (let k = from; k < kit.night.length; k++) kit.night[k].store = store.id;
 }
