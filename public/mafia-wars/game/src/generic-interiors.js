@@ -411,7 +411,9 @@ export class GenericInteriorSystem {
           ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#f2d28b'; ctx.font = '700 110px Barlow, sans-serif'; ctx.fillText(door.code, cw / 2, ch / 2, cw * 0.82);
         }, { w: 384, h: 192, preview: 0x100e14, day: 0.8, night: 0.8 });
         const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.36), number), left = door.x < cx;
-        plate.position.set(door.x + (left ? 0.18 : -0.18), y + 1.7, door.z + 1.18);
+        // Mount the number on the corridor wall beside the residence, never on the door slab. Keeping
+        // the plate 1.45 m along the wall also leaves a clear visual break from the 1.8 m-wide door.
+        plate.position.set(left ? L.minX + 0.03 : L.maxX - 0.03, y + 1.7, door.z + 1.45);
         plate.rotation.y = left ? Math.PI / 2 : -Math.PI / 2; plate.name = `${e.spaceId}-unit-${door.code}`; g.add(plate);
       }
     }
@@ -673,6 +675,11 @@ export class GenericInteriorSystem {
           }
         }
         break;
+      }
+      case 'residence-door': {
+        bx(M.trim, x0, x1, oy, oy + h + 0.12, z0, z1); const face = o.x > 0 ? x0 - 0.015 : x1;
+        bx(M.wood, face, face + 0.02, oy + 0.08, oy + h - 0.05, z0 + 0.1, z1 - 0.1);
+        const handleZ = o.z + (o.z <= 0 ? 0.48 : -0.48); bx(M.accent, face - 0.02, face + 0.04, oy + 1.0, oy + 1.12, handleZ - 0.05, handleZ + 0.05); break;
       }
       case 'wardrobe': case 'booth': case 'lift': case 'speaker': case 'gears': case 'forklift': case 'dryers': case 'washers': case 'display': case 'mannequin': {
         if (o.type === 'lift') { bx(M.trim, x0, x1, oy, oy + h + 0.2, z0, z1); const face = o.x > 0 ? x0 - 0.01 : x1; bx(M.metal, face, face + 0.01, oy, oy + h, z0 + 0.1, (z0 + z1) / 2 - 0.02); bx(M.metal, face, face + 0.01, oy, oy + h, (z0 + z1) / 2 + 0.02, z1 - 0.1); bx(M.glow, face, face + 0.01, oy + h + 0.05, oy + h + 0.15, (z0 + z1) / 2 - 0.2, (z0 + z1) / 2 + 0.2); break; }

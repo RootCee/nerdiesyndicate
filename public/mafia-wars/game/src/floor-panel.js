@@ -6,6 +6,9 @@ const STYLE = `
 #floorPanel.on{display:flex}
 #floorPanel .fp-card{background:linear-gradient(180deg,#120c22,#08060f);border:2px solid #c9a227;border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.6);width:min(460px,100%);max-height:100%;overflow:auto}
 #floorPanel .fp-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-bottom:1px solid #3a2d5c}
+#floorPanel .fp-quick{padding:10px 16px 0}
+#floorPanel .fp-lobby{display:block;width:100%;min-height:52px;border:2px solid #e8c55a;border-radius:10px;background:linear-gradient(90deg,#382b12,#1d1720);color:#fff;font:700 17px 'Barlow Condensed',system-ui,sans-serif;letter-spacing:.08em;cursor:pointer}
+#floorPanel .fp-lobby small{display:block;margin-top:2px;color:#f2d28b;font:500 13px 'Barlow',sans-serif;letter-spacing:0}
 #floorPanel .fp-kicker{font-size:13px;letter-spacing:.18em;color:#c8b3ff;text-transform:uppercase}
 #floorPanel h2{margin:2px 0 0;font-size:22px;letter-spacing:.04em;color:#f2d28b}
 #floorPanel .fp-x{flex:none;background:none;border:1px solid #5b4a86;color:#f3eefc;border-radius:8px;width:44px;height:44px;font-size:22px;cursor:pointer}
@@ -32,8 +35,8 @@ export class FloorPanel {
     if (this.root || !this.doc) return;
     const d = this.doc, style = d.createElement('style'); style.textContent = STYLE; d.head.appendChild(style);
     const root = d.createElement('div'); root.id = 'floorPanel'; root.setAttribute('role', 'dialog'); root.setAttribute('aria-modal', 'true'); root.setAttribute('aria-label', 'Choose a floor');
-    root.innerHTML = '<div class="fp-card"><div class="fp-head"><div><div class="fp-kicker">Elevator</div><h2></h2></div><button class="fp-x" type="button" aria-label="Close">×</button></div><div class="fp-list"></div></div>';
-    d.body.appendChild(root); this.root = root; this.el = { title: root.querySelector('h2'), list: root.querySelector('.fp-list') };
+    root.innerHTML = '<div class="fp-card"><div class="fp-head"><div><div class="fp-kicker">Elevator</div><h2></h2></div><button class="fp-x" type="button" aria-label="Close">×</button></div><div class="fp-quick"></div><div class="fp-list"></div></div>';
+    d.body.appendChild(root); this.root = root; this.el = { title: root.querySelector('h2'), quick: root.querySelector('.fp-quick'), list: root.querySelector('.fp-list') };
     root.querySelector('.fp-x').addEventListener('click', () => this.close());
     root.addEventListener('click', (e) => { if (e.target === root) return this.close(); const b = e.target.closest('[data-floor]'); if (b) this.choose(Number(b.dataset.floor)); });
     for (const type of ['keydown', 'keyup']) root.addEventListener(type, (e) => {
@@ -49,5 +52,9 @@ export class FloorPanel {
       return `<button type="button" class="fp-floor${here ? ' here' : ''}" data-floor="${f.floor}"${!f.open ? ' disabled' : ''} aria-current="${here}"><span class="fp-n">${f.floor === 1 ? 'L' : f.floor}</span><b>${esc(f.title)}${here ? ' · you are here' : ''}</b><small>${line}${f.open ? '' : ' · private'}</small></button>`;
     }).join('');
   }
-  render() { if (!this.el || !this.menu) return; this.el.title.textContent = this.menu.building; this.el.list.innerHTML = this.html(); }
+  shortcutHtml() {
+    if (!this.menu || this.menu.current === 1 || !this.menu.floors.some((f) => f.floor === 1 && f.open)) return '';
+    return '<button type="button" class="fp-lobby" data-floor="1">RETURN TO LOBBY<small>Then use the street doors to exit the building</small></button>';
+  }
+  render() { if (!this.el || !this.menu) return; this.el.title.textContent = this.menu.building; this.el.quick.innerHTML = this.shortcutHtml(); this.el.list.innerHTML = this.html(); }
 }

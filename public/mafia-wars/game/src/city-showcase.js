@@ -836,7 +836,7 @@ function emptyShopMaterial(kit) {
 // Cyber HQ's lots: steel, concrete and dark glass studios and workshops
 const CYBER_BODIES = ['metal', 'concrete', 'charcoal', 'stone', 'metal'];
 function neonShop(batch, kit, b, parent, { mobile = false } = {}) {
-  const bodies = b.style === 'cyber' ? CYBER_BODIES : NEON_BODIES;
+  const cyber = b.style === 'cyber', bodies = cyber ? CYBER_BODIES : NEON_BODIES;
   const m = kit.m, look = LICENSE_LOOK[b.license] || LICENSE_LOOK.retail, f = facade(b, b.front), half = f.length / 2, body = m[bodies[hashId(b.id) % bodies.length]];
   batch.box(body, b.x, b.height / 2, b.z, b.width, b.height, b.depth);
   // glass shopfront and door
@@ -849,8 +849,15 @@ function neonShop(batch, kit, b, parent, { mobile = false } = {}) {
   fbox(batch, m.charcoal, f, 0, 4.15, 0.12, 2 * half - 0.2, 1.1, 0.2);
   fbox(batch, m[look.neon], f, 0, 3.55, 0.24, 2 * half - 0.4, 0.06, 0.05);
   signPlane(parent, drawn(kit, lotSign(b, look), { w: 768, h: 220, res: 0.5, day: 0.25, night: 1.2, preview: 0x101018 }), f, 0, 4.15, 0.23, Math.min(6.2, 2 * half - 1.0), 0.9, `showcase-${b.id}-sign`);
-  // upper floor: two windows, a neon line along the parapet
-  if (!mobile) for (const s of [-1, 1]) windowUnit(batch, kit, f, s * half / 2, 6.4, Math.min(2.2, half - 0.8), 1.6, { glass: hashId(b.id + s) % 3 ? m.glass : m.glassWarm, surround: m.charcoal, lean: true });
+  // Neon Market keeps individual upstairs windows. Cyber HQ uses a continuous dark-glass data ribbon,
+  // structural fins and a projecting steel canopy so its broader labs read as a separate district.
+  if (!mobile && !cyber) for (const s of [-1, 1]) windowUnit(batch, kit, f, s * half / 2, 6.4, Math.min(2.2, half - 0.8), 1.6, { glass: hashId(b.id + s) % 3 ? m.glass : m.glassWarm, surround: m.charcoal, lean: true });
+  if (cyber) {
+    fbox(batch, m.glassCool, f, 0, Math.min(6.5, b.height - 1.6), 0.1, 2 * half - 1.0, 1.8, 0.06);
+    for (const s of [-1, 1]) fbox(batch, m.metal, f, s * (half - 0.8), b.height / 2, 0.2, 0.34, b.height, 0.35);
+    fbox(batch, m.metal, f, 0, 3.45, 0.85, Math.min(7.8, 2 * half - 1.2), 0.14, 1.7);
+    fbox(batch, m.neonPurple, f, 0, Math.min(7.55, b.height - 0.72), 0.18, 2 * half - 1.2, 0.1, 0.06);
+  }
   fbox(batch, m[look.neon], f, 0, b.height - 0.25, 0.08, 2 * half, 0.06, 0.05);
 }
 // The Neon Tower: twenty floors of glass between dark stone fins, a lit band every fourth floor, a neon crown,

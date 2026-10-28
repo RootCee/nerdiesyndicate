@@ -45,8 +45,9 @@ const SKIP = new Set(['west-mixed-north-1', 'west-mixed-north-3', 'academy-libra
 
 function templateFor(b, districtId) {
   if (SHOPS[b.id]) return SHOPS[b.id].template;
-  if (b.kind === 'neon-shop') return 'vacant'; // Stage 2: a business lot waiting for its licensed operator
+  if (b.kind === 'neon-shop') return b.style === 'cyber' ? 'cyber-studio' : 'vacant'; // distinct licensed business shells
   if (b.kind === 'neon-tower') return 'tower';
+  if (b.kind === 'cyber-tower') return 'tower-lobby';
   if (b.kind === 'house') return 'house';
   if (b.kind === 'mixed') return 'lofts';
   if (b.kind === 'warehouse') return 'warehouse';
@@ -57,7 +58,7 @@ function templateFor(b, districtId) {
   return null;
 }
 const TIER = Object.freeze({ house: 'family', apartments: 'standard', lofts: 'standard' });
-const FALLBACK_NAME = Object.freeze({ apartments: 'Apartments', lofts: 'Lofts', tower: 'Neon Tower', warehouse: 'Warehouse', house: 'House' });
+const FALLBACK_NAME = Object.freeze({ apartments: 'Apartments', lofts: 'Lofts', tower: 'Neon Tower', 'tower-lobby': 'Cyber Tower', warehouse: 'Warehouse', house: 'House' });
 
 // ---------------------------------------------------------------- layouts
 // Each template builds in local metres (x across, z from the back wall at -d/2 to the door wall at +d/2)
@@ -112,6 +113,18 @@ const TEMPLATES = {
         f('plant', -9.8, 7.6, 0.8, 0.8, 1.8), f('plant', 9.8, 7.6, 0.8, 0.8, 1.8),
       ] };
   },
+  // Cyber Tower opens as a public lobby in this checkpoint. Its residential hierarchy is kept
+  // separate from Neon Tower and will be added with the Cyber Tower residence registry.
+  'tower-lobby': () => {
+    const w = 24, d = 20;
+    return { w, d, h: 5.6, palette: 'industrial', rooms: ['Cyber Tower lobby'], partitions: [],
+      furniture: [
+        deco('screen', 0, -d / 2 + 0.05, 10, 0.1, 2.6, { y: 1.2 }),
+        f('counter', 7.4, 1.5, 4.4, 1.0, 1.1), f('desk', 7.4, 0.5, 0.8, 0.6, 0.76),
+        f('bench', -5.4, 3.8, 3.8, 0.6, 0.48), f('bench', 0, 3.8, 3.8, 0.6, 0.48),
+        f('plant', -10.6, 8.4, 0.8, 0.8, 1.8), f('plant', 10.6, 8.4, 0.8, 0.8, 1.8),
+      ] };
+  },
   // A private lift hall. The six door slabs are visual landmarks; their interaction points and stable
   // residence IDs come from neon-tower-residences.js.
   'tower-floor': () => {
@@ -119,7 +132,7 @@ const TEMPLATES = {
     return { w, d, h: 3.2, palette: 'luxury', rooms: ['Lift hall'], partitions: [],
       furniture: [
         f('lift', -1.5, -d / 2 + 0.2, 1.8, 0.3, 2.5), f('lift', 1.5, -d / 2 + 0.2, 1.8, 0.3, 2.5), deco('rug', 0, -4.3, 4.8, 1.8, 0.01),
-        ...[-4.1, 0, 4.1].flatMap((z) => [f('lift', -w / 2 + 0.2, z, 0.3, 1.8, 2.45), f('lift', w / 2 - 0.2, z, 0.3, 1.8, 2.45)]),
+        ...[-4.1, 0, 4.1].flatMap((z) => [f('residence-door', -w / 2 + 0.2, z, 0.3, 1.8, 2.45), f('residence-door', w / 2 - 0.2, z, 0.3, 1.8, 2.45)]),
         f('bench', 0, 3.6, 2.8, 0.55, 0.45), f('plant', -3.6, 5.8, 0.7, 0.7, 1.5), f('plant', 3.6, 5.8, 0.7, 0.7, 1.5),
       ] };
   },
@@ -144,6 +157,12 @@ const TEMPLATES = {
   ]),
   // A business lot nobody runs yet (Neon Market): an empty, lit shop floor with a counter at the back.
   vacant: () => shop(14, 12, 4.4, 'bright', [f('counter', 3.6, -4.6, 3, 0.8, 1.0)]),
+  // Cyber HQ licenses are larger studio/workshop floors, with a prototype bench, server rack and wall display.
+  'cyber-studio': () => shop(20, 16, 5.4, 'industrial', [
+    f('counter', 6.2, -6.4, 4.2, 0.9, 1.0), f('rack', -8.4, -1.4, 1.0, 8.6, 3.6),
+    f('desk', 3.5, 0.8, 2.2, 0.9, 0.76), f('display', -2.8, 0.8, 2.4, 1.4, 1.0),
+    deco('screen', 0, -7.95, 8.0, 0.1, 2.5, { y: 1.2 }), deco('lines', 0, 5.7, 17, 0.12, 0.01),
+  ]),
   // The Blaq Note: a music lounge with a stage, a bar and tables.
   'music-venue': () => shop(20, 16, 6, 'lounge', [
     f('stage', 0, -6.2, 9, 3.4, 0.6, { step: true }), f('speaker', -4.8, -6.6, 0.9, 0.9, 1.8), f('speaker', 4.8, -6.6, 0.9, 0.9, 1.8), f('mic', 0, -5.4, 0.3, 0.3, 1.5),
