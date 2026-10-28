@@ -70,9 +70,9 @@ import { NpcRenderer, NPC_RENDER_RULES } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=bank-m2.2-rel12';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=bank-m2.2-rel13';
 
-const GAME_BUILD_ID = 'bank-m2.2-rel12';
+const GAME_BUILD_ID = 'bank-m2.2-rel13';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');

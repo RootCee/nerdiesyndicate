@@ -45,7 +45,7 @@ export class FloorPanel {
   html() {
     const m = this.menu; if (!m) return '';
     return m.floors.map((f) => {
-      const here = f.floor === m.current, line = f.floor === 1 ? 'Street door, mail, concierge' : `${esc(f.tier)} · ${Number(f.value).toLocaleString('en-US')} sNERDIE · about ${esc(f.area)} m²`;
+      const here = f.floor === m.current, line = f.floor === 1 ? 'Street door, mail, concierge' : f.summary ? esc(f.summary) : `${esc(f.tier)} · ${Number(f.value).toLocaleString('en-US')} sNERDIE · about ${esc(f.area)} m²`;
       return `<button type="button" class="fp-floor${here ? ' here' : ''}" data-floor="${f.floor}"${!f.open ? ' disabled' : ''} aria-current="${here}"><span class="fp-n">${f.floor === 1 ? 'L' : f.floor}</span><b>${esc(f.title)}${here ? ' · you are here' : ''}</b><small>${line}${f.open ? '' : ' · private'}</small></button>`;
     }).join('');
   }

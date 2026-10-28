@@ -7,7 +7,7 @@
 //     25 Financial, 5 Tech, 5 Manufacturing. Each lot is its own two-storey shopfront with an address. A lot
 //     stays available (enterable, empty, its plaque naming its license class) until it is opened;
 //   - six six-storey loft buildings (30 lofts, the existing lofts template);
-//   - the Neon Tower: the luxury residential tower (120 apartments and 6 penthouses; its homes come next);
+//   - the Neon Tower: the luxury residential tower (120 apartments and 6 penthouses);
 //   - Neon Plaza, the open square at Main Street and Neon Boulevard.
 //
 // Pure data: the city plan, the ground (roads, sidewalks, streetlights), the catalog and the tests read it.
@@ -34,7 +34,9 @@ export const NEON_STREET_NAMES = Object.freeze({
 // The blocks between the sidewalks (2 m) of those streets.
 const COLS = [[-140, -95], [-81, -6.5], [6.5, 81], [95, 130]], ROWS = [[164, 245], [259, 342]];
 export const NEON_PLAZA = Object.freeze({ id: 'neon-plaza', name: 'Neon Plaza', minX: -81, maxX: -6.5, minZ: 164, maxZ: 214 });
-export const NEON_TOWER = Object.freeze({ id: 'neon-tower', name: 'Neon Tower', kind: 'neon-tower', x: 36, z: 196, width: 26, depth: 28, height: 72, floors: 20, apartments: 120, penthouses: 6, fixedFront: 'west' });
+// Lobby + 20 six-home apartment storeys + one six-home penthouse storey. At the shared 3.4 m storey
+// height, 75.2 m leaves the top homes a full ceiling and a shallow roof/parapet above them.
+export const NEON_TOWER = Object.freeze({ id: 'neon-tower', name: 'Neon Tower', kind: 'neon-tower', x: 36, z: 196, width: 26, depth: 28, height: 75.2, floors: 22, apartments: 120, penthouses: 6, fixedFront: 'west' });
 
 const SHOP_DEPTH = 12, LOT = 11, SHOP_HEIGHTS = [8.4, 9.2, 8.8, 10];
 // Which sides of each block carry shopfronts ('s' faces the street south of the block, and so on), and
