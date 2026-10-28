@@ -25,6 +25,7 @@ import { bankBuilding } from './bank-layout.js';
 import { GenericInteriorSystem } from './generic-interiors.js';
 import { entranceWalkways } from './entrance-walkways.js';
 import { buildEntranceWalkways } from './entrance-walkways-view.js';
+import { STORES } from './store-hours.js';
 
 const material = (color, roughness = 0.88, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
 const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
@@ -339,6 +340,9 @@ export function buildCityExpansion(scene, Q = {}) {
       const l = Math.max(0, Math.min(1, level)); if (Math.abs(l - city.nightLevel) < 0.002) return;
       city.nightLevel = l; streetlights.setLevel(l); kit?.setNight(l); updateCityLights();
     },
+    // Store hours (store-hours.js): closed stores' signs and shop windows go dark.
+    storesOpen: true,
+    setStoresOpen(open) { if (open === city.storesOpen) return; city.storesOpen = open; kit?.setClosed(open ? [] : STORES.map((s) => s.id)); },
     showcase: kit ? { zone: SHOWCASE, ...showcaseStats } : null,
     beginPrewarm() {
       const state = chunks.map((chunk) => chunk.group.visible);

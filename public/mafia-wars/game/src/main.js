@@ -63,13 +63,16 @@ import { cityPois } from './city-pois.js';
 import { UNDERGROUND_HOUSES } from './underground-match.js';
 import { UNDERGROUND_SPAWNS } from './multiplayer-combat.js';
 import * as npcLibrary from './npc-library.js';
+import { StoreStaff } from './store-staff.js';
+import { isStoreOpen } from './store-hours.js';
+import { economicMinuteOfDay } from './resident-schedule.js';
 import { NpcRenderer, NPC_RENDER_RULES } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=bank-m2.2-rel10';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=bank-m2.2-rel11';
 
-const GAME_BUILD_ID = 'bank-m2.2-rel10';
+const GAME_BUILD_ID = 'bank-m2.2-rel11';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -287,6 +290,7 @@ const residentTalk = {
   update(interact) {
     const none = { prompt: '', mobileLabel: '' };
     if (residentPanel.open) {
+      if (talkStaff) return none;
       const e = npcRenderer.entries.get(talkIndex);
       if (!e?.render || Math.hypot(e.render.x - player.pos.x, e.render.z - player.pos.z) > TALK_RANGE_M * 3) residentPanel.close();
       else if (performance.now() >= talkRefreshAt) { multiplayer?.talkToResident?.(talkIndex); talkRefreshAt = performance.now() + TALK_REFRESH_MS; }
@@ -299,7 +303,20 @@ const residentTalk = {
       const d = Math.hypot(e.render.x - player.pos.x, e.render.z - player.pos.z); if (d < bestD) { bestD = d; best = [index, e]; }
     }
     const resident = best && talkableResident(best[0], best[1].identity); if (!resident) return none;
-    if (interact) { talkIndex = resident.index; residentPanel.show(resident); multiplayer?.talkToResident?.(resident.index); talkRefreshAt = performance.now() + TALK_REFRESH_MS; return none; }
+    if (interact) { talkIndex = resident.index; talkStaff = false; residentPanel.show(resident); multiplayer?.talkToResident?.(resident.index); talkRefreshAt = performance.now() + TALK_REFRESH_MS; return none; }
+    return { prompt: `${Q.mobile ? '' : '[E] '}TALK TO ${resident.name.toUpperCase()}`, mobileLabel: 'TALK' };
+  },
+};
+// The resident on shift behind a store's counter (store-staff.js): talk to them like anyone on the street.
+const storeStaff = new StoreStaff(scene, { library: npcLibrary });
+let talkStaff = false, storeHoursCheckAt = 0;
+const staffTalk = {
+  update(interact) {
+    const none = { prompt: '', mobileLabel: '' };
+    if (residentPanel.open) { if (talkStaff && storeStaff.nearby(player, TALK_RANGE_M * 3) !== talkIndex) residentPanel.close(); return none; }
+    const index = storeStaff.nearby(player, TALK_RANGE_M + 1); if (index < 0 || player.dead) return none; // across the counter
+    const resident = talkableResident(index, PERMANENT_RESIDENT_IDENTITIES[index]); if (!resident) return none;
+    if (interact) { talkIndex = index; talkStaff = true; residentPanel.show(resident); return none; }
     return { prompt: `${Q.mobile ? '' : '[E] '}TALK TO ${resident.name.toUpperCase()}`, mobileLabel: 'TALK' };
   },
 };
@@ -1510,6 +1527,8 @@ function loop(now) {
       const interiorActive = gunShopState.active || libraryState.active || bankInteriorState.active || apartmentState.active || originalHouseState.active || duplicatedHouseState.active || houseState.active || buildingState.active;
       const interiorSite = gunShopState.active ? city.gunShop.site : libraryState.active ? city.library.site : bankInteriorState.active ? city.bankInterior.site : apartmentState.active ? city.apartment.site : originalHouseState.active ? city.originalHouse.site : duplicatedHouseState.active ? city.duplicatedHouse.site : houseState.active ? city.house.site : buildingState.active ? city.interiors.site : null;
       cityInteriorName = interiorSite?.name || ''; cityInteriorId = interiorSite?.id || '';
+      if (time >= storeHoursCheckAt) { storeHoursCheckAt = time + 5; city.setStoresOpen?.(isStoreOpen(economicMinuteOfDay())); } // lights off after 10 PM Pacific
+      storeStaff.update(dt, gunShopState.active ? 'nerdie-arms' : buildingState.active ? city.interiors.site?.id : null, gunShopState.active ? city.gunShop.staffStand : buildingState.active ? city.interiors.staffStand : null, player);
       const venueState = interiorActive || buildingState.transitioned || libraryState.transitioned || bankInteriorState.transitioned || apartmentState.transitioned || originalHouseState.transitioned || duplicatedHouseState.transitioned || houseState.transitioned
         ? { prompt: '', requestedLobby: false }
         : city.combatVenue.update(player, !!input.interact, time, combatLobbyOpen);
@@ -1527,7 +1546,7 @@ function loop(now) {
         : chessClient.update(player, !!input.interact, multiplayerActive && multiplayer?.state === 'connected');
       const otherPrompt = gunShopState.prompt || libraryState.prompt || bankInteriorState.prompt || apartmentState.prompt || originalHouseState.prompt || duplicatedHouseState.prompt || houseState.prompt || buildingState.prompt || venueState.prompt || bankState.prompt || chessState.prompt;
       // Talking to a resident is offered only when nothing else is (doors, counters and tables come first).
-      const talkState = otherPrompt || interiorActive ? { prompt: '', mobileLabel: '' } : residentTalk.update(!!input.interact);
+      const talkState = otherPrompt ? { prompt: '', mobileLabel: '' } : interiorActive ? staffTalk.update(!!input.interact) : residentTalk.update(!!input.interact);
       const prompt = otherPrompt || talkState.prompt;
       const activeHouseState = [originalHouseState, duplicatedHouseState, houseState].find((state) => state.prompt) || houseState;
       const mobileLabel = gunShopState.mobileLabel ? gunShopState.mobileLabel : libraryState.mobileLabel ? libraryState.mobileLabel : bankInteriorState.mobileLabel ? bankInteriorState.mobileLabel : venueState.prompt ? 'ENTER COMBAT' : bankState.prompt ? bankState.mobileLabel : chessState.prompt ? chessState.mobileLabel : activeHouseState.prompt && !activeHouseState.blocked ? (activeHouseState.active ? 'EXIT HOUSE' : 'ENTER HOUSE') : buildingState.prompt ? buildingState.mobileLabel : talkState.prompt ? talkState.mobileLabel : '';

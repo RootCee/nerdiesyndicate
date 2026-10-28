@@ -130,7 +130,10 @@ export function createShowcaseMaterials({ mobile = false } = {}) {
   m.metal.userData.tile = tex.metal.userData.tile; m.slats.userData.tile = tex.slats.userData.tile;
   for (const [k, t] of [['brick', 'brick'], ['darkBrick', 'darkBrick'], ['creamBrick', 'creamBrick'], ['stone', 'ashlar'], ['stucco', 'stucco'], ['stuccoWarm', 'stuccoWarm'], ['tile', 'tile']]) m[k].userData.tile = tex[t].userData.tile;
   for (const [k, v] of Object.entries(m)) v.name = `showcase-${k}`;
-  return { m, tex, night, mobile, setNight(level) { for (const n of night) n.m.emissiveIntensity = n.day + (n.night - n.day) * level; } };
+  // closed: the stores whose signs and shop windows are dark (store-hours.js; their glows carry `store`)
+  return { m, tex, night, mobile, level: 1, closed: new Set(),
+    setNight(level) { this.level = level; for (const n of night) n.m.emissiveIntensity = n.store && this.closed.has(n.store) ? 0 : n.day + (n.night - n.day) * level; },
+    setClosed(ids) { this.closed = new Set(ids); this.setNight(this.level); } };
 }
 
 // Signs: a canvas texture that reads by day and glows at night (one material and mesh per sign).

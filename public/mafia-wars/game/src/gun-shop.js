@@ -3,6 +3,8 @@ import { insideInteractionRange, interactionCooldownReady } from './city-layout.
 import { addInteriorIsolationShell, wallCollider } from './apartment-system.js';
 import { KitBatch, signMaterial, PALETTE } from './city-showcase-kit.js';
 import { gunShopInterior, gunShopSpace, GUN_SHOP_RULES } from './gun-shop-layout.js';
+import { economicMinuteOfDay } from './resident-schedule.js';
+import { isStoreOpen } from './store-hours.js';
 
 // Ammo (the gun shop) interior: like the other interiors it sits high above the city on render layer 1,
 // with its own colliders. Customers come in from West Avenue, restock at the counter, and pick a
@@ -27,8 +29,9 @@ function weaponModel(batch, m, id, x, y, z, s = 1) {
 }
 
 export class GunShopSystem {
-  constructor(scene, site, { addCollider, mobile = false, kit = null } = {}) {
-    this.scene = scene; this.site = site; this.addCollider = addCollider; this.mobile = mobile; this.kit = kit;
+  // storeMinute: the economic minute of day (Pacific) that store hours follow (store-hours.js).
+  constructor(scene, site, { addCollider, mobile = false, kit = null, storeMinute = () => economicMinuteOfDay() } = {}) {
+    this.scene = scene; this.site = site; this.addCollider = addCollider; this.mobile = mobile; this.kit = kit; this.storeMinute = storeMinute;
     this.active = false; this.prompt = ''; this.transitionReadyAt = 0; this.actionReadyAt = 0;
     this.layout = gunShopInterior(site); this.space = gunShopSpace(site);
     this.exterior = new THREE.Group(); this.exterior.name = `gun-shop-exterior-${site.id}`; // the facade is part of the showcase (city-showcase.js)
@@ -115,12 +118,16 @@ export class GunShopSystem {
     wallCollider(ac, (L.minX + 1.4 + C.x - 1.4) / 2, y + 1.1, L.maxZ - 0.3, C.x - L.minX - 2.8, 2.2, 0.6, { interior: id, furniture: 'shelves' });
   }
 
+  // Behind the counter, facing the customers (store-staff.js draws the clerk on shift there): along it from
+  // the restock spot, so a customer can step up to talk.
+  get staffStand() { const L = this.layout; return this.active ? { x: Math.min(L.maxX - 0.32, L.counter.x + 1.0), y: L.y, z: Math.min(this.site.z + 2.6, L.counter.maxZ - 0.6), yaw: -Math.PI / 2 } : null; }
   // { active, transitioned, prompt, name, mobileLabel, action: 'restock' | 'equip' | null, weaponId }
   update(player, input, now = 0) {
     const interact = !!input.interact, tap = this.mobile ? 'TAP' : '[E]';
     const idle = (prompt = '', mobileLabel = '', action = null, weaponId = null) => ({ active: this.active, transitioned: false, prompt, name: this.site.name, mobileLabel, action, weaponId });
     if (!this.active) {
       if (!insideInteractionRange(player.pos, this.entry, 2.8)) return idle();
+      if (!isStoreOpen(this.storeMinute())) return idle('AMMO · CLOSED · OPENS 4 AM', 'CLOSED'); // after hours: locked (the room refuses it too)
       if (!interact || !interactionCooldownReady(now, this.transitionReadyAt)) return idle(`ENTER AMMO · GUN SHOP · ${tap} ENTER`, 'ENTER SHOP');
       return this.#transition(player, now, true);
     }

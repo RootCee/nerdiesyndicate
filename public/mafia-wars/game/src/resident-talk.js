@@ -5,9 +5,12 @@ import { scheduledPlace } from './resident-schedule.js';
 
 export const TALK_PLACES = Object.freeze([
   { id: 'nerdie-city-bank', name: 'the bank' }, { id: 'nerdie-arms', name: 'Ammo' }, { id: 'corner-market', name: 'the Corner Market' },
+  { id: 'three-piece', name: '3 Piece' }, { id: 'the-blaq-note', name: 'The Blaq Note' }, { id: 'city-wholesaler', name: 'the City Wholesaler' },
+  { id: 'laundromat', name: 'the Laundromat' }, { id: 'sneaker-shop', name: 'the Sneaker Shop' },
   { id: 'city-hall', name: 'City Hall' }, { id: 'academy-library', name: 'the Library' }, { id: 'central-park', name: 'Central Park' },
   { id: 'north-court', name: 'North Court Apartments' },
 ]);
+const NAMED = Object.freeze(['City Hall', 'Corner Market', 'Ammo', '3 Piece', 'The Blaq Note', 'City Wholesaler', 'Laundromat', 'Sneaker Shop']);
 const placeName = (id) => TALK_PLACES.find((p) => p.id === id)?.name || 'work';
 const PLACE_TITLE = (name) => name.charAt(0).toUpperCase() + name.slice(1);
 
@@ -81,7 +84,7 @@ export function residentConversation(resident, minute, day = '') {
       if (topic === 'work') {
         const chess = resident.chess ? ' And you can find me at the chess tables in Central Park.' : '';
         if (!job) return { text: `No steady job right now. I pick up city temp work when there's a slot.${chess}` };
-        const title = job.title.toLowerCase().replace('city hall', 'City Hall').replace('corner market', 'Corner Market').replace('ammo', 'Ammo');
+        const title = NAMED.reduce((t, name) => t.replace(name.toLowerCase(), name), job.title.toLowerCase()); // business names keep their capitals
         return { text: `I'm ${/^[aeiou]/i.test(title) ? 'an' : 'a'} ${title} at ${placeName(job.workplaceId)}, ${clock(job.shiftStartMinute)} to ${clock(job.shiftStartMinute + job.shiftDurationMinutes)}.${chess}` };
       }
       if (topic === 'where') {

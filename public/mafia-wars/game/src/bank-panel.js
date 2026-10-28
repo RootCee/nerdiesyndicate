@@ -81,7 +81,7 @@ const cityWhen = (minute) => (minute == null ? '—' : `Day ${Math.floor(minute 
 const shiftText = (job) => `${clockTime(job.shiftStartMinute)}–${clockTime(job.shiftStartMinute + job.shiftDurationMinutes)}`;
 const words = (s) => esc(String(s ?? '').replaceAll('_', ' ').replaceAll('-', ' '));
 // Where a resident is right now, by the same schedule the city's residents follow (real Pacific time).
-const PLACES = Object.freeze({ 'nerdie-city-bank': 'Nerdie City Bank', 'city-hall': 'City Hall', 'academy-library': 'the Library', 'nerdie-arms': 'Ammo', 'central-park': 'Central Park', 'corner-market': 'Corner Market', 'north-court': 'North Court' });
+const PLACES = Object.freeze({ 'nerdie-city-bank': 'Nerdie City Bank', 'city-hall': 'City Hall', 'academy-library': 'the Library', 'nerdie-arms': 'Ammo', 'central-park': 'Central Park', 'corner-market': 'Corner Market', 'three-piece': '3 Piece', 'the-blaq-note': 'The Blaq Note', 'city-wholesaler': 'City Wholesaler', 'laundromat': 'Laundromat', 'sneaker-shop': 'Sneaker Shop', 'north-court': 'North Court' });
 const place = (id) => (PLACES[id] ? esc(PLACES[id]) : words(id));
 const ACTIVITY_WORDS = Object.freeze({ home: 'At home in', commute: 'On the way to work at', work: 'Working at', shop: 'Shopping at', social: 'Hanging out at', leisure: 'Relaxing at' });
 const nowText = (r, minute) => { const at = scheduledPlace(r.job, minute, 'north-court', r.residentNo - 1); return `${esc(ACTIVITY_WORDS[at.activity] || at.activity)} ${place(at.locationId)}`; };

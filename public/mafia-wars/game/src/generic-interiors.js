@@ -1,5 +1,8 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { insideInteractionRange, interactionCooldownReady } from './city-layout.js';
+import { economicMinuteOfDay } from './resident-schedule.js';
+import { isStoreOpen, storeForSpace } from './store-hours.js';
+import { counterStand } from './store-staff.js';
 import { addInteriorIsolationShell } from './apartment-system.js';
 import { KitBatch, signMaterial } from './city-showcase-kit.js';
 import { interiorCatalog, interiorLayout, interiorSpace, apartmentUnit, apartmentUnitSpace, LOBBY_LIFT_Z, PROPERTY_TIERS } from './interior-catalog.js';
@@ -114,8 +117,9 @@ export class GenericInteriorSystem {
   // The catalog is the server's (default plan), so doors and rooms match multiplayer-spaces.js exactly.
   // worldColliders: the city's collider list, so an apartment can set its building's solid box aside while
   // someone is inside it (and put it back on the way out).
-  constructor(scene, { addCollider, removeColliders, worldColliders = null, mobile = false } = {}) {
-    Object.assign(this, { scene, addCollider, removeColliders, worldColliders, mobile });
+  // storeMinute: the economic minute of day (Pacific) that store hours follow.
+  constructor(scene, { addCollider, removeColliders, worldColliders = null, mobile = false, storeMinute = () => economicMinuteOfDay() } = {}) {
+    Object.assign(this, { scene, addCollider, removeColliders, worldColliders, mobile, storeMinute });
     this.entries = interiorCatalog().map((e) => ({ e, name: buildingName(e), door: new THREE.Vector3(e.door.x, 0, e.door.z), apartments: e.template === 'apartments' || e.template === 'lofts' }));
     this.active = null; this.unit = null; this.group = null; this.colliders = []; this.shelved = []; this.transitionReadyAt = 0; this.kit = { night: [], mobile };
   }
@@ -136,6 +140,8 @@ export class GenericInteriorSystem {
       let best = null, bestD = DOOR_REACH;
       for (const it of this.entries) { const dd = Math.hypot(player.pos.x - it.door.x, player.pos.z - it.door.z); if (dd < bestD) { bestD = dd; best = it; } }
       if (!best) return idle();
+      // a store after hours (store-hours.js): dark and locked; the room refuses the door too
+      if (storeForSpace(best.e.spaceId) && !isStoreOpen(this.storeMinute())) return idle(`${best.name.toUpperCase()} · CLOSED · OPENS 4 AM`, 'CLOSED');
       if (!interact || !interactionCooldownReady(now, this.transitionReadyAt)) return idle(`${best.name.toUpperCase()} · ${tap} ENTER`, 'ENTER');
       return this.#enter(best, player, now);
     }
@@ -183,6 +189,8 @@ export class GenericInteriorSystem {
     return true;
   }
   get inApartment() { return !!this.unit; }
+  // Inside a store: where its clerk stands behind the counter (store-staff.js), else null.
+  get staffStand() { return this.active && !this.unit && storeForSpace(this.active.e.spaceId) ? counterStand(this.layout) : null; }
 
   #buildLobby(it) {
     this.layout = interiorLayout(it.e); this.space = { ...interiorSpace(it.e, this.layout), liftLobby: { x: this.layout.doorX, y: this.layout.y, z: this.layout.minZ + LOBBY_LIFT_Z } };

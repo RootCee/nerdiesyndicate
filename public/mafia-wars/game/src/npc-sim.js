@@ -18,6 +18,7 @@ import { NPC_BEHAVIOR, NPC_BEHAVIOR_RULES, greetingFor, personalityOf, reactionT
 import { NPC_COMBAT_RULES, assessThreat, strikeProfile, weaponClass } from './npc-combat.js';
 import { isInsideSafeZone } from './multiplayer-spaces.js';
 import { cityShotOccluded, publicCityShotOccluded, targetDistance } from './multiplayer-combat.js';
+import { storeById } from './store-hours.js';
 import { bodyHit, residentBodyOptions } from './hit-regions.js';
 import { hourAt } from './city-clock.js';
 import { scheduledPlace } from './resident-schedule.js';
@@ -516,6 +517,8 @@ export class CityNpcSimulation {
       if (!r.placed) { if (place) this.#placeAt(r, place); else this.#reset(r, this.#streetPoint()); r.lastDormantAt = now; }
       const nearest = Math.min(...players.map((p) => dist(p, r)));
       r.nearest = nearest;
+      // On shift at a store and arrived: behind the counter inside (the store draws them), not on the street.
+      r.indoors = !!place && r.economicActivity === 'work' && !!storeById(r.economicLocation) && dist(place.entry, r) <= SCHEDULE_ARRIVED_M;
       if (r.held || nearest <= rules.relocateRadius || relocations >= rules.relocationsPerTick) continue;
       // Out of everyone's sight. A scheduled resident belongs at their place (and stays once there); when
       // that place is in a player's view they appear out of sight and walk in. Others come near players.
@@ -526,7 +529,7 @@ export class CityNpcSimulation {
     }
     // Activate the residents nearest to players.
     // (residents holding a chess seat near a player come first: they must stay visible at the table)
-    const ranked = this.residents.filter((r) => r.nearest <= rules.activeRadius).sort((a, b) => (b.held ? 1 : 0) - (a.held ? 1 : 0) || a.nearest - b.nearest);
+    const ranked = this.residents.filter((r) => r.nearest <= rules.activeRadius && !r.indoors).sort((a, b) => (b.held ? 1 : 0) - (a.held ? 1 : 0) || a.nearest - b.nearest);
     const active = ranked.slice(0, this.maxActive);
     for (const r of this.residents) r.active = false;
     for (const r of active) r.active = true;

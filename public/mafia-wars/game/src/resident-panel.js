@@ -31,7 +31,7 @@ const STYLE = `
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n = (v) => (v == null ? '—' : esc(Number(v).toLocaleString('en-US')));
 const clock = (minute) => { const m = ((minute % 1440) + 1440) % 1440, h = Math.floor(m / 60); return `${h % 12 || 12}:${String(m % 60).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
-const PLACES = Object.freeze({ 'nerdie-city-bank': 'Nerdie City Bank', 'city-hall': 'City Hall', 'academy-library': 'the Library', 'nerdie-arms': 'Ammo', 'central-park': 'Central Park', 'corner-market': 'Corner Market', 'north-court': 'North Court Apartments' });
+const PLACES = Object.freeze({ 'nerdie-city-bank': 'Nerdie City Bank', 'city-hall': 'City Hall', 'academy-library': 'the Library', 'nerdie-arms': 'Ammo', 'central-park': 'Central Park', 'corner-market': 'Corner Market', 'three-piece': '3 Piece', 'the-blaq-note': 'The Blaq Note', 'city-wholesaler': 'City Wholesaler', 'laundromat': 'Laundromat', 'sneaker-shop': 'Sneaker Shop', 'north-court': 'North Court Apartments' });
 const NOW = Object.freeze({ home: 'At home', commute: 'On the way to work at', work: 'Working at', shop: 'Shopping at', social: 'Hanging out at', leisure: 'Relaxing at' });
 const PERSONALITY = Object.freeze({ peaceful: 'Friendly', cautious: 'Shy', defensive: 'Protective', aggressive: 'Blunt' });
 const pacificDay = (ms) => new Date(ms - 7 * 3_600_000).toISOString().slice(0, 10); // a day key; only needs to change once a day

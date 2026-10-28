@@ -5,6 +5,7 @@ import { SHOWCASE_HEROES, SHOWCASE_BUSINESSES } from './city-showcase-layout.js'
 import { STOREFRONT_BUSINESSES } from './city-pois.js';
 import { CIVIC_STAIRS, HOUSE_STOOP, LIBRARY_STAIRS, entrySteps, flightDepth } from './entry-steps.js';
 import { GUN_SHOP_BUILDING_ID } from './gun-shop-layout.js';
+import { storeForBuilding } from './store-hours.js';
 
 // M7.0B1 North Market showcase buildings. Every design keeps its building's footprint, height,
 // and collider (city-expansion adds the same box as before; the server registry is unchanged);
@@ -806,7 +807,14 @@ function clockTower(batch, kit, b, parent) {
 }
 
 export const SHOWCASE_DESIGNS = Object.freeze({ [SHOWCASE_HEROES.bank]: bank, [SHOWCASE_HEROES.boutique]: threads, [SHOWCASE_HEROES.lounge]: lounge, [GUN_SHOP_BUILDING_ID]: arms });
-export function showcaseBuilding(batch, kit, b, parent, opts = {}) { (SHOWCASE_DESIGNS[b.id] || (b.kind === 'house' ? house : b.kind === 'warehouse' ? warehouse : b.kind === 'civic' ? cityHall : b.kind === 'library' ? library : b.kind === 'academy-hall' ? academyHall : b.kind === 'clock-tower' ? clockTower : b.kind === 'pavilion' ? pavilion : b.kind === 'bleachers' ? bleachers : midrise))(batch, kit, b, parent, opts); }
+export function showcaseBuilding(batch, kit, b, parent, opts = {}) {
+  const from = kit.night.length, store = storeForBuilding(b.id), shared = kit.m;
+  // a store gets its own copies of the lit trims and warm window glass (canopy lamps, neon, lit windows), so they go dark with it
+  if (store) { kit.m = Object.create(shared); for (const k of ['lamp', 'neonPurple', 'neonGreen', 'glassWarm']) { const n = kit.night.find((x) => x.m === shared[k]), c = shared[k].clone(); kit.m[k] = c; kit.night.push({ m: c, day: n.day, night: n.night }); } }
+  try { (SHOWCASE_DESIGNS[b.id] || (b.kind === 'house' ? house : b.kind === 'warehouse' ? warehouse : b.kind === 'civic' ? cityHall : b.kind === 'library' ? library : b.kind === 'academy-hall' ? academyHall : b.kind === 'clock-tower' ? clockTower : b.kind === 'pavilion' ? pavilion : b.kind === 'bleachers' ? bleachers : midrise))(batch, kit, b, parent, opts); } finally { kit.m = shared; }
+  // a store's own signs, shop windows and trims go dark when it closes (store-hours.js, kit.setClosed)
+  if (store) for (let k = from; k < kit.night.length; k++) kit.night[k].store = store.id;
+}
 
 // ------------------------------------------------------------- North Court
 // The apartment's exterior. HybridApartmentSystem keeps its colliders, door, entry, and interior.
