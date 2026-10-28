@@ -140,11 +140,11 @@ assert.deepEqual(desktop.roads, mobile.roads);
 assert.deepEqual(desktop.districts, mobile.districts);
 assert.deepEqual(desktop.apartment, mobile.apartment);
 assert.deepEqual(desktop.combatVenue, mobile.combatVenue);
-// M7.2: the Civic Center, Central Park, and four Academy render districts
-assert.equal(desktop.districts.length, 13);
-assert.equal(desktop.districts.reduce((total, district) => total + district.buildings.length, 0) + 2, 74);
+// M7.2: the Civic Center, Central Park, and four Academy render districts; Stage 2: Neon Market's eight blocks
+assert.equal(desktop.districts.length, 13 + 8);
+assert.equal(desktop.districts.reduce((total, district) => total + district.buildings.length, 0) + 2, 74 + 110 + 6 + 1);
 assert.equal(desktop.districts.reduce((total, district) => total + district.vehicles.length, 0), 12);
-assert.deepEqual(CITY_BOUNDS, { minX: -140, maxX: 420, minZ: -148, maxZ: 148 });
+assert.deepEqual(CITY_BOUNDS, { minX: -140, maxX: 420, minZ: -148, maxZ: 356 });
 const mobileChunkRadius = (district) => mobile.profile.activeRadius + district.radius * 0.35;
 assert.equal(chunkVisible(mobile.districts[0].center, { x: 0, z: 28 }, mobileChunkRadius(mobile.districts[0])), true);
 assert.equal(chunkVisible(mobile.districts[1].center, { x: 0, z: 28 }, mobileChunkRadius(mobile.districts[1])), false);
