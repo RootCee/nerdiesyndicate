@@ -11,6 +11,7 @@ import {
   APARTMENT_SITE, COMBAT_VENUE_SITE, DUPLICATED_ENTERABLE_HOUSE_SITE, ENTERABLE_HOUSE_SITE, FRONT_NORMALS, ORIGINAL_EXPANSION_HOUSES, createCityPlan,
 } from './city-layout.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
+import { NEON_BLOCKS, NEON_STREET_NAMES } from './neon-market-layout.js';
 
 // Provisional storefront identities, keyed by city-plan building id. Status
 // 'coming-soon' means nothing can be bought or used there yet. To add or rename
@@ -44,12 +45,14 @@ export const STREET_NAMES = Object.freeze({
   main: 'Main Street', 'west-avenue': 'West Avenue', 'east-avenue': 'East Avenue', 'hood-duplicate-main': 'East Block Main',
   'central-cross': 'Central Cross', 'north-cross': 'North Cross', 'north-market': 'North Market', 'south-cross': 'South Cross', 'south-market': 'South Market',
   'academy-avenue': 'Academy Avenue',
+  ...NEON_STREET_NAMES,
 });
 export const DISTRICT_NAMES = Object.freeze({
   'central-park': 'Nerdie Central Park', 'civic-center': 'Civic Center',
   'academy-north': 'Nerdie Blaq Academy', 'academy-south': 'Nerdie Blaq Academy', 'academy-library': 'Nerdie Blaq Academy', 'academy-green': 'Academy Green',
   north: 'North Blocks', south: 'South Blocks', 'east-residential-north': 'East Market', 'east-residential-south': 'East Side',
   'west-mixed-north': 'West Market', 'west-industrial-south': 'Industrial South', 'hood-duplicate-neighborhood': '184 East Block',
+  ...Object.fromEntries(NEON_BLOCKS.map((b) => [b.id, 'Neon Market'])),
 });
 
 // Storefront doors sit on the facade facing the street side of the building.

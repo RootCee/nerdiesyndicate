@@ -1,5 +1,6 @@
 import { CITY_HALL, CIVIC_BLOCK, PARK, PARK_BLEACHERS, PARK_PAVILION } from './city-park-layout.js';
 import { ACADEMY_AVENUE, ACADEMY_CHUNKS, ACADEMY_HALLS, CLOCK_TOWER, LIBRARY } from './academy-layout.js';
+import { NEON_MARKET, NEON_ROADS, neonMarketDistricts } from './neon-market-layout.js';
 // Pure, deterministic city plan. Rendering code consumes this data so desktop
 // and mobile share one collision/layout topology while choosing different
 // visibility and detail budgets.
@@ -7,7 +8,8 @@ import { ACADEMY_AVENUE, ACADEMY_CHUNKS, ACADEMY_HALLS, CLOCK_TOWER, LIBRARY } f
 // block east of the approved 280 m city. Its 120 m ground/street staging area
 // reaches x=244 without overlapping the existing x=112 residential row.
 // M7.2: the city grows east to x=420 for Academy Avenue and the Nerdie Blaq Academy (academy-layout.js).
-export const CITY_BOUNDS = Object.freeze({ minX: -140, maxX: 420, minZ: -148, maxZ: 148 });
+// Stage 2: and north to z=356 for Neon Market (neon-market-layout.js).
+export const CITY_BOUNDS = Object.freeze({ minX: -140, maxX: 420, minZ: -148, maxZ: NEON_MARKET.maxZ });
 
 export const ORIGINAL_NEIGHBORHOOD_LAYOUT = Object.freeze({
   id: 'hood-original-neighborhood', centerX: 0, centerZ: 0,
@@ -246,6 +248,8 @@ export function createCityPlan(profileName = 'desktop') {
       { id: 'north-market', x: (CITY_BOUNDS.minX + PARK.minX - 2) / 2, z: 96, width: PARK.minX - 2 - CITY_BOUNDS.minX, depth: 9 },
       { id: 'south-cross', x: westToAvenue.x, z: -48.5, width: westToAvenue.width, depth: 9 },
       { id: 'south-market', x: westToAvenue.x, z: -96, width: westToAvenue.width, depth: 9 },
+      // Stage 2: Neon Market's streets (Neon Boulevard, Neon Cross, Neon Row, the avenues carried north)
+      ...NEON_ROADS.map((r) => ({ ...r })),
     ],
     districts: [
       district('north', 100, 401), district('south', -100, 809),
@@ -258,6 +262,8 @@ export function createCityPlan(profileName = 'desktop') {
       { id: PARK.id, kind: 'park', center: { x: (PARK.minX + PARK.maxX) / 2, z: (PARK.minZ + PARK.maxZ) / 2 }, radius: 72, buildings: [{ ...PARK_PAVILION }, { ...PARK_BLEACHERS }], vehicles: [] },
       // M7.2: the Nerdie Blaq Academy, in four render chunks (academy-layout.js ACADEMY_CHUNKS)
       ...ACADEMY_CHUNKS.map((c) => ({ id: c.id, kind: 'academy', center: { ...c.center }, radius: c.radius, buildings: ACADEMY_CHUNK_BUILDINGS[c.id].map((b) => ({ ...b })), vehicles: [] })),
+      // Stage 2: Neon Market, one render chunk per block
+      ...neonMarketDistricts(),
       { id: DUPLICATED_ORIGINAL_NEIGHBORHOOD.id, kind: 'original-copy', center: { x: DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX, z: 0 }, radius: 58, buildings: [], vehicles: [] },
     ],
     apartment: { ...APARTMENT_SITE },

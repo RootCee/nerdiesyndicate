@@ -807,11 +807,76 @@ function clockTower(batch, kit, b, parent) {
 }
 
 export const SHOWCASE_DESIGNS = Object.freeze({ [SHOWCASE_HEROES.bank]: bank, [SHOWCASE_HEROES.boutique]: threads, [SHOWCASE_HEROES.lounge]: lounge, [GUN_SHOP_BUILDING_ID]: arms });
+// ------------------------------------------------- Neon Market (neon-market-layout.js)
+// A business lot: a two-storey shopfront, its neon trim coloured by license class, a lit sign with the lot
+// number while it waits for a business, a glass front with a centre door, two upper windows.
+const LICENSE_LOOK = Object.freeze({
+  financial: { neon: 'lamp', sign: '#f4d58a', label: 'FINANCIAL' }, entertainment: { neon: 'neonPink', sign: '#ff7cc4', label: 'ENTERTAINMENT' },
+  retail: { neon: 'neonCyan', sign: '#7cecff', label: 'RETAIL' }, tech: { neon: 'neonPurple', sign: '#c39bff', label: 'TECH' }, manufacturing: { neon: 'neonGreen', sign: '#7ff0b4', label: 'MANUFACTURING' },
+});
+const lotSign = (b, look) => (ctx, w, h) => {
+  ctx.fillStyle = '#101018'; ctx.fillRect(0, 0, w, h); ctx.strokeStyle = look.sign; ctx.lineWidth = 8; ctx.strokeRect(12, 12, w - 24, h - 24);
+  ctx.fillStyle = look.sign; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '700 104px Barlow, sans-serif'; ctx.fillText(b.lotId, w / 2, h * 0.42);
+  ctx.font = '600 34px Barlow, sans-serif'; ctx.fillText(`${look.label} LOT · AVAILABLE`, w / 2, h * 0.8);
+};
+const NEON_BODIES = ['creamBrick', 'darkBrick', 'stucco', 'brick', 'stuccoWarm', 'charcoal'];
+// One shared picture of an empty, lit shop floor behind every available lot's glass (one texture for all 110).
+let emptyShop = null;
+const paintEmptyShop = (ctx, w, h) => {
+  const g = ctx.createLinearGradient?.(0, 0, 0, h); if (g) { g.addColorStop(0, '#f3efe6'); g.addColorStop(1, '#bfb6a6'); ctx.fillStyle = g; } else ctx.fillStyle = '#e6e0d4';
+  ctx.fillRect(0, 0, w, h); ctx.fillStyle = '#d8d0c2'; ctx.fillRect(0, h * 0.72, w, h * 0.28); // the floor
+  ctx.fillStyle = '#8a8172'; ctx.fillRect(w * 0.62, h * 0.5, w * 0.22, h * 0.24); // an empty counter
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(w * 0.12, h * 0.18, w * 0.28, h * 0.34); ctx.fillStyle = '#20202a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = '700 24px Barlow, sans-serif'; ctx.fillText('FOR LEASE', w * 0.26, h * 0.3); ctx.font = '500 15px Barlow, sans-serif'; ctx.fillText('LICENSE LOT', w * 0.26, h * 0.42);
+};
+function emptyShopMaterial(kit) {
+  if (emptyShop?.kit !== kit) emptyShop = { kit, mat: drawn(kit, paintEmptyShop, { w: 512, h: 256, res: 0.5, day: 0.3, night: 0.9, preview: 0xe6e0d4 }) };
+  return emptyShop.mat;
+}
+function neonShop(batch, kit, b, parent, { mobile = false } = {}) {
+  const m = kit.m, look = LICENSE_LOOK[b.license] || LICENSE_LOOK.retail, f = facade(b, b.front), half = f.length / 2, body = m[NEON_BODIES[hashId(b.id) % NEON_BODIES.length]];
+  batch.box(body, b.x, b.height / 2, b.z, b.width, b.height, b.depth);
+  // glass shopfront and door
+  fbox(batch, m.charcoal, f, 0, 0.25, 0.06, 2 * half - 0.4, 0.5, 0.12);
+  signPlane(parent, emptyShopMaterial(kit), f, 0, 2.0, 0.03, 2 * half - 0.9, 3.0, `showcase-${b.id}-window`); // the empty shop floor seen through the glass
+  for (const t of [-1, 1]) fbox(batch, m.frame, f, t * (half - 0.45) / 2, 2.0, 0.07, 0.06, 3.0, 0.05); // mullions
+  for (const s of [-1, 1]) fbox(batch, m.frame, f, s * (half - 0.3), 1.9, 0.07, 0.12, 3.8, 0.1);
+  fbox(batch, m.frame, f, 0, 1.3, 0.08, 1.9, 2.6, 0.06); fbox(batch, m.glassWarm, f, 0, 1.3, 0.1, 1.6, 2.4, 0.03);
+  // sign band with the neon tube under it, the lit lot sign
+  fbox(batch, m.charcoal, f, 0, 4.15, 0.12, 2 * half - 0.2, 1.1, 0.2);
+  fbox(batch, m[look.neon], f, 0, 3.55, 0.24, 2 * half - 0.4, 0.06, 0.05);
+  signPlane(parent, drawn(kit, lotSign(b, look), { w: 768, h: 220, res: 0.5, day: 0.25, night: 1.2, preview: 0x101018 }), f, 0, 4.15, 0.23, Math.min(6.2, 2 * half - 1.0), 0.9, `showcase-${b.id}-sign`);
+  // upper floor: two windows, a neon line along the parapet
+  if (!mobile) for (const s of [-1, 1]) windowUnit(batch, kit, f, s * half / 2, 6.4, Math.min(2.2, half - 0.8), 1.6, { glass: hashId(b.id + s) % 3 ? m.glass : m.glassWarm, surround: m.charcoal, lean: true });
+  fbox(batch, m[look.neon], f, 0, b.height - 0.25, 0.08, 2 * half, 0.06, 0.05);
+}
+// The Neon Tower: twenty floors of glass between dark stone fins, a lit band every fourth floor, a neon crown,
+// and a double-height lobby with a canopy facing Main Street.
+function neonTower(batch, kit, b, parent, { mobile = false } = {}) {
+  const m = kit.m, f = facade(b, b.front), half = f.length / 2, storey = (b.height - 4) / b.floors;
+  batch.box(m.charcoal, b.x, b.height / 2, b.z, b.width - 0.4, b.height, b.depth - 0.4);
+  for (const side of ['north', 'south', 'east', 'west']) {
+    const g = facade(b, side), n = Math.max(4, Math.round(g.length / (mobile ? 5 : 3.2)));
+    fbox(batch, m.glass, g, 0, 4 + (b.height - 4) / 2, 0.02, g.length - 0.6, b.height - 4.6, 0.04);
+    // homes lit here and there, floor by floor, between the fins
+    const r = rng(hashId(b.id + side)), bay = (g.length - 0.6) / n;
+    for (let k = 0; k < b.floors; k++) for (let i = 0; i < n; i++) if (r() < 0.3) fbox(batch, r() < 0.8 ? m.glassWarm : m.glassCool, g, -g.length / 2 + 0.3 + (i + 0.5) * bay, 4 + (k + 0.5) * storey, 0.05, bay - 0.5, storey - 0.7, 0.03);
+    for (let i = 0; i <= n; i++) fbox(batch, m.stone, g, -g.length / 2 + 0.3 + i * ((g.length - 0.6) / n), b.height / 2, 0.1, 0.35, b.height, 0.25);
+    for (let k = 4; k < b.floors; k += 4) fbox(batch, m.charcoal, g, 0, 4 + k * storey, 0.12, g.length - 0.6, 0.25, 0.08);
+    fbox(batch, m.neonCyan, g, 0, b.height - 0.4, 0.2, g.length, 0.12, 0.06); fbox(batch, m.neonPink, g, 0, b.height - 1.1, 0.2, g.length, 0.08, 0.06);
+  }
+  // the lobby: a double-height glass front, revolving door frame, canopy with lights
+  fbox(batch, m.glassWarm, f, 0, 2.3, 0.12, Math.min(14, 2 * half - 4), 4.2, 0.04);
+  fbox(batch, m.frame, f, 0, 1.3, 0.16, 2.6, 2.6, 0.08); fbox(batch, m.charcoal, f, 0, 4.7, 0.9, 10, 0.18, 1.8);
+  for (let i = -2; i <= 2; i++) fbox(batch, m.lamp, f, i * 2, 4.6, 1.4, 0.3, 0.03, 0.3);
+  signPlane(parent, drawn(kit, (ctx, w, h) => { ctx.fillStyle = '#0c0c14'; ctx.fillRect(0, 0, w, h); ctx.fillStyle = '#7cecff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '700 120px Barlow, sans-serif'; ctx.fillText('NEON TOWER', w / 2, h * 0.45); ctx.fillStyle = '#ff7cc4'; ctx.fillRect(w * 0.15, h * 0.82, w * 0.7, 8); }, { w: 1024, h: 200, day: 0.3, night: 1.3 }), f, 0, 5.6, 0.2, 9, 1.6, 'showcase-neon-tower-sign');
+}
+
 export function showcaseBuilding(batch, kit, b, parent, opts = {}) {
   const from = kit.night.length, store = storeForBuilding(b.id), shared = kit.m;
   // a store gets its own copies of the lit trims and warm window glass (canopy lamps, neon, lit windows), so they go dark with it
   if (store) { kit.m = Object.create(shared); for (const k of ['lamp', 'neonPurple', 'neonGreen', 'glassWarm']) { const n = kit.night.find((x) => x.m === shared[k]), c = shared[k].clone(); kit.m[k] = c; kit.night.push({ m: c, day: n.day, night: n.night }); } }
-  try { (SHOWCASE_DESIGNS[b.id] || (b.kind === 'house' ? house : b.kind === 'warehouse' ? warehouse : b.kind === 'civic' ? cityHall : b.kind === 'library' ? library : b.kind === 'academy-hall' ? academyHall : b.kind === 'clock-tower' ? clockTower : b.kind === 'pavilion' ? pavilion : b.kind === 'bleachers' ? bleachers : midrise))(batch, kit, b, parent, opts); } finally { kit.m = shared; }
+  try { (SHOWCASE_DESIGNS[b.id] || (b.kind === 'neon-shop' ? neonShop : b.kind === 'neon-tower' ? neonTower : b.kind === 'house' ? house : b.kind === 'warehouse' ? warehouse : b.kind === 'civic' ? cityHall : b.kind === 'library' ? library : b.kind === 'academy-hall' ? academyHall : b.kind === 'clock-tower' ? clockTower : b.kind === 'pavilion' ? pavilion : b.kind === 'bleachers' ? bleachers : midrise))(batch, kit, b, parent, opts); } finally { kit.m = shared; }
   // a store's own signs, shop windows and trims go dark when it closes (store-hours.js, kit.setClosed)
   if (store) for (let k = from; k < kit.night.length; k++) kit.night[k].store = store.id;
 }

@@ -3,6 +3,7 @@ import { insideInteractionRange, interactionCooldownReady } from './city-layout.
 import { economicMinuteOfDay } from './resident-schedule.js';
 import { isStoreOpen, storeForSpace } from './store-hours.js';
 import { counterStand } from './store-staff.js';
+import { LICENSE_CLASSES } from './neon-market-layout.js';
 import { addInteriorIsolationShell } from './apartment-system.js';
 import { KitBatch, signMaterial } from './city-showcase-kit.js';
 import { interiorCatalog, interiorLayout, interiorSpace, apartmentUnit, apartmentUnitSpace, LOBBY_LIFT_Z, PROPERTY_TIERS } from './interior-catalog.js';
@@ -56,7 +57,7 @@ function floorTexture(kind, color) {
 // Light per room type, calibrated from measured renders (qa/stage2/interiors.html?measure=1) to an even,
 // comfortable level: mean brightness about 0.48 (the lounge a moodier 0.36), nothing crushed or blown out.
 const POINT_SHARE = 0.35, FILL = 2.3;
-const LIGHT_SCALE = Object.freeze({ house: 0.92, apartments: 1.1, lofts: 3.4, grocery: 0.92, wholesale: 2, laundromat: 0.47, sneakers: 2, tailor: 5.6,
+const LIGHT_SCALE = Object.freeze({ house: 0.92, apartments: 1.1, lofts: 3.4, grocery: 0.92, wholesale: 2, laundromat: 0.47, sneakers: 2, tailor: 5.6, vacant: 2,
   'music-venue': 5.1, warehouse: 2, 'city-hall': 1.06, 'lecture-hall': 1.24, 'clock-tower': 1.33 });
 // The name on a business's (or hall's, or lobby's) feature wall.
 const FEATURE_LINE = Object.freeze({ grocery: 'GROCERIES · ESSENTIALS · FRESH DAILY', wholesale: 'WHOLESALE SUPPLY · TRADE ONLY', laundromat: 'WASH · DRY · FOLD', sneakers: 'KICKS · RELEASES · CUSTOMS',
@@ -82,6 +83,8 @@ export const buildingName = (entry) => allNames().get(entry.spaceId) || entry.na
 
 export function residentialPlaque(entry) {
   const tier = entry.tier ? PROPERTY_TIERS[entry.tier] : null, address = streetAddress(entry.door, entry.facing)?.text || '';
+  // a Neon Market business lot: its license class (the Business NFT token it belongs to)
+  if (entry.lotId) return { title: buildingName(entry), line: `${LICENSE_CLASSES[entry.license]?.label || 'Business'} lot · available`, address };
   return { title: buildingName(entry), line: tier ? `${tier.label} · Value ${tier.value.toLocaleString('en-US')} sNERDIE · about ${tier.area} m²` : 'Nerdie City', address };
 }
 
@@ -327,7 +330,7 @@ export class GenericInteriorSystem {
     // the feature wall: a business's name (or the hall's, or the building directory in a lobby)
     const isHome = e.template === 'house', isLobby = e.template === 'apartments' || e.template === 'lofts';
     if (!isHome) {
-      const title = buildingName(e).toUpperCase(), line = isLobby ? `MODEL APARTMENT · ${PROPERTY_TIERS[e.tier]?.label.toUpperCase() || ''} · AVAILABLE` : FEATURE_LINE[e.template] || 'NERDIE CITY';
+      const title = buildingName(e).toUpperCase(), line = isLobby ? `MODEL APARTMENT · ${PROPERTY_TIERS[e.tier]?.label.toUpperCase() || ''} · AVAILABLE` : e.lotId ? `${(LICENSE_CLASSES[e.license]?.label || 'BUSINESS').toUpperCase()} LICENSE · AVAILABLE` : FEATURE_LINE[e.template] || 'NERDIE CITY';
       const feature = signMaterial(this.kit, (ctx, cw, ch) => {
         ctx.fillStyle = '#0d0b12'; ctx.fillRect(0, 0, cw, ch); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.shadowColor = `#${cGlow.toString(16).padStart(6, '0')}`; ctx.shadowBlur = 30; ctx.fillStyle = '#f2d28b'; ctx.font = '700 150px Barlow, sans-serif'; ctx.fillText(title, cw / 2, ch * 0.42, cw * 0.92);

@@ -43,6 +43,7 @@ const SKIP = new Set(['west-mixed-north-1', 'west-mixed-north-3', 'academy-libra
 
 function templateFor(b, districtId) {
   if (SHOPS[b.id]) return SHOPS[b.id].template;
+  if (b.kind === 'neon-shop') return 'vacant'; // Stage 2: a Neon Market business lot, waiting for its business
   if (b.kind === 'house') return 'house';
   if (b.kind === 'mixed') return 'lofts';
   if (b.kind === 'warehouse') return 'warehouse';
@@ -117,6 +118,8 @@ const TEMPLATES = {
     f('rack', -5.6, 0.4, 0.6, 5.2, 1.7), f('rack', 5.6, 0.4, 0.6, 5.2, 1.7), f('mannequin', -2.2, 3.4, 0.6, 0.6, 1.85), f('mannequin', 2.2, 3.4, 0.6, 0.6, 1.85),
     f('booth', -6, -4.8, 2.2, 2.2, 2.4), f('mirror', 0, -6.3, 2.4, 0.15, 2.2), f('counter', 4.6, -4, 3, 0.8, 1.0), deco('rug', 0, 0.2, 6, 5, 0.01),
   ]),
+  // A business lot nobody runs yet (Neon Market): an empty, lit shop floor with a counter at the back.
+  vacant: () => shop(14, 12, 4.4, 'bright', [f('counter', 3.6, -4.6, 3, 0.8, 1.0)]),
   // The Blaq Note: a music lounge with a stage, a bar and tables.
   'music-venue': () => shop(20, 16, 6, 'lounge', [
     f('stage', 0, -6.2, 9, 3.4, 0.6, { step: true }), f('speaker', -4.8, -6.6, 0.9, 0.9, 1.8), f('speaker', 4.8, -6.6, 0.9, 0.9, 1.8), f('mic', 0, -5.4, 0.3, 0.3, 1.5),
@@ -346,7 +349,7 @@ export function interiorCatalog(plan = null) {
     const door = doorOf(b), tier = TIER[template] || null;
     out.push(Object.freeze({
       buildingId: b.id, spaceId: `bld-${b.id}`, districtId: district.id, template, name: SHOPS[b.id]?.name || b.name || FALLBACK_NAME[template] || 'Building',
-      tier, value: tier ? PROPERTY_TIERS[tier].value : null, facing: door.facing,
+      tier, value: tier ? PROPERTY_TIERS[tier].value : null, facing: door.facing, lotId: b.lotId || null, license: b.license || null,
       site: Object.freeze({ x: b.x, z: b.z, width: b.width, depth: b.depth, height: b.height }),
       door: Object.freeze(door.out(1.4)), outside: Object.freeze(door.out(1.2)),
     }));

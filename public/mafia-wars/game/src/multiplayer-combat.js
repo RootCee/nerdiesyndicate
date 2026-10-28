@@ -202,7 +202,11 @@ export function undergroundShotOccluded(origin, direction, distance) {
 }
 
 export function publicCityShotOccluded(origin, direction, distance) {
+  // the ray's own box first: most shells (the interiors at y 300 and up, the far side of the city) are nowhere near it
+  const ex = origin.x + direction.x * distance, ey = origin.y + direction.y * distance, ez = origin.z + direction.z * distance;
+  const minX = Math.min(origin.x, ex), maxX = Math.max(origin.x, ex), minY = Math.min(origin.y, ey), maxY = Math.max(origin.y, ey), minZ = Math.min(origin.z, ez), maxZ = Math.max(origin.z, ez);
   return MULTIPLAYER_SAFE_ZONES.some(({ bounds }) => {
+    if (bounds.minY > maxY || bounds.maxY < minY || bounds.minX > maxX || bounds.maxX < minX || bounds.minZ > maxZ || bounds.maxZ < minZ) return false;
     const hit = rayAabbDistance(origin, direction, bounds);
     return hit !== null && hit > 0.03 && hit < distance - 0.05;
   });

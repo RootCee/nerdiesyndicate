@@ -8,7 +8,7 @@ import { interiorCatalog } from './interior-catalog.js';
 
 const NORMALS = Object.freeze({ north: [0, 1], south: [0, -1], east: [1, 0], west: [-1, 0] });
 const WIDTH = Object.freeze({ house: 1.5, apartments: 2.4, lofts: 2.4, warehouse: 2, grocery: 2.6, wholesale: 2.6, laundromat: 2.6, sneakers: 2.6, tailor: 2.6, 'music-venue': 3 });
-const SKIP = new Set(['lecture-hall', 'clock-tower', 'city-hall']);
+const SKIP = new Set(['lecture-hall', 'clock-tower', 'city-hall', 'vacant']); // (Neon Market's lots open straight onto the sidewalk)
 const r2 = (v) => Math.round(v * 100) / 100;
 const inside = (p, r) => p.x > r.minX && p.x < r.maxX && p.z > r.minZ && p.z < r.maxZ;
 

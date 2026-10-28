@@ -121,6 +121,9 @@ export function createShowcaseMaterials({ mobile = false } = {}) {
     lamp: glow(std(0x3a3328, { emissive: 0xffd9a0 }), 0.05, 2.4),
     neonPurple: glow(std(PALETTE.purple, { emissive: 0x9b4dff }), 0.25, 3.2),
     neonGreen: glow(std(PALETTE.green, { emissive: 0x3fd08a }), 0.2, 2.6),
+    // Stage 2: Neon Market's tubes
+    neonPink: glow(std(0x5a1038, { emissive: 0xff3fa4 }), 0.25, 3.0),
+    neonCyan: glow(std(0x0e3a48, { emissive: 0x3fe0ff }), 0.25, 2.8),
     leaf: std(0x4f7d45, { roughness: 0.9 }), leafDark: std(0x3a6338, { roughness: 0.9 }), trunk: std(0x5d4434, { roughness: 0.95 }), soil: std(0x3b2f27, { roughness: 1 }),
   };
   for (const k of ['pavers', 'grass']) m[k].userData.tile = tex[k].userData.tile;

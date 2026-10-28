@@ -15,6 +15,8 @@ import { showcaseBuilding } from './city-showcase.js';
 import { SHOWCASE, inShowcase, showcaseFurniture, showcaseForecourts } from './city-showcase-layout.js';
 import { GunShopSystem } from './gun-shop.js';
 import { buildPark, buildCivicPlaza, addParkColliders } from './city-park.js';
+import { buildNeonPlaza, addNeonPlazaColliders } from './neon-plaza.js';
+const NEON_PLAZA_BLOCK = 'neon-a2';
 import { PARK, CIVIC_FIXTURES, COURTS, FOOTBALL, BASEBALL, CHESS_PLAZA, PARK_PATHS, CIVIC_PATHS, PATH_WIDTH, CITY_HALL_ENTRY } from './city-park-layout.js';
 import { GUN_SHOP_BUILDING_ID, gunShopSite } from './gun-shop-layout.js';
 import { buildAcademyGrounds, addAcademyColliders, academyMapRects } from './academy.js';
@@ -245,6 +247,8 @@ export function buildCityExpansion(scene, Q = {}) {
     // M7.1A: Nerdie Central Park and the City Hall plaza (drawn with the kit; their colliders are added below either way)
     if (kit && district.id === PARK.id) showcaseStats.triangles += buildPark(kit, group, { mobile: plan.profile.key === 'mobile' }).triangles;
     if (kit && district.id === 'civic-center') showcaseStats.triangles += buildCivicPlaza(kit, group).triangles;
+    // Stage 2: Neon Plaza, in the block it opens out of
+    if (kit && district.id === NEON_PLAZA_BLOCK) showcaseStats.triangles += buildNeonPlaza(kit, group, { mobile: plan.profile.key === 'mobile' }).triangles;
     // M7.2: the Academy Library's interior (its facade is the showcase design)
     if (district.buildings.some((b) => b.id === LIBRARY.id)) library = new LibrarySystem(scene, { ...LIBRARY }, { addCollider, mobile: plan.profile.key === 'mobile', kit });
     if (district.buildings.some((b) => b.id === GUN_SHOP_BUILDING_ID)) gunShop = new GunShopSystem(scene, gunShopSite(plan), { addCollider, mobile: plan.profile.key === 'mobile', kit });
@@ -261,7 +265,7 @@ export function buildCityExpansion(scene, Q = {}) {
   }
 
   // M7.1A: park and plaza fixtures block walking (not bullets), matching resident navigation
-  addParkColliders(addCollider);
+  addParkColliders(addCollider); addNeonPlazaColliders(addCollider);
   mapRects.push({ x: PARK.minX, z: PARK.minZ, w: PARK.maxX - PARK.minX, h: PARK.maxZ - PARK.minZ, type: 'park' });
   for (const r of [BASEBALL.fair, ...COURTS, FOOTBALL]) mapRects.push({ x: r.minX, z: r.minZ, w: r.maxX - r.minX, h: r.maxZ - r.minZ, type: 'field' });
   for (const p of [...PARK_PATHS, ...CIVIC_PATHS]) { const h = PATH_WIDTH / 2; mapRects.push(p.axis === 'x' ? { x: p.c - h, z: p.a0, w: PATH_WIDTH, h: p.a1 - p.a0, type: 'walk' } : { x: p.a0, z: p.c - h, w: p.a1 - p.a0, h: PATH_WIDTH, type: 'walk' }); }
