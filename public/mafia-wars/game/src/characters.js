@@ -21,7 +21,7 @@ export const ROSTER = {
   red: ['red_hoodie', 'red_jersey'],
 };
 const HEIGHT = 1.8; // metres, top of head
-const CLIP_MAP = { Idle_Gun: 'idle', Idle_Gun_Shoot: 'idle', Idle_Unarmed: 'idle', Run: 'run', Run_Shoot: 'run', Walk: 'walk', Death: 'fall', HitRecieve: 'hit_to_body_01' };
+const CLIP_MAP = { Idle_Gun: 'idle', Idle_Gun_Shoot: 'idle', Idle_Unarmed: 'idle_unarmed', Run: 'run', Run_Shoot: 'run', Walk: 'walk', Death: 'fall', HitRecieve: 'hit_to_body_01' };
 
 const lib = { models: {}, loading: {}, clips: {}, weapons: new Map(), ready: false };
 
@@ -197,7 +197,6 @@ const GRIP_HAND_DIR = Object.freeze(new THREE.Vector3(-0.25, -0.45, -0.85).norma
 const SUPPORT_HAND_DIR = Object.freeze(new THREE.Vector3(0.5, 0.15, -0.85).normalize());
 
 const UP = new THREE.Vector3(0, 1, 0);
-const LOCAL_Z = new THREE.Vector3(0, 0, 1);
 // M6.9 weapon holds. Offsets are metres from the upper chest (Spine2) in the aim
 // frame (x the character's right, y up, z along the aim): `ready` is the low
 // carry, `raised` the aimed hold. Raised, the muzzle points down the aim; at
@@ -236,6 +235,37 @@ const SHOULDER_TOP_OUT = 0.02;  // the RPG rests this far outboard of the should
 const SPINE_SHARE = Object.freeze([['spine0', 0.3, 0.2], ['spine1', 0.3, 0.2], ['spine', 0.25, 0.2], ['neck', 0.15, 0.25]]);
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const LOCOMOTION = new Set(['walk', 'run']);
+// NC-LIFE-01B: the unarmed idle. The rig has no unarmed idle clip (the shared idle is the gun-ready stance), and the
+// old fix held the upper body at its bind pose, which read as an unanimated A-pose rig. `idle_unarmed` is built once
+// from the clips the rig already has: the idle clip's legs, hips and head (its weight shifts and glances), the walk
+// clip's shoulders, arms and hands averaged over one stride (the relaxed, arms-down carriage the walk swings around),
+// and an upright spine. Being a clip, the mixer crossfades it with walk, run and the armed idle like any other.
+// IDLE_LIFE then breathes, sways the weight and looks about on top (radians, periods in seconds), faded with it.
+const IDLE_LIFE = Object.freeze({ breathS: 4.2, breathChest: 0.022, breathShoulder: 0.018, swayS: 7.3, sway: 0.022, lookS: 11.7, look: 0.07, nodS: 9.1, nod: 0.025, armS: 6.1, arm: 0.035, armIn: 0.16 }); // armIn: the walk's average carries the arms a little wide
+const POSE_SETTLE_S = 0.4, POSE_SETTLE_RATE = 10; // after an equip or unequip the upper body travels, never snaps
+const UNARMED_ARM_BONE = /(?:Shoulder|Arm|ForeArm|Hand[A-Za-z]*\d*)$/, UNARMED_UPRIGHT_BONE = /(?:Spine\d?|Neck)$/;
+function buildUnarmedIdle(root) {
+  if (lib.clips.idle_unarmed || !lib.clips.idle || !lib.clips.walk) return;
+  const bind = new Map(); root.traverse((o) => { if (o.isBone) bind.set(o.name, o.quaternion); });
+  const average = (track) => {
+    const v = track.values, q = new THREE.Quaternion(), sum = new THREE.Vector4();
+    for (let i = 0; i < v.length; i += 4) {
+      q.fromArray(v, i); if (i && sum.x * q.x + sum.y * q.y + sum.z * q.z + sum.w * q.w < 0) q.set(-q.x, -q.y, -q.z, -q.w);
+      sum.x += q.x; sum.y += q.y; sum.z += q.z; sum.w += q.w;
+    }
+    return new THREE.Quaternion(sum.x, sum.y, sum.z, sum.w).normalize();
+  };
+  const idle = lib.clips.idle, held = (name, q) => new THREE.QuaternionKeyframeTrack(name, [0, idle.duration], [...q.toArray(), ...q.toArray()]);
+  const walk = new Map(lib.clips.walk.tracks.map((t) => [t.name, t]));
+  const tracks = idle.tracks.map((track) => {
+    if (!track.name.endsWith('.quaternion')) return track.clone();
+    const node = track.name.slice(0, -'.quaternion'.length);
+    if (UNARMED_ARM_BONE.test(node) && walk.has(track.name)) return held(track.name, average(walk.get(track.name)));
+    if (UNARMED_UPRIGHT_BONE.test(node) && bind.has(node)) return held(track.name, bind.get(node));
+    return track.clone();
+  });
+  lib.clips.idle_unarmed = new THREE.AnimationClip('idle_unarmed', idle.duration, tracks);
+}
 export class Character {
   constructor(scene, modelName, ghostMat, { presenceOnly = false, weaponId = presenceOnly ? null : 'ak', holstered = false } = {}) {
     const src = lib.models[modelName]; if (!src) throw new Error(`Character preset not loaded: ${modelName}`);
@@ -256,11 +286,14 @@ export class Character {
       if (!/^(?:Neck|Spine(?:1|2)?|LeftShoulder|RightShoulder|(?:Left|Right)(?:Arm|ForeArm|Hand.*))$/.test(name)) return;
       this.unarmedPoseBones.push({ bone: object, name, side: name.startsWith('Right') ? 1 : -1, rest: object.quaternion.clone() });
     });
+    buildUnarmedIdle(root);
+    this.settleFrom = this.unarmedPoseBones.map(() => new THREE.Quaternion()); this.settleT = 0;
+    this.mixerPose = this.unarmedPoseBones.map(() => new THREE.Quaternion()); this.mixerPoseSaved = false;
     this.mixer = new THREE.AnimationMixer(root); this.actions = {};
     for (const [k, c] of Object.entries(lib.clips)) this.actions[k] = this.mixer.clipAction(c);
-    this.gun = null; this.weaponId = null; this.holstered = true; this.setWeapon(weaponId, holstered);
+    this.gun = null; this.weaponId = null; this.holstered = true; this.setWeapon(weaponId, holstered); this.settleT = 0; this.settleReady = false;
     this.aimPitch = 0; this.ready = 0; this.raise = 0; this.fastRaise = false; this.dead = false; this.recoil = 0;
-    this.unarmedPoseWeight = 0; this.unarmedGaitPhase = 0;
+    this.unarmedGaitPhase = Math.random() * 60; // two idle characters never breathe in step
     this.bodyYaw = null; this.turning = false; this.fireHold = 0; this.switchDip = 0; this.shotAim = { yaw: 0, pitch: 0, t: 0 };
     this.contacts = null; // body contact points, measured from this character's mesh on the first posed update
     this.visualOffset = new THREE.Vector3();
@@ -271,6 +304,7 @@ export class Character {
   }
   set ghostVisible(v) { for (const g of this.ghosts) g.visible = v; }
   setWeapon(weaponId, holstered = false) {
+    if (this.weaponId !== (weaponId || null) || this.holstered !== (weaponId ? !!holstered : true)) this.settleT = POSE_SETTLE_S;
     if (this.weaponId === weaponId && this.gun) { this.holstered = !!holstered; this.gun.visible = this.obj.visible && !this.holstered && !this.dead; return true; }
     if (this.gun) { this.scene.remove(this.gun); disposeWeaponClone(this.gun); this.gun = null; if (weaponId) { this.switchDip = AIM_RULES.switchDipS; this.ready = this.raise = 0; } }
     this.weaponId = weaponId || null; this.holstered = weaponId ? !!holstered : true;
@@ -278,7 +312,7 @@ export class Character {
     this.gun = makeGun(weaponId); if (!this.gun) return false;
     this.scene.add(this.gun); this.gun.visible = this.obj.visible && !this.holstered && !this.dead; return true;
   }
-  setHolstered(holstered) { this.holstered = !!holstered || !this.weaponId; if (this.gun) this.gun.visible = this.obj.visible && !this.holstered && !this.dead; }
+  setHolstered(holstered) { if (this.holstered !== (!!holstered || !this.weaponId)) this.settleT = POSE_SETTLE_S; this.holstered = !!holstered || !this.weaponId; if (this.gun) this.gun.visible = this.obj.visible && !this.holstered && !this.dead; }
   // M7.1D: seated at a chess table ({ x, z, yaw } on the stool, facing the board) or null. While seated
   // the character sits on the stool whatever position it is given, with its weapon put away.
   setSeated(seat) {
@@ -286,7 +320,10 @@ export class Character {
     this.seat = seat && this.seatBones ? seat : null;
   }
   play(name, fade = 0.15, once = false) {
-    const key = CLIP_MAP[name] || name; if (this.cur === key && !once) return;
+    // a weaponless character standing (not seated) always gets the unarmed idle, whichever idle the caller named
+    let key = CLIP_MAP[name] || name; if (key === 'idle' && (!this.gun || this.holstered) && !this.seat) key = 'idle_unarmed';
+    if (!this.actions[key] && key === 'idle_unarmed') key = 'idle';
+    if (this.cur === key && !once) return;
     const a = this.actions[key]; if (!a) return;
     const prev = this.curA;
     if (prev && prev !== a) prev.fadeOut(fade);
@@ -303,7 +340,7 @@ export class Character {
   update(dt, pos, yaw, aiming, dead, contactOffset = null, { moving = true } = {}) {
     if (this.seat && !dead) {
       this.bodyYaw = this.seat.yaw; this.visualOffset.set(0, 0, 0); this.raise = this.ready = 0;
-      this.play('Idle_Gun', 0.25); this.mixer.update(dt);
+      this.play('Idle_Gun', 0.25); this.#mix(dt);
       applySeatedPose(this.obj, this.seatBones, this.seat);
       if (this.gun) this.gun.visible = false;
       return;
@@ -317,35 +354,16 @@ export class Character {
     if (moving || dead || Math.abs(diff) > AIM_RULES.turnStart) this.turning = true;
     else if (Math.abs(diff) < AIM_RULES.turnStop) this.turning = false;
     if (this.turning) { this.bodyYaw = wrapAngle(this.bodyYaw + diff * Math.min(1, dt * (moving ? AIM_RULES.moveTurnRate : AIM_RULES.turnRate))); diff = wrapAngle(aimYaw - this.bodyYaw); }
-    this.obj.position.copy(pos).add(this.visualOffset); this.obj.rotation.y = this.bodyYaw; this.mixer.update(dt);
-    const weaponless = (!this.gun || this.holstered) && !dead;
-    this.unarmedPoseWeight += ((weaponless ? 1 : 0) - this.unarmedPoseWeight) * (1 - Math.exp(-Math.max(0, dt) * 12));
-    // The walk/run clips already contain a full-body Mixamo gait: shoulder roll,
-    // bent elbows, and hands driving opposite the feet.  Do not replace those
-    // authored upper-body tracks with the bind pose.  The previous unarmed
-    // override did exactly that after mixer.update(), leaving only a tiny
-    // shoulder rotation and making both hands appear to hang at the hips.
-    // Only idle needs a relaxed override because the shared idle clip is the
-    // gun-ready source pose used by armed characters.
-    const locomoting = moving && LOCOMOTION.has(this.cur);
-    if (weaponless && !locomoting && this.unarmedPoseWeight > 0.001) {
-      this.unarmedGaitPhase += Math.max(0, dt) * 1.6;
-      const breath = Math.sin(this.unarmedGaitPhase);
-      for (const pose of this.unarmedPoseBones) {
-        _q5.copy(pose.rest);
-        if (pose.name === 'Spine' || pose.name === 'Spine1') {
-          _q6.setFromAxisAngle(LOCAL_Z, breath * 0.008);
-          _q5.multiply(_q6);
-        } else if (/^(?:Left|Right)Arm$/.test(pose.name)) {
-          _q6.setFromAxisAngle(LOCAL_Z, breath * 0.012 * pose.side);
-          _q5.multiply(_q6);
-        }
-        pose.bone.quaternion.slerp(_q5, this.unarmedPoseWeight);
-      }
-    }
+    this.obj.position.copy(pos).add(this.visualOffset); this.obj.rotation.y = this.bodyYaw; this.#mix(dt);
+    // The breathing and glances ride on the unarmed idle clip's own crossfade weight, so they fade in and out with
+    // it (walk, run and the armed idle carry their own authored upper body). An action that never played still
+    // reports weight 1, hence isRunning().
+    const unarmedIdle = this.actions.idle_unarmed, idleWeight = unarmedIdle?.isRunning() && !dead ? unarmedIdle.getEffectiveWeight() : 0;
+    if (idleWeight > 0.001) this.#idleLife(dt, idleWeight);
     if (!this.gun || this.holstered) {
       this.raise = this.ready = 0; this.fastRaise = false;
       if (this.gun) this.gun.visible = false;
+      this.#settle(dt);
       return;
     }
     const hold = holdFor(this.weaponId);
@@ -357,8 +375,8 @@ export class Character {
     if (this.raise >= 1 || !want) this.fastRaise = false;
     this.ready = smooth(this.raise);
     this.gun.visible = this.obj.visible && !dead && !this.holstered;
-    if (dead || !this.b.spine) return;
-    if (!this.contacts) this.contacts = this.calibrateContacts() || {};
+    if (dead || !this.b.spine) return void this.#settle(dt);
+    if (!this.contacts) this.contacts = (unarmedIdle?.isRunning() ? this.#inArmedIdlePose(() => this.calibrateContacts()) : this.calibrateContacts()) || {};
     const r = this.ready, twist = THREE.MathUtils.clamp(diff, -AIM_RULES.maxTwist, AIM_RULES.maxTwist), facing = this.bodyYaw + twist;
     // the aim frame: forward along the (twisted) aim, right, and both pitched with the aim
     const fwd = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing)), right = new THREE.Vector3().crossVectors(fwd, UP).normalize(); // character's right side
@@ -412,6 +430,61 @@ export class Character {
       handIK(b.lClav, b.lArm, b.lFore, b.lHand, b.lPalm, this.supportHand(this.gun.matrixWorld), supportDir, pole);
       if (dip > 0) { arm.forEach((bone, i) => bone.quaternion.slerp(clip[i], dip)); arm[0].updateMatrixWorld(true); }
     }
+    this.#settle(dt);
+  }
+  // The mixer rewrites a bone only when its clip value changes, so the held tracks of idle_unarmed would keep
+  // whatever was layered on last frame (idle life, aim, IK, settle) and pile it up. Put back last frame's clip pose
+  // first: the mixer then either overwrites it or leaves the right one.
+  #mix(dt) {
+    if (this.mixerPoseSaved) this.unarmedPoseBones.forEach((pose, i) => pose.bone.quaternion.copy(this.mixerPose[i]));
+    this.mixer.update(dt);
+    this.unarmedPoseBones.forEach((pose, i) => this.mixerPose[i].copy(pose.bone.quaternion)); this.mixerPoseSaved = true;
+  }
+  // Run `measure` with the skeleton in the armed idle clip's pose, then put it back. Weapon contacts are measured on
+  // the first armed frame; drawing out of the unarmed idle, that frame is still mostly the relaxed stance (up to
+  // 3 cm off the armed idle the contacts were always measured in), and the stock would sit in the chest.
+  #inArmedIdlePose(measure) {
+    const clip = lib.clips.idle, action = this.actions.idle; if (!clip || !action) return measure();
+    const t = action.time % clip.duration, saved = [];
+    for (const track of clip.tracks) {
+      if (!track.name.endsWith('.quaternion')) continue;
+      const bone = this.inner.getObjectByName(track.name.slice(0, -'.quaternion'.length)); if (!bone) continue;
+      saved.push([bone, bone.quaternion.clone()]); bone.quaternion.fromArray(track.createInterpolant().evaluate(t));
+    }
+    this.obj.updateMatrixWorld(true);
+    try { return measure(); } finally { for (const [bone, q] of saved) bone.quaternion.copy(q); this.obj.updateMatrixWorld(true); }
+  }
+  // Breathing, weight and a look about, scaled by `weight`. Body-space rotations, so they read the same whatever
+  // the bones' local axes; only the upper body is touched (feet, hips and facing are not).
+  #idleLife(dt, weight) {
+    const L = IDLE_LIFE, t = (this.unarmedGaitPhase += Math.max(0, dt)), TAU = Math.PI * 2;
+    const breath = Math.sin(t * TAU / L.breathS), inhale = 0.5 + 0.5 * breath;
+    const sway = Math.sin(t * TAU / L.swayS), look = Math.sin(t * TAU / L.lookS + 1.3) * 0.75 + Math.sin(t * TAU / (L.lookS * 0.43)) * 0.25;
+    const nod = Math.sin(t * TAU / L.nodS + 0.6), drift = (side) => Math.sin(t * TAU / L.armS + side * 1.9);
+    this.obj.updateMatrixWorld(true);
+    const fwd = _a.set(Math.sin(this.bodyYaw), 0, Math.cos(this.bodyYaw)), right = _b.crossVectors(fwd, UP).normalize();
+    const turn = (bone, pitch, roll, yaw) => { if (!bone) return; _q3.setFromAxisAngle(right, pitch * weight); _q4.setFromAxisAngle(fwd, roll * weight); _q3.multiply(_q4); _q4.setFromAxisAngle(UP, yaw * weight); rotateBoneWorld(bone, _q3.multiply(_q4)); };
+    const b = this.b;
+    turn(b.spine0, 0, L.sway * sway, L.sway * 0.4 * sway);
+    turn(b.spine1, -L.breathChest * 0.5 * breath, -L.sway * 0.5 * sway, 0);
+    turn(b.spine, -L.breathChest * breath, 0, 0);
+    turn(b.neck, L.nod * nod + L.breathChest * 0.5 * breath, -L.sway * 0.3 * sway, L.look * look);
+    turn(b.lClav, 0, L.breathShoulder * inhale, 0);
+    turn(this.rClav ??= this.unarmedPoseBones.find((p) => p.name === 'RightShoulder')?.bone || false, 0, -L.breathShoulder * inhale, 0);
+    turn(b.lArm, L.arm * drift(-1), -L.armIn + L.arm * 0.4 * inhale, 0);
+    turn(b.rArm, L.arm * drift(1), L.armIn - L.arm * 0.4 * inhale, 0);
+  }
+  // For a moment after an equip or unequip, ease the upper body from where it was last frame toward this frame's
+  // pose (the hands travel to the grip or drop to the sides); otherwise just remember this frame's pose.
+  #settle(dt) {
+    const settling = this.settleT > 0 && this.settleReady, k = 1 - Math.exp(-Math.max(0, dt) * POSE_SETTLE_RATE);
+    this.settleT = Math.max(0, this.settleT - Math.max(0, dt));
+    this.unarmedPoseBones.forEach((pose, i) => {
+      if (settling) pose.bone.quaternion.copy(this.settleFrom[i].slerp(pose.bone.quaternion, k));
+      else this.settleFrom[i].copy(pose.bone.quaternion);
+    });
+    if (settling) this.obj.updateMatrixWorld(true);
+    this.settleReady = true;
   }
   // Measure where weapons touch this body: CPU-skin the torso vertices once, in the current
   // (idle) pose, and keep the points relative to the upper chest (Spine2).

@@ -72,9 +72,9 @@ import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
 import { createMobilePerformanceOverlay } from './mobile-performance-overlay.js';
 import { createAdaptiveResolution } from './adaptive-resolution.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-life-01a-prod1';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-life-01b-prod1';
 
-const GAME_BUILD_ID = 'nc-life-01a-prod1';
+const GAME_BUILD_ID = 'nc-life-01b-prod1';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -294,8 +294,13 @@ function openConversation(residentId) {
   rootsConversationResident = residentId; const resident = latestEconomy?.roots?.residents?.find((r) => r.id === residentId);
   $('rootsConversationTitle').textContent = resident?.name || 'Roots Host';
   $('rootsResidentIdentity').textContent = resident ? `${resident.occupation.replaceAll('-', ' ')} · ${resident.neighborhood.replaceAll('-', ' ')} · ${resident.activity}` : 'Roots Lounge host';
-  $('rootsDialogue').textContent = 'Choose a topic.'; $('rootsConversation').hidden = false; document.exitPointerLock?.();
+  for (const b of $('rootsTopics').querySelectorAll('[data-topic]')) b.classList.toggle('on', b.dataset.topic === 'roots');
+  rootsReply('Choose a topic.'); $('rootsConversation').hidden = false; document.exitPointerLock?.();
 }
+// NC-LIFE-01B: every topic tap shows at once that it was heard (the reply replaces the "…"), and a reply that never
+// comes says so instead of leaving a button that looks dead.
+let rootsReplyTimer = 0;
+function rootsReply(text) { clearTimeout(rootsReplyTimer); rootsReplyTimer = 0; $('rootsDialogue').textContent = text; }
 $('rootsTreasuryClose').onclick = () => closeEconomyPanel('rootsTreasury');
 $('rootsDemandClose').onclick = () => closeEconomyPanel('rootsDemand');
 $('rootsConversationClose').onclick = () => closeEconomyPanel('rootsConversation');
@@ -305,7 +310,12 @@ $('rootsSuggestionSubmit').onclick = () => {
   if (!multiplayer || multiplayer.state !== 'connected') return void ($('rootsSuggestionStatus').textContent = 'Join multiplayer to submit.');
   multiplayer.sendEconomy({ action: 'suggest', category: $('rootsSuggestionCategory').value, text }); $('rootsSuggestionStatus').textContent = 'Submitting to the city server…';
 };
-for (const button of $('rootsTopics').querySelectorAll('[data-topic]')) button.onclick = () => multiplayer?.sendEconomy?.({ action: 'interact-resident', residentId: rootsConversationResident, station: 'resident', topic: button.dataset.topic });
+for (const button of $('rootsTopics').querySelectorAll('[data-topic]')) button.onclick = () => {
+  for (const b of $('rootsTopics').querySelectorAll('[data-topic]')) b.classList.toggle('on', b === button);
+  if (!multiplayer || multiplayer.state !== 'connected') return rootsReply('Join multiplayer to talk with residents.');
+  rootsReply('…'); rootsReplyTimer = setTimeout(() => rootsReply('No answer. Check your connection and try again.'), 5000);
+  multiplayer.sendEconomy({ action: 'interact-resident', residentId: rootsConversationResident, station: 'resident', topic: button.dataset.topic });
+};
 // M7.1D chess at the Central Park tables: the panel pauses movement and releases the mouse while open.
 const chessClient = new ChessClient({ send: (body) => multiplayer?.sendChess(body), mobile: Q.mobile, onOpen: (open) => {
   if (open) { input.moveX = input.moveY = 0; input.fire = input.ads = input.sprint = false; document.exitPointerLock?.(); } else if (MATCH.started && !MATCH.over && !TOUCH) requestLock();
@@ -1239,7 +1249,7 @@ function configureMultiplayerClient() {
       for (const peer of message.peers || []) { const remote = ensureRemote(peer); if (remote && peer.state) remote.push(peer.state); }
     } else if (message.type === 'economy') {
       if (message.snapshot) { latestEconomy = message.snapshot; city?.rootsLounge?.setEconomy(latestEconomy); followEconomicClock(latestEconomy); }
-      if (message.dialogue) $('rootsDialogue').textContent = message.dialogue;
+      if (message.dialogue) rootsReply(message.dialogue);
       if (message.confirmation) { $('rootsSuggestionStatus').textContent = message.confirmation; if (message.suggestion) { $('rootsSuggestionText').value = ''; openDemand(); } }
       if (message.payment) hud.callout('ROOTS ADMISSION · SIMULATED', `${simCash(message.payment.amount)} · BALANCE ${simCash(message.snapshot?.player?.balance)}`);
     } else if (message.type === 'peer-joined') {
@@ -1302,7 +1312,7 @@ function configureMultiplayerClient() {
     else if (message.type === 'reject' && message.talk) { /* a busy resident just keeps walking; the card still works */ }
     else if (message.type === 'reject' && message.economy) {
       const copy = { duplicate_suggestion: 'That suggestion is already on the board.', suggestion_rate_limited: 'Suggestion limit reached for this simulation hour.', invalid_suggestion: 'Enter a valid suggestion.', resident_not_in_roots: 'That resident has moved away.', insufficient_simulated_funds: 'Not enough simulated funds.' };
-      $($('rootsConversation').hidden ? 'rootsSuggestionStatus' : 'rootsDialogue').textContent = copy[message.reason] || `Request rejected: ${message.reason}`;
+      clearTimeout(rootsReplyTimer); $($('rootsConversation').hidden ? 'rootsSuggestionStatus' : 'rootsDialogue').textContent = copy[message.reason] || `Request rejected: ${message.reason}`;
     }
     else if (message.type === 'reject') { showShopReject(message); if (message.context) applyLocalContext(message.context, message.contextRevision || localContextRevision, message.state, message.safeZone); if (message.combat) applyLocalCombat(message.combat); }
     else if (message.type === 'correction' && message.state) applyServerCorrection(message.state);

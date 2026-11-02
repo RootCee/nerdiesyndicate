@@ -76,10 +76,10 @@ assert.equal((index.match(/id="tFire"/g) || []).length, 1);
 assert.doesNotMatch(index, /tFire2/);
 assert.match(index, /@media \(pointer: coarse\) and \(orientation: portrait\)/);
 assert.match(index, /id="mpDiagnosticsToggle"[^>]*hidden/);
-assert.match(index, /src="src\/main\.js\?build=nc-life-01a-prod1"/);
+assert.match(index, /src="src\/main\.js\?build=nc-life-01b-prod1"/);
 assert.match(main, /multiplayer-endpoint\.js\?build=m6\.3-cross-device-diagnostics-rc1/);
-assert.match(main, /wallet-bridge\.js\?build=nc-life-01a-prod1/);
-assert.match(main, /const GAME_BUILD_ID = 'nc-life-01a-prod1'/);
+assert.match(main, /wallet-bridge\.js\?build=nc-life-01b-prod1/);
+assert.match(main, /const GAME_BUILD_ID = 'nc-life-01b-prod1'/);
 // M6.5 Underground 6v6: results panel and server match state handling.
 assert.match(index, /id="ugResults"[^>]*role="dialog"/);
 assert.match(index, /id="ugStay"/); assert.match(index, /id="ugLeave"/);

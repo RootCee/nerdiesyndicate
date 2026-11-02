@@ -1,7 +1,7 @@
 {
   "name": "Nerdie City: Mafia Wars",
-  "channel": "nc-life-01a-production-candidate",
-  "sourceCommit": "2964c582f902091b1e02d89582471cbe8d9da5e2",
-  "sourceBranch": "codex/nerdie-city-nc-life-01a-preview",
+  "channel": "nc-life-01b-production",
+  "sourceCommit": "e4bbe6b616495bf793702413e82b0ae6761492d9",
+  "sourceBranch": "codex/nerdie-city-nc-life-01b-repair",
   "entry": "/mafia-wars/game/?phys=0&multiplayer=1"
 }
