@@ -70,8 +70,8 @@ export function nightLevel(hour) { return smooth(5 * DEG, -3 * DEG, sunAt(hour).
 // Keyframes by hour. Colours are sRGB hex; intensities are the renderer's (physically based) units.
 // zenith/horizon/ground: sky dome; fog: colour, near, far; key: the sun or moon; hemi: sky, ground, intensity.
 const K = [
-  { h: 0, zenith: 0x0a1330, horizon: 0x1f2d52, ground: 0x0d111c, fog: [0x1a2440, 24, 150], key: [0xa3b6e6, 0.75], hemi: [0x51628c, 0x17171d, 0.62], rim: [0x6f5cb0, 0.18], exposure: 1.08, env: 0.32, stars: 1, bloom: 0.42, clouds: 0x1c2747 },
-  { h: 4.6, zenith: 0x0e1838, horizon: 0x283358, ground: 0x10131e, fog: [0x1f2846, 24, 150], key: [0xa3b6e6, 0.7], hemi: [0x56668e, 0x17171d, 0.6], rim: [0x6f5cb0, 0.18], exposure: 1.08, env: 0.32, stars: 0.9, bloom: 0.42, clouds: 0x222c4e },
+  { h: 0, zenith: 0x0a1330, horizon: 0x1f2d52, ground: 0x0d111c, fog: [0x1a2440, 24, 150], key: [0xa3b6e6, 0.78], hemi: [0x5b6e9c, 0x1b1a20, 0.68], rim: [0x8170c2, 0.26], exposure: 1.12, env: 0.34, stars: 1, bloom: 0.42, clouds: 0x1c2747 },
+  { h: 4.6, zenith: 0x0e1838, horizon: 0x283358, ground: 0x10131e, fog: [0x1f2846, 24, 150], key: [0xa3b6e6, 0.74], hemi: [0x60719d, 0x1b1a20, 0.66], rim: [0x8170c2, 0.25], exposure: 1.11, env: 0.34, stars: 0.9, bloom: 0.42, clouds: 0x222c4e },
   { h: 5.6, zenith: 0x24315f, horizon: 0x8a6a86, ground: 0x2a2630, fog: [0x5a4d66, 26, 160], key: [0xffa88a, 0.55], hemi: [0x7a7aa8, 0x2a2228, 0.6], rim: [0xff8a6a, 0.3], exposure: 1.04, env: 0.36, stars: 0.35, bloom: 0.38, clouds: 0x7a5c78 },
   { h: 6.4, zenith: 0x3e5d98, horizon: 0xf2a676, ground: 0x4e4650, fog: [0xb08c84, 30, 180], key: [0xffb27a, 1.5], hemi: [0x8f98c0, 0x3c302a, 0.64], rim: [0xff9a66, 0.4], exposure: 1.0, env: 0.4, stars: 0.05, bloom: 0.32, clouds: 0xf3b38c },
   { h: 8, zenith: 0x5a8fd2, horizon: 0xbcd3ea, ground: 0x6a6458, fog: [0xa9bdcf, 40, 220], key: [0xfff0d8, 2.3], hemi: [0x9fc0e8, 0x4c4238, 0.66], rim: [0xffe2b8, 0.25], exposure: 0.93, env: 0.5, stars: 0, bloom: 0.24, clouds: 0xf4f1ec },
@@ -82,8 +82,8 @@ const K = [
   { h: 18.1, zenith: 0x2f2b72, horizon: 0xf08a5e, ground: 0x3e3040, fog: [0x8c5c70, 28, 175], key: [0xff9a5a, 1.2], hemi: [0x8a70b0, 0x2c2028, 0.62], rim: [0xc070d8, 0.42], exposure: 1.0, env: 0.4, stars: 0.05, bloom: 0.36, clouds: 0xe0789a },
   // dusk: the look the city shipped with (rooftop_night), then night
   { h: 19, zenith: 0x1d2650, horizon: 0x5e4672, ground: 0x1d1a22, fog: [0x4d4258, 22, 150], key: [0xb8b0d8, 1.0], hemi: [0x7a6c9c, 0x1d1a17, 0.58], rim: [0xffb28a, 0.3], exposure: 1.04, env: 0.5, stars: 0.5, bloom: 0.4, clouds: 0x4a3c66 },
-  { h: 20.4, zenith: 0x0c1534, horizon: 0x223058, ground: 0x0e121d, fog: [0x1c2642, 24, 150], key: [0xa3b6e6, 0.75], hemi: [0x51628c, 0x17171d, 0.62], rim: [0x6f5cb0, 0.18], exposure: 1.08, env: 0.32, stars: 1, bloom: 0.42, clouds: 0x1c2747 },
-  { h: 24, zenith: 0x0a1330, horizon: 0x1f2d52, ground: 0x0d111c, fog: [0x1a2440, 24, 150], key: [0xa3b6e6, 0.75], hemi: [0x51628c, 0x17171d, 0.62], rim: [0x6f5cb0, 0.18], exposure: 1.08, env: 0.32, stars: 1, bloom: 0.42, clouds: 0x1c2747 },
+  { h: 20.4, zenith: 0x0c1534, horizon: 0x223058, ground: 0x0e121d, fog: [0x1c2642, 24, 150], key: [0xa3b6e6, 0.78], hemi: [0x5b6e9c, 0x1b1a20, 0.68], rim: [0x8170c2, 0.26], exposure: 1.12, env: 0.34, stars: 1, bloom: 0.42, clouds: 0x1c2747 },
+  { h: 24, zenith: 0x0a1330, horizon: 0x1f2d52, ground: 0x0d111c, fog: [0x1a2440, 24, 150], key: [0xa3b6e6, 0.78], hemi: [0x5b6e9c, 0x1b1a20, 0.68], rim: [0x8170c2, 0.26], exposure: 1.12, env: 0.34, stars: 1, bloom: 0.42, clouds: 0x1c2747 },
 ];
 const toRgb = (hex) => [(hex >> 16 & 255) / 255, (hex >> 8 & 255) / 255, (hex & 255) / 255];
 const mixHex = (a, b, t) => { const x = toRgb(a), y = toRgb(b); return x.map((v, i) => v + (y[i] - v) * t); };

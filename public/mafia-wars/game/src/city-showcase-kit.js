@@ -258,9 +258,14 @@ export function roofUnits(batch, kit, x, y, z, count, rnd) {
 export function furniturePiece(batch, kit, f) {
   const m = kit.m;
   if (f.kind === 'tree') {
+    const leaf = (mat, x, y, z, radius, lowerDetail = false) => batch.add(
+      mat,
+      (kit.mobile && lowerDetail ? new THREE.OctahedronGeometry(radius) : new THREE.IcosahedronGeometry(radius)).translate(x, y, z),
+    );
     batch.box(m.curb, f.x, 0.1, f.z, 1.1, 0.06, 1.1); batch.box(m.soil, f.x, 0.115, f.z, 0.9, 0.04, 0.9);
     batch.cyl(m.trunk, f.x, 1.6, f.z, 0.13, 3.2, 7, 0.09);
-    batch.blob(m.leaf, f.x, 3.9, f.z, 1.35, 1); batch.blob(m.leafDark, f.x + 0.7, 3.4, f.z + 0.3, 0.9, 0); batch.blob(m.leaf, f.x - 0.6, 3.5, f.z - 0.4, 0.95, 0); batch.blob(m.leaf, f.x + 0.1, 4.7, f.z - 0.2, 0.8, 0);
+    leaf(m.leaf, f.x, 3.9, f.z, 1.35, true); leaf(m.leafDark, f.x + 0.7, 3.4, f.z + 0.3, 0.9, true);
+    if (!kit.mobile) leaf(m.leaf, f.x - 0.6, 3.5, f.z - 0.4, 0.95);
   } else if (f.kind === 'planter') {
     batch.box(m.concrete, f.x, 0.42, f.z, f.width, 0.7, f.depth); batch.box(m.gold, f.x, 0.79, f.z, f.width + 0.04, 0.04, f.depth + 0.04); batch.box(m.soil, f.x, 0.78, f.z, f.width - 0.16, 0.04, f.depth - 0.16);
     const along = f.width > f.depth; for (const s of [-0.5, 0, 0.5]) batch.blob(s ? m.leafDark : m.leaf, f.x + (along ? s * f.width * 0.6 : 0), 1.15, f.z + (along ? 0 : s * f.depth * 0.6), 0.42, 0);
@@ -271,5 +276,6 @@ export function furniturePiece(batch, kit, f) {
     batch.box(m.trunk, along ? f.x : f.x + 0.22, 0.78, along ? f.z + 0.22 : f.z, along ? len : 0.06, 0.38, along ? 0.06 : len);
   } else if (f.kind === 'bollard') {
     batch.cyl(m.charcoal, f.x, 0.48, f.z, 0.13, 0.95, 10); batch.cyl(m.gold, f.x, 0.88, f.z, 0.14, 0.06, 10);
+    if (f.id.startsWith('greenway-light-')) batch.cyl(m.lamp, f.x, 0.94, f.z, 0.08, 0.06, 10);
   }
 }

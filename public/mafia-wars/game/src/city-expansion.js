@@ -28,6 +28,8 @@ import { GenericInteriorSystem } from './generic-interiors.js';
 import { entranceWalkways } from './entrance-walkways.js';
 import { buildEntranceWalkways } from './entrance-walkways-view.js';
 import { STORES } from './store-hours.js';
+import { RootsLoungeSystem } from './roots-lounge.js';
+import { ROOTS_LOUNGE_BUILDING_ID, rootsLoungeSite } from './roots-lounge-layout.js';
 
 const material = (color, roughness = 0.88, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
 const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
@@ -92,6 +94,13 @@ function addBuilding(group, spec, profile, mats) {
     facade(mats.awning, 0.7, 0.24, facadeLength * 0.72, 0.31, 2.75, 0, `city-awning-${spec.id}`);
     facade(mats.window, 0.1, 1.55, facadeLength * 0.64, 0.09, 1.35, 0, `city-shopfront-${spec.id}`);
   }
+  if (kind === 'venue') {
+    const signY = Math.min(height - 1.1, 4.4);
+    facade(mats.awning, 0.52, 0.62, facadeLength * 0.76, 0.38, signY, 0, `city-venue-marquee-${spec.id}`);
+    for (const along of [-facadeLength * 0.32, facadeLength * 0.32]) {
+      facade(mats.metal, 0.32, 3.4, 0.38, 0.24, 1.7, along, `city-venue-pillar-${spec.id}`);
+    }
+  }
   if (!spec.enterableHouseId && kind !== 'storefront') {
     facade(mats.door, 0.14, 2.25, 1.12, 0.07, 1.13, facadeLength * 0.24, `city-door-${spec.id}`);
     facade(mats.trim, 0.48, 0.16, 1.55, 0.23, 2.42, facadeLength * 0.24, `city-door-canopy-${spec.id}`);
@@ -109,7 +118,7 @@ function addBuilding(group, spec, profile, mats) {
 function registerBuilding(spec) {
   const { x, z, width, depth, height, kind = 'apartment' } = spec;
   addCollider(x - width / 2, z - depth / 2, x + width / 2, z + depth / 2, 0, height + 0.5, { cityChunk: spec.id });
-  mapRects.push({ x: x - width / 2, z: z - depth / 2, w: width, h: depth, type: spec.id === BANK_BUILDING_ID ? 'bank' : kind === 'house' ? 'house' : 'apartment' });
+  mapRects.push({ x: x - width / 2, z: z - depth / 2, w: width, h: depth, type: spec.id === BANK_BUILDING_ID ? 'bank' : kind === 'house' ? 'house' : kind === 'venue' ? 'venue' : 'apartment' });
 }
 
 function addParkedVehicle(group, spec, mats) {
@@ -147,7 +156,8 @@ export function buildCityExpansion(scene, Q = {}) {
   const plan = createCityPlan(Q.mobile || Q.lowMemory ? 'mobile' : 'desktop');
   Object.assign(MAP, plan.bounds);
   const mats = {
-    road: material(0x252a31), alley: material(0x2c3036), sidewalk: material(0x777a78), ground: material(0x34452e),
+    road: material(0x252a31), alley: material(0x2c3036), sidewalk: material(0x777a78), parkingLine: material(0xc4c3b9), ground: material(0x34452e),
+    futureLot: material(0x62674c), futureLotEdge: material(0xa69b78),
     yard: material(0x3e5033), roof: material(0x34383d), metal: material(0x555b61, 0.55, 0.35),
     window: material(0x162536, 0.2, 0.35), awning: material(0x8b5b32), car: material(0x4d5966, 0.55, 0.25),
     trim: material(0x292b2d, 0.82), door: material(0x38261d, 0.72),
@@ -155,17 +165,32 @@ export function buildCityExpansion(scene, Q = {}) {
   };
   const infrastructure = new THREE.Group(); infrastructure.name = 'city-infrastructure'; scene.add(infrastructure);
   const cityWidth = plan.bounds.maxX - plan.bounds.minX, cityCenterX = (plan.bounds.minX + plan.bounds.maxX) / 2;
-  addBox(infrastructure, mats.ground, cityWidth, 0.12, 296, cityCenterX, -0.08, 0, 'city-ground');
+  const cityDepth = plan.bounds.maxZ - plan.bounds.minZ;
+  const cityCenterZ = (plan.bounds.minZ + plan.bounds.maxZ) / 2;
+  addBox(infrastructure, mats.ground, cityWidth, 0.12, cityDepth, cityCenterX, -0.08, cityCenterZ, 'city-ground');
   // M7.0A: the shared ground layout (city-ground-layout.js): road surfaces that never overlap,
   // sidewalks that stop at cross streets, alleys without sidewalks. One merged mesh per material.
   const ground = cityGroundLayout(plan);
-  const merged = (rects, mat, y0, y1, name) => {
+  const merged = (rects, mat, y0, y1, name, surface = false) => {
     if (!rects.length) return null;
-    const geometry = mergeGeometries(rects.map((r) => new THREE.BoxGeometry(r.maxX - r.minX, y1 - y0, r.maxZ - r.minZ).translate((r.minX + r.maxX) / 2, (y0 + y1) / 2, (r.minZ + r.maxZ) / 2)));
+    const geometry = mergeGeometries(rects.map((r) => {
+      const x = (r.minX + r.maxX) / 2, z = (r.minZ + r.maxZ) / 2;
+      return surface
+        ? new THREE.PlaneGeometry(r.maxX - r.minX, r.maxZ - r.minZ).rotateX(-Math.PI / 2).translate(x, y1, z)
+        : new THREE.BoxGeometry(r.maxX - r.minX, y1 - y0, r.maxZ - r.minZ).translate(x, (y0 + y1) / 2, z);
+    }));
     const mesh = new THREE.Mesh(geometry, mat); mesh.name = name; mesh.receiveShadow = true; mesh.castShadow = false; infrastructure.add(mesh); return mesh;
   };
-  merged(ground.surfaces, mats.road, -0.03, GROUND.roadTop, 'city-roads');
-  merged(ground.alleys, mats.alley, -0.03, GROUND.roadTop, 'city-alleys');
+  merged(ground.surfaces, mats.road, -0.03, GROUND.roadTop, 'city-roads', true);
+  merged(ground.alleys, mats.alley, -0.03, GROUND.roadTop, 'city-alleys', true);
+  merged(ground.parking, mats.road, -0.03, GROUND.roadTop, 'city-parking', true);
+  merged(ground.paths, mats.sidewalk, 0.005, GROUND.sidewalkTop, 'city-greenway-paths');
+  const parkingMarks = ground.parking.flatMap((lot) => {
+    const marks = [], z0 = lot.minZ + 2, z1 = lot.maxZ - 2;
+    for (let x = lot.minX + 2; x < lot.maxX - 1; x += 4.5) marks.push({ minX: x, maxX: x + 0.12, minZ: z0, maxZ: z1 });
+    return marks;
+  });
+  merged(parkingMarks, mats.parkingLine, GROUND.roadTop + 0.003, GROUND.roadTop + 0.025, 'city-parking-markings');
   // M7.0B1: the North Market showcase (city-showcase*.js); ?showcase=0 shows the city without it.
   const kit = Q.showcase === false ? null : createShowcaseMaterials({ mobile: plan.profile.key === 'mobile' });
   kit?.setNight(1); // lit, matching the city's shipped dusk look until the clock says otherwise
@@ -177,7 +202,16 @@ export function buildCityExpansion(scene, Q = {}) {
     // paved sidewalks with a raised curb, paved forecourts, and street furniture
     const walks = ground.sidewalks.filter(showcaseWalk), batch = new KitBatch();
     for (const w of walks) {
-      batch.box(kit.m.pavers, (w.minX + w.maxX) / 2, (0.005 + GROUND.sidewalkTop) / 2, (w.minZ + w.maxZ) / 2, w.maxX - w.minX, GROUND.sidewalkTop - 0.005, w.maxZ - w.minZ);
+      // Corner infills and endpoint caps join existing sidewalk surfaces. A flat
+      // two-triangle paver avoids stacked curb boxes at the junction and keeps
+      // the mobile/desktop geometry cost proportional to their visible area.
+      if (kit.mobile || w.corner || w.cap) {
+        batch.add(kit.m.pavers, new THREE.PlaneGeometry(w.maxX - w.minX, w.maxZ - w.minZ)
+          .rotateX(-Math.PI / 2).translate((w.minX + w.maxX) / 2, GROUND.sidewalkTop, (w.minZ + w.maxZ) / 2));
+      } else {
+        batch.box(kit.m.pavers, (w.minX + w.maxX) / 2, (0.005 + GROUND.sidewalkTop) / 2, (w.minZ + w.maxZ) / 2, w.maxX - w.minX, GROUND.sidewalkTop - 0.005, w.maxZ - w.minZ);
+      }
+      if (w.corner || w.cap) continue;
       const c = 0.18, edge = w.vertical ? (w.side < 0 ? w.maxX - c / 2 : w.minX + c / 2) : (w.side < 0 ? w.maxZ - c / 2 : w.minZ + c / 2);
       if (w.vertical) batch.box(kit.m.curb, edge, 0.065, (w.minZ + w.maxZ) / 2, c, 0.13, w.maxZ - w.minZ); else batch.box(kit.m.curb, (w.minX + w.maxX) / 2, 0.065, edge, w.maxX - w.minX, 0.13, c);
     }
@@ -189,28 +223,52 @@ export function buildCityExpansion(scene, Q = {}) {
       // furniture blocks walking but not bullets, like the streetlight poles (the server has no furniture)
       const r = f.kind === 'tree' ? 0.14 : 0;
       addCollider(f.x - (r || f.width / 2), f.z - (r || f.depth / 2), f.x + (r || f.width / 2), f.z + (r || f.depth / 2), 0, Math.min(f.height, 1.2), { fence: true, furniture: f.id });
-      mapRects.push({ x: f.x - f.width / 2, z: f.z - f.depth / 2, w: f.width, h: f.depth, type: 'pole' });
+      mapRects.push({ x: f.x - f.width / 2, z: f.z - f.depth / 2, w: f.width, h: f.depth, type: f.kind === 'tree' ? 'tree' : 'pole' });
     }
     batch.build(infrastructure, 'showcase-ground');
     showcaseStats.triangles += batch.triangles;
   }
+  const parcelRects = (plan.reservedLots || []).map((lot) => ({
+    minX: lot.minX ?? lot.x - lot.width / 2,
+    maxX: lot.maxX ?? lot.x + lot.width / 2,
+    minZ: lot.minZ ?? lot.z - lot.depth / 2,
+    maxZ: lot.maxZ ?? lot.z + lot.depth / 2,
+  }));
+  merged(parcelRects, mats.futureLot, -0.004, 0.004, 'city-future-lot-pads');
+  const parcelEdges = parcelRects.flatMap((lot) => {
+    const edge = 0.16;
+    return [
+      { minX: lot.minX, maxX: lot.maxX, minZ: lot.minZ, maxZ: lot.minZ + edge },
+      { minX: lot.minX, maxX: lot.maxX, minZ: lot.maxZ - edge, maxZ: lot.maxZ },
+      { minX: lot.minX, maxX: lot.minX + edge, minZ: lot.minZ + edge, maxZ: lot.maxZ - edge },
+      { minX: lot.maxX - edge, maxX: lot.maxX, minZ: lot.minZ + edge, maxZ: lot.maxZ - edge },
+    ];
+  });
+  merged(parcelEdges, mats.futureLotEdge, 0.004, 0.035, 'city-future-lot-boundaries');
   for (const road of plan.roads) mapRects.push({ x: road.x - road.width / 2, z: road.z - road.depth / 2, w: road.width, h: road.depth, type: 'road' });
+  for (const lot of ground.parking) mapRects.push({ x: lot.minX, z: lot.minZ, w: lot.maxX - lot.minX, h: lot.maxZ - lot.minZ, type: 'parking' });
   for (const a of ground.alleys) mapRects.push({ x: a.minX, z: a.minZ, w: a.maxX - a.minX, h: a.maxZ - a.minZ, type: 'alley' });
   for (const w of ground.sidewalks) mapRects.push({ x: w.minX, z: w.minZ, w: w.maxX - w.minX, h: w.maxZ - w.minZ, type: 'walk' });
+  for (const path of ground.paths) mapRects.push({ x: path.minX, z: path.minZ, w: path.maxX - path.minX, h: path.maxZ - path.minZ, type: 'walk' });
+  for (const lot of parcelRects) mapRects.push({ x: lot.minX, z: lot.minZ, w: lot.maxX - lot.minX, h: lot.maxZ - lot.minZ, type: 'reserved' });
   // Slop New York-inspired procedural road paint: all lane dashes and
   // crosswalks share one geometry and material, keeping the upgrade to one
   // lightweight draw call on both desktop and mobile.
-  const roadPaint = Q.roadPaint === false ? null : buildCityRoadMarkings(infrastructure, plan.roads.filter((r) => Math.min(r.width, r.depth) >= GROUND.alleyMaxWidth));
+  const roadPaint = Q.roadPaint === false ? null : buildCityRoadMarkings(infrastructure, plan.roads.filter((r) => !r.alley && Math.min(r.width, r.depth) >= GROUND.alleyMaxWidth));
   // M7.0A: streetlights from the shared layout, on the sidewalks at the curb (instanced: three draw calls).
   const streetlights = buildStreetlights(infrastructure, ground.streetlights, mats);
 
   const chunks = [];
-  let apartment = null, house = null, originalHouse = null, duplicatedHouse = null, combatVenue = null, bank = null, gunShop = null, library = null, bankInterior = null;
+  let apartment = null, house = null, originalHouse = null, duplicatedHouse = null, combatVenue = null, bank = null, gunShop = null, library = null, bankInterior = null, rootsLounge = null;
   for (const district of plan.districts) {
     const group = new THREE.Group(); group.name = `city-chunk-${district.id}`; scene.add(group);
     const batch = kit ? new KitBatch() : null;
     for (const spec of district.buildings) {
-      if (kit) {
+      if (spec.destructible && Q.houses !== false) {
+        addBox(infrastructure, mats.yard, spec.width + 5, 0.035, spec.depth + 4, spec.x, -0.006, spec.z, `city-yard-${spec.id}`);
+        showcaseStats.buildings++;
+        continue;
+      } else if (kit) {
         showcaseBuilding(batch, kit, spec, group, { mobile: plan.profile.key === 'mobile' }); registerBuilding(spec); showcaseStats.buildings++;
         // M7.1B: front steps up to raised doors (climbable; shots pass over them as over other low fixtures)
         for (const st of entrySteps(spec)) addCollider(st.minX, st.minZ, st.maxX, st.maxZ, 0, st.top, { step: true, fence: true, cityChunk: spec.id, entrySteps: st.id });
@@ -244,6 +302,10 @@ export function buildCityExpansion(scene, Q = {}) {
       duplicatedHouse = new HybridHouseSystem(scene, plan.duplicatedEnterableHouse, { addCollider, mobile: plan.profile.key === 'mobile' });
       group.add(duplicatedHouse.exterior);
     }
+    if (district.kind === 'hood-neighborhood') {
+      const neighborhoodWorld = scene.getObjectByName(`${district.id}-world`);
+      if (neighborhoodWorld) group.add(neighborhoodWorld);
+    }
     // M7.1A: Nerdie Central Park and the City Hall plaza (drawn with the kit; their colliders are added below either way)
     if (kit && district.id === PARK.id) showcaseStats.triangles += buildPark(kit, group, { mobile: plan.profile.key === 'mobile' }).triangles;
     if (kit && district.id === 'civic-center') showcaseStats.triangles += buildCivicPlaza(kit, group).triangles;
@@ -254,6 +316,7 @@ export function buildCityExpansion(scene, Q = {}) {
     if (district.buildings.some((b) => b.id === GUN_SHOP_BUILDING_ID)) gunShop = new GunShopSystem(scene, gunShopSite(plan), { addCollider, mobile: plan.profile.key === 'mobile', kit });
     // Phase 2.1: the bank's interior (the facade stays the showcase design; BankSystem keeps its sign outside the showcase)
     if (district.buildings.some((b) => b.id === BANK_BUILDING_ID)) bankInterior = new BankInteriorSystem(scene, bankBuilding(plan), { addCollider, mobile: plan.profile.key === 'mobile', kit, cityService: Q.cityService || null });
+    if (district.buildings.some((b) => b.id === ROOTS_LOUNGE_BUILDING_ID)) rootsLounge = new RootsLoungeSystem(scene, rootsLoungeSite(plan), { addCollider, mobile: plan.profile.key === 'mobile', npcLibrary: Q.npcLibrary });
     if (district.buildings.some((b) => b.id === BANK_BUILDING_ID)) bank = new BankSystem(group, bankSite(plan), { mobile: plan.profile.key === 'mobile', visuals: !kit || !inShowcase(bankSite(plan).x, bankSite(plan).z) });
     if (district.id === 'west-industrial-south') {
       addBox(group, mats.sidewalk, 42, 0.08, 34, -112, 0.02, -72, 'underground-parking-lot');
@@ -284,7 +347,7 @@ export function buildCityExpansion(scene, Q = {}) {
   // district visit. Three pooled lights cover the maximum simultaneous
   // desktop districts without adding paid infrastructure or changing art.
   const cityLightPool = [];
-  if (plan.profile.streetLights) for (let i = 0; i < 3; i++) {
+  if (plan.profile.streetLights) for (let i = 0; i < (Q.perfReducedLights ? 0 : plan.profile.streetLightPool); i++) {
     const light = new THREE.PointLight(0xffc57a, 0, 13, 2);
     light.name = `city-stream-light-${i}`; infrastructure.add(light); cityLightPool.push(light);
   }
@@ -329,7 +392,7 @@ export function buildCityExpansion(scene, Q = {}) {
   const walkways = buildEntranceWalkways(entranceWalkways(plan, ground), { mobile: plan.profile.key === 'mobile' }); scene.add(walkways);
   const interiors = new GenericInteriorSystem(scene, { addCollider, removeColliders, worldColliders: colliders, mobile: plan.profile.key === 'mobile' });
   const city = {
-    plan, ground, chunks, apartment, house, originalHouse, duplicatedHouse, combatVenue, bank, gunShop, library, bankInterior, interiors, infrastructure, mode: 'free-roam',
+    plan, ground, chunks, apartment, house, originalHouse, duplicatedHouse, combatVenue, bank, gunShop, library, bankInterior, rootsLounge, interiors, infrastructure, mode: 'free-roam',
     // M7.2: the clock tower's hands follow the city clock (hours 0..24)
     academyClock: { hands: clockHands, hours: null },
     setAcademyClock(hours) {

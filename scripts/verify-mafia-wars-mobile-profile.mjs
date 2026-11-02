@@ -39,7 +39,7 @@ assert.match(world, /if \(!Q\.lowMemory\) \{[\s\S]*jacaranda_tree/);
 assert.match(characters, /loadCharacters\(gunTemplate, names =/);
 assert.match(audio, /const AudioContextClass = window\.AudioContext \|\| window\.webkitAudioContext/);
 assert.match(main, /addEventListener\('pointerdown', unlockAudio/);
-assert.match(main, /buildCityExpansion\(scene, \{ \.\.\.Q, cityService \}\)/);
+assert.match(main, /buildCityExpansion\(scene, \{ \.\.\.Q, cityService, npcLibrary \}\)/);
 assert.match(main, /apartmentState = [^;]*city\.apartment\.update/);
 assert.match(cityExpansion, /from '\/mafia-wars\/game\/vendor\/three\/three\.module\.js'/);
 assert.match(cityExpansion, /chunkVisible\(chunk\.center, player\.pos, plan\.profile\.activeRadius \+ chunk\.radius \* 0\.35\)/);
@@ -76,10 +76,10 @@ assert.equal((index.match(/id="tFire"/g) || []).length, 1);
 assert.doesNotMatch(index, /tFire2/);
 assert.match(index, /@media \(pointer: coarse\) and \(orientation: portrait\)/);
 assert.match(index, /id="mpDiagnosticsToggle"[^>]*hidden/);
-assert.match(index, /src="src\/main\.js\?build=bank-m2\.2-rel16"/);
+assert.match(index, /src="src\/main\.js\?build=nc-life-01a-prod1"/);
 assert.match(main, /multiplayer-endpoint\.js\?build=m6\.3-cross-device-diagnostics-rc1/);
-assert.match(main, /wallet-bridge\.js\?build=bank-m2\.2-rel16/);
-assert.match(main, /const GAME_BUILD_ID = 'bank-m2\.2-rel16'/);
+assert.match(main, /wallet-bridge\.js\?build=nc-life-01a-prod1/);
+assert.match(main, /const GAME_BUILD_ID = 'nc-life-01a-prod1'/);
 // M6.5 Underground 6v6: results panel and server match state handling.
 assert.match(index, /id="ugResults"[^>]*role="dialog"/);
 assert.match(index, /id="ugStay"/); assert.match(index, /id="ugLeave"/);
@@ -127,7 +127,9 @@ assert.match(walletPage, /src=\{GAME_URL\}/);
 assert.match(walletPage, /setWalletOpen\(true\)/);
 assert.match(walletPage, /formatTokenAmount\(tokenBalance\.data, 18\)/);
 assert.match(endpoint, /nerdie-city-multiplayer-v4\.buddieroots\.workers\.dev/);
-assert.match(endpoint, /AVATAR_PREVIEW_MULTIPLAYER_SERVICE = 'https:\/\/nerdie-city-(?:m6-(?:3|7|7b|7b2|8a|8b|9)|m7-0a|m7-0b|m7-1a|m7-1d|m7-2|bank-m2-1|bank-m2-2)-preview\.buddieroots\.workers\.dev'/);
+assert.match(endpoint, /PREVIEW_MULTIPLAYER_SERVICES = Object\.freeze/);
+assert.match(endpoint, /nerdie-city-hood-expansion-preview\.buddieroots\.workers\.dev/);
+assert.match(endpoint, /This preview build has no isolated multiplayer Worker configured/);
 assert.match(endpoint, /override && \(isLocal \|\| isPrivateLan\)/);
 
 const { CITY_BOUNDS, createCityPlan, chunkVisible } = await import(
@@ -140,11 +142,11 @@ assert.deepEqual(desktop.roads, mobile.roads);
 assert.deepEqual(desktop.districts, mobile.districts);
 assert.deepEqual(desktop.apartment, mobile.apartment);
 assert.deepEqual(desktop.combatVenue, mobile.combatVenue);
-// M7.2: Civic, Park and Academy; Stage 2 adds Neon Market, Cyber HQ and six Dark Alley blocks.
-assert.equal(desktop.districts.length, 13 + 8 + 8 + 6);
-assert.equal(desktop.districts.reduce((total, district) => total + district.buildings.length, 0) + 2, 74 + 110 + 6 + 1 + 95 + 20 + 1 + 54 + 1);
+// M7.2 plus the current transition and residential expansion districts.
+assert.equal(desktop.districts.length, 43);
+assert.equal(desktop.districts.reduce((total, district) => total + district.buildings.length, 0), 406);
 assert.equal(desktop.districts.reduce((total, district) => total + district.vehicles.length, 0), 12);
-assert.deepEqual(CITY_BOUNDS, { minX: -340, maxX: 420, minZ: -148, maxZ: 356 });
+assert.deepEqual(CITY_BOUNDS, { minX: -540, maxX: 476, minZ: -148, maxZ: 704 });
 const mobileChunkRadius = (district) => mobile.profile.activeRadius + district.radius * 0.35;
 assert.equal(chunkVisible(mobile.districts[0].center, { x: 0, z: 28 }, mobileChunkRadius(mobile.districts[0])), true);
 assert.equal(chunkVisible(mobile.districts[1].center, { x: 0, z: 28 }, mobileChunkRadius(mobile.districts[1])), false);

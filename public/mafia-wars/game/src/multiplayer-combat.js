@@ -34,6 +34,24 @@ const UNDERGROUND_HOUSE_WALLS = Object.freeze(Array.from({ length: 10 }, (_, ind
   { minX: x - 5, maxX: x + 5, minY: 0.75, maxY: 10, minZ: z + 3.0, maxZ: z + 3.2 },
 ])));
 
+const SAFE_ZONE_CELL_SIZE = 32;
+const safeZoneCellKey = (x, z) => x * 4096 + z;
+const SAFE_ZONE_GRID = new Map();
+for (let index = 0; index < MULTIPLAYER_SAFE_ZONES.length; index++) {
+  const b = MULTIPLAYER_SAFE_ZONES[index].bounds;
+  for (let x = Math.floor(b.minX / SAFE_ZONE_CELL_SIZE); x <= Math.floor(b.maxX / SAFE_ZONE_CELL_SIZE); x++) {
+    for (let z = Math.floor(b.minZ / SAFE_ZONE_CELL_SIZE); z <= Math.floor(b.maxZ / SAFE_ZONE_CELL_SIZE); z++) {
+      const key = safeZoneCellKey(x, z);
+      let cell = SAFE_ZONE_GRID.get(key);
+      if (!cell) SAFE_ZONE_GRID.set(key, cell = []);
+      cell.push(index);
+    }
+  }
+}
+const seenSafeZoneQueries = new Uint32Array(MULTIPLAYER_SAFE_ZONES.length);
+let safeZoneQueryId = 0;
+const EMPTY_SAFE_ZONES = [];
+
 const FORBIDDEN = ['playerId', 'targetId', 'targetIds', 'targets', 'damage', 'hit', 'health', 'team', 'admin', 'origin', 'position', 'context', 'spaceId', 'instanceId', 'region', 'hitRegion', 'headshot', 'multiplier'];
 // M6.9 dev3: how far back the server may look for where targets were when a shot was aimed
 // (the shooter saw them interpolated ~120 ms in the past, plus half their round trip).
@@ -202,14 +220,24 @@ export function undergroundShotOccluded(origin, direction, distance) {
 }
 
 export function publicCityShotOccluded(origin, direction, distance) {
-  // the ray's own box first: most shells (the interiors at y 300 and up, the far side of the city) are nowhere near it
   const ex = origin.x + direction.x * distance, ey = origin.y + direction.y * distance, ez = origin.z + direction.z * distance;
   const minX = Math.min(origin.x, ex), maxX = Math.max(origin.x, ex), minY = Math.min(origin.y, ey), maxY = Math.max(origin.y, ey), minZ = Math.min(origin.z, ez), maxZ = Math.max(origin.z, ez);
-  return MULTIPLAYER_SAFE_ZONES.some(({ bounds }) => {
-    if (bounds.minY > maxY || bounds.maxY < minY || bounds.minX > maxX || bounds.maxX < minX || bounds.minZ > maxZ || bounds.maxZ < minZ) return false;
-    const hit = rayAabbDistance(origin, direction, bounds);
-    return hit !== null && hit > 0.03 && hit < distance - 0.05;
-  });
+  safeZoneQueryId = (safeZoneQueryId + 1) >>> 0;
+  if (!safeZoneQueryId) { seenSafeZoneQueries.fill(0); safeZoneQueryId = 1; }
+  const queryId = safeZoneQueryId;
+  const minCellX = Math.floor(minX / SAFE_ZONE_CELL_SIZE), maxCellX = Math.floor(maxX / SAFE_ZONE_CELL_SIZE);
+  const minCellZ = Math.floor(minZ / SAFE_ZONE_CELL_SIZE), maxCellZ = Math.floor(maxZ / SAFE_ZONE_CELL_SIZE);
+  for (let x = minCellX; x <= maxCellX; x++) for (let z = minCellZ; z <= maxCellZ; z++) {
+    for (const index of SAFE_ZONE_GRID.get(safeZoneCellKey(x, z)) || EMPTY_SAFE_ZONES) {
+      if (seenSafeZoneQueries[index] === queryId) continue;
+      seenSafeZoneQueries[index] = queryId;
+      const bounds = MULTIPLAYER_SAFE_ZONES[index].bounds;
+      if (bounds.minY > maxY || bounds.maxY < minY || bounds.minX > maxX || bounds.maxX < minX || bounds.minZ > maxZ || bounds.maxZ < minZ) continue;
+      const hit = rayAabbDistance(origin, direction, bounds);
+      if (hit !== null && hit > 0.03 && hit < distance - 0.05) return true;
+    }
+  }
+  return false;
 }
 
 // M6.8A: interior shells plus the city's outdoor structures (city-structures.js).

@@ -62,6 +62,7 @@ export class CityNpcSimulation {
     // Bank P1.2: a room given the city's permanent identities shows those residents; otherwise it seeds its own (unchanged)
     this.identities = Array.isArray(identities) && identities.length ? identities.slice(0, NPC_POPULATION.max) : seedPopulation(seed, population);
     this.schedules = new Map((Array.isArray(schedules) ? schedules : []).map((s) => [s.gameId, s]));
+    this.evenings = new Map(); // NC-LIFE-01A: residentId -> tonight's window (setEvenings)
     this.cityClock = cityClock?.enabled ? cityClock : null; this.scheduleMinute = typeof scheduleMinute === 'function' ? scheduleMinute : null;
     this.graph = null; this.hard = null; this.pois = cityPois(plan).filter((p) => !p.spaceId || p.kind === 'apartment');
     // Scheduled destinations include workplaces with an interior (the bank, Ammo): staff wait at the street door.
@@ -100,16 +101,40 @@ export class CityNpcSimulation {
       const p = this.#streetPoint(), nearest = Math.min(...players.map((pl) => dist(p, pl)));
       if (nearest >= this.rules.spawnMinDistance && nearest <= this.rules.spawnMaxDistance) { this.#reset(r, p); this.metrics.relocations++; return true; }
     }
+    // The expanded 37-district graph makes a citywide random edge unlikely to
+    // land in the 55-95 m spawn annulus. Fall back to an existing walk node so
+    // a defeated resident cannot remain forever just because rejection
+    // sampling missed the player's neighbourhood.
+    const target = (this.rules.spawnMinDistance + this.rules.spawnMaxDistance) / 2;
+    let best = null, bestDelta = Infinity;
+    for (const node of this.#ensureGraph().nodes) {
+      const nearest = Math.min(...players.map((pl) => dist(node, pl)));
+      if (nearest < this.rules.spawnMinDistance || nearest > this.rules.spawnMaxDistance || insideObstacle(node, this.graph.obstacles, 0.3)) continue;
+      const delta = Math.abs(nearest - target);
+      if (delta < bestDelta) { best = node; bestDelta = delta; }
+    }
+    if (best) { this.#reset(r, best); this.metrics.relocations++; return true; }
     return false;
   }
   #reset(r, p) { Object.assign(r, { x: p.x, z: p.z, route: null, lastRoute: null, step: 0, speed: 0, anim: NPC_ANIM.idle, waitUntil: 0, stuckFor: 0, placed: true, behavior: NPC_BEHAVIOR.calm, threat: null, pending: null, fleeing: false, health: NPC_COMBAT_RULES.maxHealth, downUntil: 0, defeatedAt: 0, fight: null, lastAttack: null, allyAttack: null }); }
 
+  // NC-LIFE-01A: tonight's plans from the bank (residentId -> { locationId, from, to }); replaces the last set.
+  setEvenings(evenings) { this.evenings = new Map(evenings); }
+  // Who the schedules put at a place at this minute (every permanent resident, simulated nearby or not).
+  scheduledAt(locationId, minute) {
+    const here = [];
+    for (const [gameId, s] of this.schedules) {
+      const place = scheduledPlace(s.employment, minute, s.homeLocationId || 'north-court', null, this.evenings.get(s.residentId) || null);
+      if (place.locationId === locationId) here.push({ gameId, residentId: s.residentId, activity: place.activity, employment: s.employment });
+    }
+    return here;
+  }
   #scheduledPoi(r, now) {
     const schedule = this.schedules.get(r.identity.id);
     if (!schedule || (!this.scheduleMinute && !this.cityClock)) return null;
     if (this.minuteAt?.now !== now) this.minuteAt = { now, minute: this.scheduleMinute ? this.scheduleMinute(now) : Math.floor(hourAt(now, this.cityClock) * 60) }; // once per tick
     const minute = this.minuteAt.minute;
-    const { activity, locationId } = scheduledPlace(schedule.employment, minute, schedule.homeLocationId || 'north-court', r.index);
+    const { activity, locationId } = scheduledPlace(schedule.employment, minute, schedule.homeLocationId || 'north-court', r.index, this.evenings.get(schedule.residentId) || null);
     r.economicActivity = activity; r.economicLocation = locationId;
     return this.schedulePois.get(locationId) || null;
   }
@@ -217,7 +242,7 @@ export class CityNpcSimulation {
       const severity = severityOf(type, d);
       if (severity <= 0) continue;
       if (!r.pending || severity > severityOf(r.pending.type, dist(r, r.pending))) r.pending = { type, x, z, sourceId, at, depth: 0 };
-      if (sourceId) { r.threats = r.threats.filter((t) => t.sourceId !== sourceId); r.threats.push({ sourceId, at }); }
+      if (sourceId) { r.threats = r.threats.filter((t) => t.sourceId !== sourceId); r.threats.push({ sourceId, at, x, z, armed: false }); }
     }
   }
 
@@ -255,7 +280,7 @@ export class CityNpcSimulation {
     if (!this.combat || !r?.placed || r.behavior === B.defeated || at < r.protectionUntil || !(damage > 0)) return null;
     r.health = Math.max(0, r.health - damage); r.lastDamageAt = at; this.metrics.combat.hits++;
     r.lastAttack = { sourceId, weapon: weaponClass(weaponId), x: from?.x ?? r.x, z: from?.z ?? r.z, at };
-    if (sourceId) { r.threats = r.threats.filter((t) => t.sourceId !== sourceId); r.threats.push({ sourceId, at }); }
+    if (sourceId) { r.threats = r.threats.filter((t) => t.sourceId !== sourceId); r.threats.push({ sourceId, at, x: from?.x ?? r.x, z: from?.z ?? r.z, armed: false }); }
     Object.assign(r, { route: null, fleeing: false, fight: null, speed: 0, pending: null });
     let knockdown = false;
     if (r.health === 0) { Object.assign(r, { behavior: B.defeated, defeatedAt: at, threat: null }); this.metrics.combat.defeats++; }
@@ -443,7 +468,8 @@ export class CityNpcSimulation {
     if (r.behavior === B.calm && r.threats.length) {
       for (const t of r.threats) {
         const player = players.find((p) => p.id === t.sourceId);
-        if (!player || dist(player, r) >= R.wariness) continue;
+        if (!player || dist(player, r) >= R.wariness || !t.armed) continue;
+        t.armed = false;
         const flee = r.personality === 'cautious' || r.personality === 'peaceful';
         react(flee ? B.startled : B.wary, flee ? R.startleMs : R.alertMs, flee ? 'flee' : 'alert', { x: player.x, z: player.z, sourceId: player.id });
         this.metrics.reactions.remembered++;
@@ -501,6 +527,10 @@ export class CityNpcSimulation {
   tick(now, players) {
     const rules = this.rules, out = [];
     for (const id of this.viewers.keys()) if (!players.some((p) => p.id === id && p.receives)) this.viewers.delete(id);
+    for (const r of this.residents) for (const threat of r.threats) {
+      const source = players.find((p) => p.id === threat.sourceId);
+      if (!source || dist(source, threat) >= NPC_BEHAVIOR_RULES.wariness) threat.armed = true;
+    }
     if (!players.length) {
       for (const r of this.residents) {
         Object.assign(r, { active: false, aware: null, fight: null, allyAttack: null });

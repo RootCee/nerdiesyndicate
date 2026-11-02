@@ -23,6 +23,7 @@ import {
 } from './city-layout.js';
 import { BANK_BUILDING_ID } from './city-pois.js';
 import { HOOD_GEOMETRY } from './hood-geometry.js';
+import { ORIGINAL_STYLE_NEIGHBORHOODS } from './hood-neighborhood-layout.js';
 
 // Mirrors world.js: ROAD_HALF 4.5, SIDEWALK 2, LOT 8, HOUSE_FRONT 14,
 // HOUSE_DEPTH 10, HOUSE_W 6.2, WALL_LOTS; destruction.js BLOCK 0.4 x 0.2 x 0.2.
@@ -44,16 +45,17 @@ const centered = (x, z, width, depth, height) => box(x - width / 2, 0, z - depth
 const wallLength = (len) => Math.max(1, Math.round(len / HOOD.brick)) * HOOD.brick;
 
 function neighbourhoodStructures(layout) {
-  const out = [], cx = layout.centerX;
+  const out = [], cx = layout.centerX, cz = layout.centerZ || 0;
+  const prefix = layout.housePrefix || (layout === ORIGINAL_NEIGHBORHOOD_LAYOUT ? 'hood-original' : 'hood-duplicate');
   for (let i = 0; i < HOOD.lots; i++) for (const side of [-1, 1]) {
-    const zc = HOOD.firstLot + i * HOOD.lot + HOOD.lot / 2, row = side < 0 ? 'west' : 'east';
-    const id = `${layout === ORIGINAL_NEIGHBORHOOD_LAYOUT ? 'hood-original' : 'hood-duplicate'}-${row}-${i}`;
+    const zc = cz + HOOD.firstLot + i * HOOD.lot + HOOD.lot / 2, row = side < 0 ? 'west' : 'east';
+    const id = `${prefix}-${row}-${i}`;
     const parts = kitHouseParts(id);
     out.push({ id, kind: 'hood-house', category: id === DUPLICATED_ENTERABLE_HOUSE_SITE.id ? 'B' : 'A', box: bounding(parts), parts });
   }
   // main.js: front-yard walls on WALL_LOTS (two segments with a walkway gap), 7 courses.
   for (const key of WALL_LOTS) {
-    const [s, i] = key.split(':').map(Number), z0 = HOOD.firstLot + i * HOOD.lot, z1 = z0 + HOOD.lot;
+    const [s, i] = key.split(':').map(Number), z0 = cz + HOOD.firstLot + i * HOOD.lot, z1 = z0 + HOOD.lot;
     const x = cx + s * (HOOD.roadHalf + HOOD.sidewalk + 1.4), wz = (z0 + z1) / 2 + (s < 0 ? HOOD.houseW / 4 : -HOOD.houseW / 4);
     for (const [part, lo, hi] of [['a', z0 + 0.3, wz - 0.9], ['b', wz + 0.9, z1 - 0.3]]) {
       const len = wallLength(hi - lo), mid = (lo + hi) / 2, b = box(x - HOOD.block / 2, 0, mid - len / 2, x + HOOD.block / 2, 7 * HOOD.block, mid + len / 2);
@@ -61,7 +63,7 @@ function neighbourhoodStructures(layout) {
     }
   }
   // Two free-standing walls along x, 8 courses.
-  for (const [part, x, z] of [['north', cx - 12, 42.2], ['south', cx + 12, -42.2]]) {
+  for (const [part, x, z] of [['north', cx - 12, cz + 42.2], ['south', cx + 12, cz - 42.2]]) {
     const len = wallLength(6.4), b = box(x - len / 2, 0, z - HOOD.block / 2, x + len / 2, 8 * HOOD.block, z + HOOD.block / 2);
     out.push({ id: `${layout.id}-freestanding-${part}`, kind: 'wall', category: 'A', box: b, parts: wallParts(b) });
   }
@@ -73,7 +75,16 @@ export function buildCityStructures(plan = createCityPlan()) {
   const add = (entry) => { if (!seen.has(entry.id)) { seen.add(entry.id); out.push(Object.freeze(entry)); } };
   // city-expansion.js addBuilding: one collider per building, 0.5 m above its height.
   for (const district of plan.districts) {
-    for (const b of district.buildings) add({ id: b.id, kind: b.id === BANK_BUILDING_ID ? 'bank' : b.kind || 'building', category: 'C', box: centered(b.x, b.z, b.width, b.depth, b.height + 0.5) });
+    for (const b of district.buildings) {
+      const destructible = Boolean(b.destructible);
+      add({
+        id: b.id,
+        kind: b.id === BANK_BUILDING_ID ? 'bank' : b.kind || 'building',
+        category: destructible ? 'A' : 'C',
+        box: centered(b.x, b.z, b.width, b.depth, b.height + 0.5),
+        ...(destructible ? { parts: kitHouseParts(b.id) } : {}),
+      });
+    }
     for (const v of district.vehicles || []) add({ id: v.id, kind: 'vehicle', category: 'prop', box: centered(v.x, v.z, 1.9, 4.2, 1.45) });
   }
   // Apartment and venue shells; their doors are fixed colliders, so each shell is solid from outside.
@@ -84,13 +95,33 @@ export function buildCityStructures(plan = createCityPlan()) {
     const parts = kitHouseParts(site.id);
     add({ id: site.id, kind: 'kit-house', category: site.enterable ? 'B' : 'A', box: bounding(parts), parts });
   }
-  for (const entry of [...neighbourhoodStructures(ORIGINAL_NEIGHBORHOOD_LAYOUT), ...neighbourhoodStructures(DUPLICATED_ORIGINAL_NEIGHBORHOOD)]) add(entry);
+  for (const layout of [ORIGINAL_NEIGHBORHOOD_LAYOUT, DUPLICATED_ORIGINAL_NEIGHBORHOOD, ...ORIGINAL_STYLE_NEIGHBORHOODS]) {
+    for (const entry of neighbourhoodStructures(layout)) add(entry);
+  }
   // Garages beyond the alleys (on the lots world.js gave one), protected.
   HOOD_GEOMETRY.garages.forEach((g, i) => add({ id: `hood-garage-${i}`, kind: 'garage', category: 'C', box: fromArray(g) }));
   return Object.freeze(out);
 }
 
 export const CITY_STRUCTURES = buildCityStructures();
+
+const STRUCTURE_CELL_SIZE = 32;
+const structureCellKey = (x, z) => x * 4096 + z;
+const CITY_STRUCTURE_GRID = new Map();
+const EMPTY_STRUCTURE_CELL = [];
+for (let index = 0; index < CITY_STRUCTURES.length; index++) {
+  const b = CITY_STRUCTURES[index].box;
+  for (let x = Math.floor(b.minX / STRUCTURE_CELL_SIZE); x <= Math.floor(b.maxX / STRUCTURE_CELL_SIZE); x++) {
+    for (let z = Math.floor(b.minZ / STRUCTURE_CELL_SIZE); z <= Math.floor(b.maxZ / STRUCTURE_CELL_SIZE); z++) {
+      const key = structureCellKey(x, z);
+      let cell = CITY_STRUCTURE_GRID.get(key);
+      if (!cell) CITY_STRUCTURE_GRID.set(key, cell = []);
+      cell.push(index);
+    }
+  }
+}
+const seenStructureQueries = new Uint32Array(CITY_STRUCTURES.length);
+let structureQueryId = 0;
 
 const openCount = (mask) => { let n = 0; for (let m = mask; m; m &= m - 1) n++; return n; };
 // Is this part gone? An open face, or the roof once two faces are open (it falls in, client destruction.js).
@@ -116,13 +147,22 @@ export function firstStructureHit(origin, direction, distance, structures = CITY
   const ex = origin.x + direction.x * distance, ez = origin.z + direction.z * distance;
   const minX = Math.min(origin.x, ex), maxX = Math.max(origin.x, ex), minZ = Math.min(origin.z, ez), maxZ = Math.max(origin.z, ez);
   let best = null;
-  for (const s of structures) {
+  const indexed = structures === CITY_STRUCTURES;
+  const candidates = indexed ? null : structures;
+  let queryId = 0;
+  if (indexed) {
+    // Generation stamps deduplicate structures spanning multiple cells without allocating a Set per query.
+    structureQueryId = (structureQueryId + 1) >>> 0;
+    if (!structureQueryId) { seenStructureQueries.fill(0); structureQueryId = 1; }
+    queryId = structureQueryId;
+  }
+  const test = (s) => {
     const b = s.box;
-    if (b.maxX < minX || b.minX > maxX || b.maxZ < minZ || b.minZ > maxZ) continue;
+    if (b.maxX < minX || b.minX > maxX || b.maxZ < minZ || b.minZ > maxZ) return;
     if (!s.parts) {
       const hit = rayBoxDistance(origin, direction, b);
       if (hit !== null && hit > 0.03 && hit < distance - 0.05 && (!best || hit < best.distance)) best = { structure: s, distance: hit, face: null };
-      continue;
+      return;
     }
     const mask = open?.get(s.id) || 0;
     for (const part of s.parts) {
@@ -130,6 +170,19 @@ export function firstStructureHit(origin, direction, distance, structures = CITY
       const hit = rayBoxDistance(origin, direction, part.box);
       if (hit !== null && hit > 0.03 && hit < distance - 0.05 && (!best || hit < best.distance)) best = { structure: s, distance: hit, face: part.face };
     }
+  };
+  if (indexed) {
+    const minCellX = Math.floor(minX / STRUCTURE_CELL_SIZE), maxCellX = Math.floor(maxX / STRUCTURE_CELL_SIZE);
+    const minCellZ = Math.floor(minZ / STRUCTURE_CELL_SIZE), maxCellZ = Math.floor(maxZ / STRUCTURE_CELL_SIZE);
+    for (let x = minCellX; x <= maxCellX; x++) for (let z = minCellZ; z <= maxCellZ; z++) {
+      for (const index of CITY_STRUCTURE_GRID.get(structureCellKey(x, z)) || EMPTY_STRUCTURE_CELL) {
+        if (seenStructureQueries[index] === queryId) continue;
+        seenStructureQueries[index] = queryId;
+        test(CITY_STRUCTURES[index]);
+      }
+    }
+  } else {
+    for (const structure of candidates) test(structure);
   }
   return best;
 }

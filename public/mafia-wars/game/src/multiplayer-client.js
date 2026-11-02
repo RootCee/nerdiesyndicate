@@ -9,7 +9,7 @@ const rounded = (value) => Math.round(value * 1000) / 1000;
 export class MultiplayerClient extends EventTarget {
   constructor({ serviceUrl, name = 'Guest', appearance, npc = false }) {
     super(); this.npc = npc === true; this.serviceUrl = serviceUrl.replace(/\/$/, ''); this.name = name.slice(0, 16) || 'Guest';
-    this.appearance = normalizeAvatarAppearance(appearance); this.state = 'disconnected'; this.seq = 0; this.appearanceSeq = 0; this.equipmentSeq = 0; this.combatSeq = 0; this.spaceSeq = 0; this.socket = null; this.credentials = null;
+    this.appearance = normalizeAvatarAppearance(appearance); this.state = 'disconnected'; this.seq = 0; this.appearanceSeq = 0; this.equipmentSeq = 0; this.combatSeq = 0; this.spaceSeq = 0; this.economySeq = 0; this.socket = null; this.credentials = null;
     this.reconnectAttempts = 0; this.closedByUser = false; this.connectedAt = 0; this.lastMovement = null; this.lastMovementAt = 0;
     this.metrics = { rtt: 0, rttJitter: 0, sent: 0, received: 0, sentBytes: 0, receivedBytes: 0, movementSkipped: 0, rejected: 0, corrections: 0 };
   }
@@ -113,6 +113,7 @@ export class MultiplayerClient extends EventTarget {
   shopRestock(shopId = 'nerdie-arms') { this.shopSeq = (this.shopSeq || 0) + 1; return this.send({ type: 'shop', seq: this.shopSeq, shopId, action: 'restock' }); }
   // M7.1D chess: sit, stand, ready, challenge, move, resign, draws, watch (the server checks the seat and the rules)
   sendChess(body) { this.chessSeq = (this.chessSeq || 0) + 1; return this.send({ type: 'chess', seq: this.chessSeq, ...body }); }
+  sendEconomy(body) { return this.send({ type: 'economy', seq: ++this.economySeq, ...body }); }
   // Talking to a resident: the server holds them in place, facing this player, for a few seconds (resent while talking).
   talkToResident(index) { return Number.isInteger(index) && index >= 0 ? this.send({ type: 'npc-talk', index }) : false; }
   ping() { const sentAt = performance.now(); this.send({ type: 'ping', nonce: Math.random().toString(36).slice(2), sentAt }); }

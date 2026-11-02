@@ -13,8 +13,8 @@ import { createCityPlan, ENTERABLE_HOUSE_SITE } from './city-layout.js';
 import { CITY_HALL_ENTRY } from './city-park-layout.js';
 import { HOUSE_STOOP, flightDepth, houseDoorOffset } from './entry-steps.js';
 import { APARTMENT_FLOORS, balconyFor, facadeBays, storeyCeiling, storeyFloor } from './apartment-building.js';
-import { NEON_TOWER } from './neon-market-layout.js';
-import { NEON_TOWER_HOMES, NEON_TOWER_LOBBY_SPACE, neonTowerFloor } from './neon-tower-residences.js';
+import { NEON_TOWER_LOBBY_SPACE, neonTowerFloor } from './neon-tower-residences.js';
+import { TOWER_DEFINITIONS, towerDefinitionForLobby } from './tower-residences.js';
 
 export const GENERIC_INTERIOR_Y = 300;
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -33,7 +33,7 @@ export const PROPERTY_TIERS = Object.freeze({
 
 // Storefront businesses without an interior yet (the bank and Ammo have their own).
 const SHOPS = Object.freeze({
-  'west-mixed-north-0': { name: 'The Blaq Note', template: 'music-venue' },
+  'west-mixed-north-0': { name: 'Roots Lounge', template: 'music-venue' },
   'west-mixed-north-2': { name: '3 Piece', template: 'tailor' },
   'west-industrial-south-0': { name: 'Corner Market', template: 'grocery' },
   'west-industrial-south-1': { name: 'City Wholesaler', template: 'wholesale' },
@@ -41,10 +41,12 @@ const SHOPS = Object.freeze({
   'west-industrial-south-3': { name: 'Sneaker Shop', template: 'sneakers' },
 });
 // Buildings with a hand-built interior, or open-air ones, stay as they are.
-const SKIP = new Set(['west-mixed-north-1', 'west-mixed-north-3', 'academy-library', 'park-pavilion', 'park-bleachers']);
+const SKIP = new Set(['west-mixed-north-0', 'west-mixed-north-1', 'west-mixed-north-3', 'academy-library', 'park-pavilion', 'park-bleachers']);
 
 function templateFor(b, districtId) {
   if (SHOPS[b.id]) return SHOPS[b.id].template;
+  if (b.interiorTemplate) return b.interiorTemplate;
+  if (b.kind === 'venue') return 'music-venue';
   if (b.kind === 'neon-shop') return b.style === 'cyber' ? 'cyber-studio' : b.style === 'dark-alley' ? 'dark-stall' : 'vacant'; // distinct licensed business shells
   if (b.kind === 'casino') return 'casino-lobby';
   if (b.kind === 'neon-tower') return 'tower';
@@ -126,14 +128,14 @@ const TEMPLATES = {
         f('plant', -10.6, 8.4, 0.8, 0.8, 1.8), f('plant', 10.6, 8.4, 0.8, 0.8, 1.8),
       ] };
   },
-  // A private lift hall. The six door slabs are visual landmarks; their interaction points and stable
-  // residence IDs come from neon-tower-residences.js.
-  'tower-floor': () => {
+  // A private lift hall. Door slabs are generated from the selected tower's permanent address registry.
+  'tower-floor': (_k, entry) => {
     const w = 18, d = 14;
+    const doors = entry.towerFloor?.doors || neonTowerFloor(Number(/-f(\d+)$/.exec(entry.spaceId)?.[1]))?.doors || [];
     return { w, d, h: 3.2, palette: 'luxury', rooms: ['Lift hall'], partitions: [],
       furniture: [
         f('lift', -1.5, -d / 2 + 0.2, 1.8, 0.3, 2.5), f('lift', 1.5, -d / 2 + 0.2, 1.8, 0.3, 2.5), deco('rug', 0, -4.3, 4.8, 1.8, 0.01),
-        ...[-4.1, 0, 4.1].flatMap((z) => [f('residence-door', -w / 2 + 0.2, z, 0.3, 1.8, 2.45), f('residence-door', w / 2 - 0.2, z, 0.3, 1.8, 2.45)]),
+        ...doors.map((door) => f('residence-door', door.x < entry.site.x ? -w / 2 + 0.2 : w / 2 - 0.2, door.z - entry.site.z, 0.3, 1.8, 2.45)),
         f('bench', 0, 3.6, 2.8, 0.55, 0.45), f('plant', -3.6, 5.8, 0.7, 0.7, 1.5), f('plant', 3.6, 5.8, 0.7, 0.7, 1.5),
       ] };
   },
@@ -187,6 +189,30 @@ const TEMPLATES = {
     f('stage', 0, -6.2, 9, 3.4, 0.6, { step: true }), f('speaker', -4.8, -6.6, 0.9, 0.9, 1.8), f('speaker', 4.8, -6.6, 0.9, 0.9, 1.8), f('mic', 0, -5.4, 0.3, 0.3, 1.5),
     f('bar', 8.9, 0.6, 1.0, 9, 1.1), ...[[-5, -0.5], [-2, 2.2], [-6, 4], [2.4, -0.4], [4.6, 3.2]].map(([x, z]) => f('round-table', x, z, 1.0, 1.0, 1.05)), deco('rug', 0, -2.6, 7.6, 3, 0.01),
   ]),
+  'underground-venue': () => ({
+    w: 38, d: 28, h: 7.5, palette: 'industrial', rooms: ['Entry hall', 'Underground stage', 'Lounge'],
+    partitions: [wallX(-3.2, -18, 18, [[0, 2.4]])],
+    furniture: [
+      f('stage', 0, -10.2, 13, 3.6, 0.65, { step: true }),
+      f('speaker', -7.4, -10.4, 1, 1, 2.2), f('speaker', 7.4, -10.4, 1, 1, 2.2),
+      f('bar', 15.8, 2.8, 1.2, 11, 1.1),
+      ...[[-10, -5], [-5, -5], [5, -5], [10, -5], [-10, 4], [-5, 4], [5, 4], [10, 4]].map(([x, z]) => f('round-table', x, z, 1.8, 1.8, 0.82)),
+      f('sofa', -13.6, 10.1, 4, 1, 0.85), f('sofa', 11.6, 10.1, 4, 1, 0.85),
+      deco('rug', 0, 7.5, 16, 4.2, 0.01),
+    ],
+  }),
+  'cyber-arena': () => ({
+    w: 48, d: 40, h: 13, palette: 'academy', rooms: ['Arena concourse', 'Concert floor', 'Backstage'],
+    partitions: [wallX(-7.5, -22, 22, [[0, 4]])],
+    furniture: [
+      f('stage', 0, -15.5, 18, 5, 0.8, { step: true }),
+      f('screen', 0, -19.2, 16, 0.2, 4.2, { y: 4.1 }),
+      ...[-10, -5, 5, 10].flatMap((x) => [-2, 3, 8].map((z, i) => f('tier', x, z, 3.2, 2.2, 0.25 + i * 0.12, { step: true }))),
+      f('counter', -18.5, 12.2, 1, 9, 1.1), f('counter', 18.5, 12.2, 1, 9, 1.1),
+      ...[-15, 15].map((x) => f('bench', x, 17.1, 4.2, 0.7, 0.48)),
+      deco('rug', 0, 12, 24, 5, 0.01),
+    ],
+  }),
   warehouse: (k) => {
     const w = 24, d = 18;
     return { w, d, h: 7.5, palette: 'industrial', rooms: ['Warehouse floor', 'Office'],
@@ -339,7 +365,7 @@ export function apartmentUnitSpace(entry, floor, U = apartmentUnit(entry, floor)
   });
 }
 // tower-floor is an internal, on-demand lift hall rather than a street-facing catalog building.
-export const INTERIOR_TEMPLATES = Object.freeze(Object.keys(TEMPLATES).filter((name) => name !== 'tower-floor'));
+export const INTERIOR_TEMPLATES = Object.freeze(Object.keys(TEMPLATES).filter((name) => name !== 'tower-floor' && name !== 'music-venue'));
 
 // ---------------------------------------------------------------- the catalog
 // Doors that cannot be on the plan's front: a warehouse packed against its neighbour opens on its north side.
@@ -364,7 +390,7 @@ export function doorAlong(b, facing = b.front) {
 const hash = (s) => { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
 
 export function interiorLayout(entry) {
-  const k = hash(entry.buildingId), T = TEMPLATES[entry.template](k), y = GENERIC_INTERIOR_Y;
+  const k = hash(entry.buildingId), T = TEMPLATES[entry.template](k, entry), y = GENERIC_INTERIOR_Y;
   const cx = entry.site.x, cz = entry.site.z, minX = r2(cx - T.w / 2), maxX = r2(cx + T.w / 2), minZ = r2(cz - T.d / 2), maxZ = r2(cz + T.d / 2);
   const at = (o) => ({ ...o, x: r2(cx + o.x), z: r2(cz + o.z) });
   return Object.freeze({
@@ -410,11 +436,15 @@ export function interiorCatalog(plan = null) {
     if (SKIP.has(b.id) || b.id === house?.id) continue;
     const template = templateFor(b, district.id); if (!template) continue;
     const door = doorOf(b), tier = b.propertyTier || TIER[template] || null;
+    // Tower lobbies need a real forecourt handoff. The old 1.2 m point sat only 20 cm
+    // behind the 1.4 m entrance trigger, so an authoritative exit correction could
+    // leave the player inside the entrance radius and appear to pull them back in.
+    const outsideDistance = template === 'tower' || template === 'tower-lobby' ? 5.4 : 1.2;
     out.push(Object.freeze({
       buildingId: b.id, spaceId: `bld-${b.id}`, districtId: district.id, template, name: SHOPS[b.id]?.name || b.name || FALLBACK_NAME[template] || 'Building',
       tier, value: tier ? PROPERTY_TIERS[tier].value : null, facing: door.facing, lotId: b.lotId || null, license: b.license || null,
       site: Object.freeze({ x: b.x, z: b.z, width: b.width, depth: b.depth, height: b.height }),
-      door: Object.freeze(door.out(1.4)), outside: Object.freeze(door.out(1.2)),
+      door: Object.freeze(door.out(1.4)), outside: Object.freeze(door.out(outsideDistance)),
     }));
   }
   const frozen = Object.freeze(out);
@@ -422,28 +452,35 @@ export function interiorCatalog(plan = null) {
   return frozen;
 }
 
-export function neonTowerFloorEntry(floor) {
-  const record = neonTowerFloor(floor); if (!record) return null;
-  return Object.freeze({ buildingId: `neon-tower-floor-${floor}`, spaceId: record.spaceId, districtId: 'neon-a3', template: 'tower-floor', name: `Neon Tower · ${record.title}`, tier: null, value: null, facing: 'west', site: Object.freeze({ x: NEON_TOWER.x, z: NEON_TOWER.z, width: 18, depth: 14, height: 3.2 }), door: Object.freeze({ x: NEON_TOWER.x - 10.4, z: NEON_TOWER.z }), outside: Object.freeze({ x: NEON_TOWER.x - 10.2, z: NEON_TOWER.z }) });
+export function towerFloorEntry(tower, floor) {
+  const record = tower?.floor(floor); if (!record) return null;
+  const building = tower.building;
+  return Object.freeze({ buildingId: `${building.id}-floor-${floor}`, spaceId: record.spaceId, districtId: tower.districtId, template: 'tower-floor', name: `${building.name} · ${record.title}`, tier: null, value: null, facing: 'west', site: Object.freeze({ x: building.x, z: building.z, width: 18, depth: 14, height: 3.2 }), towerFloor: record, door: Object.freeze({ x: building.x - 10.4, z: building.z }), outside: Object.freeze({ x: building.x - 10.2, z: building.z }) });
 }
 
-export function neonTowerHomeEntry(home) {
-  return Object.freeze({ buildingId: home.id, spaceId: home.spaceId, districtId: 'neon-a3', template: 'apartments', name: `${NEON_TOWER.name} · ${home.title}`, tier: home.tier, value: PROPERTY_TIERS[home.tier].value, facing: home.facing, site: home.site, towerHome: home, door: Object.freeze({ x: 0, z: 0 }), outside: Object.freeze({ x: 0, z: 0 }) });
+export function towerHomeEntry(tower, home) {
+  return Object.freeze({ buildingId: home.id, spaceId: home.spaceId, districtId: tower.districtId, template: 'apartments', name: `${tower.building.name} · ${home.title}`, tier: home.tier, value: PROPERTY_TIERS[home.tier].value, facing: home.facing, site: home.site, towerHome: home, door: Object.freeze({ x: 0, z: 0 }), outside: Object.freeze({ x: 0, z: 0 }) });
 }
 
-export function neonTowerFloorSpace(floor, lobby = interiorSpace(interiorCatalog().find((e) => e.spaceId === NEON_TOWER_LOBBY_SPACE))) {
-  const record = neonTowerFloor(floor), entry = neonTowerFloorEntry(floor), L = interiorLayout(entry); if (!record || !lobby) return null;
-  const root = interiorCatalog().find((e) => e.spaceId === NEON_TOWER_LOBBY_SPACE), rootLayout = interiorLayout(root);
+export function towerFloorSpace(tower, floor, lobby = interiorSpace(interiorCatalog().find((e) => e.spaceId === tower?.lobbySpaceId))) {
+  const record = tower?.floor(floor), entry = towerFloorEntry(tower, floor); if (!record || !entry || !lobby) return null;
+  const L = interiorLayout(entry), root = interiorCatalog().find((e) => e.spaceId === tower.lobbySpaceId), rootLayout = interiorLayout(root);
   const lobbyLift = Object.freeze({ x: rootLayout.doorX, y: rootLayout.y, z: r2(rootLayout.minZ + LOBBY_LIFT_Z) });
   const floorLift = Object.freeze({ x: L.doorX, y: L.y, z: r2(L.minZ + LOBBY_LIFT_Z) });
-  return Object.freeze({ id: record.spaceId, parent: NEON_TOWER_LOBBY_SPACE, floor, layer: 1, safeZone: true, entry: lobbyLift, inside: floorLift, exit: floorLift, outside: lobbyLift, bounds: Object.freeze({ minX: L.minX + 0.2, maxX: L.maxX - 0.2, minY: L.y - 1, maxY: L.y + L.height, minZ: L.minZ + 0.2, maxZ: L.maxZ - 0.2 }) });
+  return Object.freeze({ id: record.spaceId, parent: tower.lobbySpaceId, floor, layer: 1, safeZone: true, entry: lobbyLift, inside: floorLift, exit: floorLift, outside: lobbyLift, bounds: Object.freeze({ minX: L.minX + 0.2, maxX: L.maxX - 0.2, minY: L.y - 1, maxY: L.y + L.height, minZ: L.minZ + 0.2, maxZ: L.maxZ - 0.2 }) });
 }
 
-export function neonTowerHomeSpace(home, floorSpace = neonTowerFloorSpace(home.floor)) {
-  const entry = neonTowerHomeEntry(home), U = apartmentUnit(entry, home.floor), door = neonTowerFloor(home.floor).doors.find((d) => d.slot === home.slot);
+export function towerHomeSpace(tower, home, floorSpace = towerFloorSpace(tower, home.floor)) {
+  const entry = towerHomeEntry(tower, home), U = apartmentUnit(entry, home.floor), door = tower.floor(home.floor).doors.find((d) => d.slot === home.slot);
   const base = apartmentUnitSpace(entry, home.floor, U);
   return Object.freeze({ ...base, id: home.spaceId, parent: floorSpace.id, entry: Object.freeze({ x: door.x, y: door.y, z: door.z }), outside: Object.freeze({ x: door.x + (door.facing === 'west' ? 0.9 : -0.9), y: door.y, z: door.z }) });
 }
+
+const NEON_TOWER_DEFINITION = towerDefinitionForLobby(NEON_TOWER_LOBBY_SPACE);
+export const neonTowerFloorEntry = (floor) => towerFloorEntry(NEON_TOWER_DEFINITION, floor);
+export const neonTowerHomeEntry = (home) => towerHomeEntry(NEON_TOWER_DEFINITION, home);
+export const neonTowerFloorSpace = (floor, lobby) => towerFloorSpace(NEON_TOWER_DEFINITION, floor, lobby);
+export const neonTowerHomeSpace = (home, floorSpace) => towerHomeSpace(NEON_TOWER_DEFINITION, home, floorSpace);
 
 export function genericInteriorSpaces(plan = null) {
   const out = {};
@@ -451,9 +488,9 @@ export function genericInteriorSpaces(plan = null) {
     out[e.spaceId] = interiorSpace(e);
     if (e.template === 'apartments' || e.template === 'lofts') for (const { floor } of APARTMENT_FLOORS) { const sp = apartmentUnitSpace(e, floor); out[sp.id] = sp; }
   }
-  if (!plan) for (const floor of new Set(NEON_TOWER_HOMES.map((home) => home.floor))) {
-    const floorSpace = neonTowerFloorSpace(floor, out[NEON_TOWER_LOBBY_SPACE]); out[floorSpace.id] = floorSpace;
-    for (const home of NEON_TOWER_HOMES.filter((item) => item.floor === floor)) { const space = neonTowerHomeSpace(home, floorSpace); out[space.id] = space; }
+  if (!plan) for (const tower of TOWER_DEFINITIONS) for (const floor of tower.residentialFloors) {
+    const floorSpace = towerFloorSpace(tower, floor, out[tower.lobbySpaceId]); out[floorSpace.id] = floorSpace;
+    for (const home of tower.homes.filter((item) => item.floor === floor)) { const space = towerHomeSpace(tower, home, floorSpace); out[space.id] = space; }
   }
   return out;
 }

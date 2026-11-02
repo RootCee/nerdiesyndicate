@@ -143,8 +143,6 @@ canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block
 #weaponTray.on { display: grid; }
 #weaponTray button { min-width: 58px; min-height: 38px; padding: 8px 9px; border: 1px solid rgba(255,255,255,.25); border-radius: 6px; background: rgba(255,255,255,.08); color: #fff; font: 600 10px/1 'Barlow'; letter-spacing: .08em; }
 #weaponTray button.selected { border-color: var(--gold-bright); color: var(--gold-bright); background: rgba(217,172,88,.18); }
-#weaponTray [data-weapon="holster"], #weaponTray [data-weapon="unarmed"] { display: none; }
-body.multiplayer-active #weaponTray [data-weapon="holster"], body.multiplayer-active #weaponTray [data-weapon="unarmed"] { display: block; }
 body.weapon-selecting #interactPrompt, body.weapon-selecting #tInteract, body.weapon-selecting #tCam { opacity: 0; pointer-events: none; }
 #tInteract { right: calc(110px + var(--sar)); bottom: calc(238px + var(--sab)); width: 72px; height: 72px; border-color: rgba(217,172,88,.8); color: var(--gold-bright); opacity: 0; pointer-events: none; }
 #tInteract.on { opacity: 1; pointer-events: auto; }
@@ -317,6 +315,24 @@ body.multiplayer-active #avatarToggle { display: block; }
 #lboard tr.me td { background: rgba(255,209,102,.14); color: #ffd166; }
 #lboard .cap { font: 500 10px/1.4 'Barlow'; letter-spacing: .14em; color: #6f859d; text-transform: uppercase; margin-top: 8px; text-align: center; }
 @media (max-width: 520px) { #lboard .tiers { grid-template-columns: repeat(2, 1fr); } #lboard .hs { display: none; } }
+.eco-panel { position: fixed; z-index: 30; inset: max(18px, var(--sat)) max(14px, var(--sar)) max(18px, var(--sab)) max(14px, var(--sal)); display: grid; place-items: center; background: rgba(5,6,8,.78); pointer-events: auto; }
+.eco-panel[hidden] { display: none; }
+.eco-card { width: min(620px, 100%); max-height: 86svh; overflow: auto; padding: 22px; border: 1px solid rgba(217,172,88,.7); border-radius: 10px; background: #121217; color: #eee8dc; box-shadow: 0 20px 70px #000; }
+.eco-card h2 { margin: 0 0 5px; color: var(--gold-bright); letter-spacing: .08em; }
+.eco-card .simulated { color: #7fe3ad; font: 700 11px/1.4 'Barlow'; letter-spacing: .13em; text-transform: uppercase; }
+.eco-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; margin: 16px 0; }
+.eco-stat { padding: 10px; border: 1px solid #33333b; border-radius: 6px; background: #1a1a21; }
+.eco-stat small { display: block; color: #aaa4b2; text-transform: uppercase; }
+.eco-card button, .eco-card select, .eco-card textarea { min-height: 44px; border: 1px solid #605477; border-radius: 6px; background: #20202a; color: #f3eee4; font: inherit; }
+.eco-card button { padding: 10px 14px; cursor: pointer; }
+.eco-card textarea, .eco-card select { box-sizing: border-box; width: 100%; padding: 10px; margin: 6px 0; }
+.eco-card textarea { min-height: 92px; resize: vertical; }
+.eco-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.eco-card > .eco-actions:last-child { position: sticky; bottom: 0; padding: 10px 0 2px; background: #121217; box-shadow: 0 -10px 14px #121217; }
+.eco-list { margin: 10px 0; padding: 0; list-style: none; }
+.eco-list li { padding: 8px 0; border-bottom: 1px solid #292932; }
+.eco-status { min-height: 20px; color: #7fe3ad; margin-top: 8px; }
+@media (max-width: 560px) { .eco-grid { grid-template-columns: 1fr; } .eco-card { padding: 16px; } }
 </style>
 </head>
 <body class="menu-open">
@@ -393,6 +409,16 @@ body.multiplayer-active #avatarToggle { display: block; }
   <div class="avatar-creator"><h3>Change Character</h3><div class="avatar-presets" id="avatarPresetsLive" role="radiogroup" aria-label="Character preset"></div><div class="avatar-status" id="avatarStatusLive" role="status"></div></div>
 </div>
 
+<section id="rootsTreasury" class="eco-panel" role="dialog" aria-modal="true" aria-labelledby="rootsTreasuryTitle" hidden>
+  <div class="eco-card"><div class="simulated">Simulated Nerdie City economy · not blockchain-backed</div><h2 id="rootsTreasuryTitle">City Treasury</h2><div id="rootsTreasuryGrid" class="eco-grid"></div><h3>Recent transactions</h3><ul id="rootsTransactions" class="eco-list"></ul><div class="eco-actions"><button id="rootsTreasuryClose" type="button">Close</button></div></div>
+</section>
+<section id="rootsDemand" class="eco-panel" role="dialog" aria-modal="true" aria-labelledby="rootsDemandTitle" hidden>
+  <div class="eco-card"><div class="simulated">Authoritative city demand board</div><h2 id="rootsDemandTitle">Resident Suggestions</h2><ul id="rootsDemandList" class="eco-list"></ul><label for="rootsSuggestionCategory">Category</label><select id="rootsSuggestionCategory"><option value="products">Products</option><option value="businesses">Businesses</option><option value="housing">Housing</option><option value="employment">Employment</option><option value="entertainment">Entertainment</option><option value="public-services">Public services</option><option value="neighborhood-improvements">Neighborhood improvements</option></select><label for="rootsSuggestionText">What does the city need?</label><textarea id="rootsSuggestionText" maxlength="160" placeholder="Describe one specific request"></textarea><div id="rootsSuggestionStatus" class="eco-status" role="status"></div><div class="eco-actions"><button id="rootsSuggestionSubmit" type="button">Submit suggestion</button><button id="rootsDemandClose" type="button">Close</button></div></div>
+</section>
+<section id="rootsConversation" class="eco-panel" role="dialog" aria-modal="true" aria-labelledby="rootsConversationTitle" hidden>
+  <div class="eco-card"><div class="simulated">Persistent resident relationship</div><h2 id="rootsConversationTitle">Roots Resident</h2><p id="rootsResidentIdentity"></p><p id="rootsDialogue"></p><div class="eco-actions" id="rootsTopics"><button data-topic="occupation">Work</button><button data-topic="neighborhood">Neighborhood</button><button data-topic="businesses">Businesses</button><button data-topic="events">Events</button><button data-topic="demand">City needs</button><button data-topic="roots">Roots Lounge</button></div><div class="eco-actions"><button id="rootsConversationClose" type="button">Close</button></div></div>
+</section>
+
 <div id="touch">
   <div id="stick"><div id="knob"></div></div>
   <button class="tb" id="tFire" type="button">FIRE</button>
@@ -443,6 +469,6 @@ body.multiplayer-active #avatarToggle { display: block; }
 </div>
 
 <script src="src/startup-fallback.js"></script>
-<script type="module" src="src/main.js?build=bank-m2.2-rel16"></script>
+<script type="module" src="src/main.js?build=nc-life-01a-prod1"></script>
 </body>
 </html>

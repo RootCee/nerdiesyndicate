@@ -1,5 +1,6 @@
 // Stage 2, step 2: Neon Market, the city's prime commercial neighbourhood (founder-approved plan, 27 October
-// 2026). New land north of the original city (z 148 to 356): Neon Boulevard along its south edge, Main Street
+// 2026). The district shifts west as a unit to make room for a real arena/estate transition to Cyber HQ.
+// Neon Boulevard runs along its south edge, Main Street
 // and both avenues carried north through it, Neon Cross through the middle and Neon Row along the north edge
 // (land beyond stays free for later neighbourhoods). Eight blocks:
 //
@@ -15,11 +16,12 @@ import { LICENSE_CLASSES, SHOP_DEPTH, assignLicenses, mergeToCount, shopRow } fr
 
 const r2 = (v) => Math.round(v * 100) / 100;
 
-export const NEON_MARKET = Object.freeze({ id: 'neon-market', name: 'Neon Market', minX: -140, maxX: 140, minZ: 148, maxZ: 356 });
+export const NEON_MARKET_X_OFFSET = -70;
+export const NEON_MARKET = Object.freeze({ id: 'neon-market', name: 'Neon Market', minX: -210, maxX: 70, minZ: 148, maxZ: 356 });
 
 // Streets (the plan's road records: centre, width along x, depth along z).
 export const NEON_ROADS = Object.freeze([
-  { id: 'neon-boulevard', x: 0, z: 156, width: 280, depth: 12 },
+  { id: 'neon-boulevard', x: 0, z: 157, width: 280, depth: 8 },
   { id: 'neon-cross', x: 0, z: 252, width: 280, depth: 10 },
   { id: 'neon-row', x: 0, z: 349, width: 280, depth: 10 }, // its north sidewalk ends at the city edge (z 356)
   // the avenues and Main Street carry on north from the old city edge (z 148)
@@ -27,18 +29,20 @@ export const NEON_ROADS = Object.freeze([
   { id: 'neon-main', x: 0, z: 252, width: 9, depth: 208 },
   { id: 'neon-east-avenue', x: 88, z: 252, width: 10, depth: 208 },
   { id: 'neon-lane', x: 136, z: 252, width: 8, depth: 204 }, // from Neon Boulevard (a T junction) to Neon Row
-].map((r) => Object.freeze(r)));
+  { id: 'neon-city-link', x: -53, z: 148, width: 70, depth: 10, roadClass: 'collector' },
+].map((r) => Object.freeze({ ...r, x: r2(r.x + NEON_MARKET_X_OFFSET) })));
 export const NEON_STREET_NAMES = Object.freeze({
   'neon-boulevard': 'Neon Boulevard', 'neon-cross': 'Neon Cross', 'neon-row': 'Neon Row', 'neon-lane': 'Neon Lane',
-  'neon-west-avenue': 'West Avenue', 'neon-main': 'Main Street', 'neon-east-avenue': 'East Avenue',
+  'neon-west-avenue': 'West Avenue', 'neon-main': 'Main Street', 'neon-east-avenue': 'East Avenue', 'neon-city-link': 'West Avenue',
 });
 
 // The blocks between the sidewalks (2 m) of those streets.
-const COLS = [[-140, -95], [-81, -6.5], [6.5, 81], [95, 130]], ROWS = [[164, 245], [259, 342]];
-export const NEON_PLAZA = Object.freeze({ id: 'neon-plaza', name: 'Neon Plaza', minX: -81, maxX: -6.5, minZ: 164, maxZ: 214 });
+const COLS = [[-140, -95], [-81, -6.5], [6.5, 81], [95, 130]], ROWS = [[164, 243.9], [260.1, 342]];
+const RAW_NEON_PLAZA = Object.freeze({ id: 'neon-plaza', name: 'Neon Plaza', minX: -81, maxX: -6.5, minZ: 164, maxZ: 214 });
+export const NEON_PLAZA = Object.freeze({ ...RAW_NEON_PLAZA, minX: r2(RAW_NEON_PLAZA.minX + NEON_MARKET_X_OFFSET), maxX: r2(RAW_NEON_PLAZA.maxX + NEON_MARKET_X_OFFSET) });
 // Lobby + 20 six-home apartment storeys + one six-home penthouse storey. At the shared 3.4 m storey
 // height, 75.2 m leaves the top homes a full ceiling and a shallow roof/parapet above them.
-export const NEON_TOWER = Object.freeze({ id: 'neon-tower', name: 'Neon Tower', kind: 'neon-tower', x: 36, z: 196, width: 26, depth: 28, height: 75.2, floors: 22, apartments: 120, penthouses: 6, fixedFront: 'west' });
+export const NEON_TOWER = Object.freeze({ id: 'neon-tower', name: 'Neon Tower', kind: 'neon-tower', x: 36 + NEON_MARKET_X_OFFSET, z: 196, width: 26, depth: 28, height: 75.2, floors: 22, apartments: 120, penthouses: 6, fixedFront: 'west' });
 
 const LOT = 11, SHOP_HEIGHTS = [8.4, 9.2, 8.8, 10];
 // Which sides of each block carry shopfronts ('s' faces the street south of the block, and so on), and
@@ -66,7 +70,7 @@ function build() {
     (spec.lofts || []).forEach(([lx, lz], i) => lofts.push({ id: `${id}-lofts-${i}`, blockId: id, x: lx, z: lz, ...LOFT }));
   }));
   // the plaza block keeps its south half open (the plaza): its side rows stop at the plaza
-  const plaza = NEON_PLAZA, open = lots.filter((l) => l.blockId === 'neon-a2' && l.z < plaza.maxZ + SHOP_DEPTH / 2 && l.front !== 'north');
+  const plaza = RAW_NEON_PLAZA, open = lots.filter((l) => l.blockId === 'neon-a2' && l.z < plaza.maxZ + SHOP_DEPTH / 2 && l.front !== 'north');
   for (const l of open) lots.splice(lots.indexOf(l), 1);
   // exactly one lot per license
   mergeToCount(lots, Object.values(NEON_LICENSES).reduce((a, b) => a + b, 0));
@@ -75,9 +79,9 @@ function build() {
   return { blocks, lots, lofts };
 }
 const BUILT = build();
-export const NEON_BLOCKS = Object.freeze(BUILT.blocks.map((b) => Object.freeze({ id: b.id, minX: b.x[0], maxX: b.x[1], minZ: b.z[0], maxZ: b.z[1] })));
-export const NEON_LOTS = Object.freeze(BUILT.lots.map((l) => Object.freeze({ id: l.lotId, buildingId: `neon-lot-${l.lotId.slice(3)}`, blockId: l.blockId, license: l.license, x: l.x, z: l.z, width: l.width, depth: l.depth, height: l.height, front: l.front })));
-export const NEON_LOFTS = Object.freeze(BUILT.lofts.map((l) => Object.freeze(l)));
+export const NEON_BLOCKS = Object.freeze(BUILT.blocks.map((b) => Object.freeze({ id: b.id, minX: r2(b.x[0] + NEON_MARKET_X_OFFSET), maxX: r2(b.x[1] + NEON_MARKET_X_OFFSET), minZ: b.z[0], maxZ: b.z[1] })));
+export const NEON_LOTS = Object.freeze(BUILT.lots.map((l) => Object.freeze({ id: l.lotId, buildingId: `neon-lot-${l.lotId.slice(3)}`, blockId: l.blockId, license: l.license, x: r2(l.x + NEON_MARKET_X_OFFSET), z: l.z, width: l.width, depth: l.depth, height: l.height, front: l.front })));
+export const NEON_LOFTS = Object.freeze(BUILT.lofts.map((l) => Object.freeze({ ...l, x: r2(l.x + NEON_MARKET_X_OFFSET) })));
 
 // The city plan's buildings, by render chunk (one per block).
 export function neonMarketDistricts() {

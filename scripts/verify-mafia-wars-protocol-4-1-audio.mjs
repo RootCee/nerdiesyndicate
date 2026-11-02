@@ -16,13 +16,11 @@ const expectedCommit = syncScript.match(/const expectedCommit = '([0-9a-f]{40})'
 assert.ok(expectedCommit, 'sync script pins a source commit');
 assert.equal(manifest.sourceCommit, expectedCommit, 'release manifest matches the synced source commit');
 assert.match(manifest.sourceBranch, /^codex\//);
-const syncSource = await readFile(path.join(import.meta.dirname, 'sync-mafia-wars-preview.mjs'), 'utf8');
-const previewService = syncSource.match(/const previewMultiplayerService = '([^']+)'/)?.[1];
-assert.ok(previewService, 'sync script names the preview server');
-assert.ok(endpoint.includes(`AVATAR_PREVIEW_MULTIPLAYER_SERVICE = '${previewService}'`), 'preview builds use the configured preview server');
+assert.match(endpoint, /PREVIEW_MULTIPLAYER_SERVICES = Object\.freeze/);
+assert.match(endpoint, /This preview build has no isolated multiplayer Worker configured/);
 assert.match(audio, /reloadWeaponAt\(weaponId, pos\)/);
 assert.match(audio, /weaponShotAt\(weaponId, pos\)/);
 assert.match(main, /message\.type === 'reload'/);
 assert.match(main, /networkAudioEvents\.accept\('shot', message\)/);
 assert.match(workerAudio, /rpg: Object\.freeze\([^\n]*rocket: true/);
-console.log('Protocol 4.1 audio verified: pinned source, preview Worker endpoint, local/nearby weapon audio, and event deduplication present.');
+console.log('Protocol 4.1 audio verified: pinned source, protected preview endpoint mapping, local/nearby weapon audio, and event deduplication present.');

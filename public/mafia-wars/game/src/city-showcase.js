@@ -53,13 +53,13 @@ const SIGN_ART = {
   marquee: (ctx, w, h) => {
     ctx.fillStyle = '#f4ead8'; ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = hexCss(PALETTE.charcoal); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = '600 104px Barlow, sans-serif'; ctx.fillText('THE BLAQ NOTE', w / 2, h * 0.38);
-    ctx.fillStyle = hexCss(PALETTE.purple); ctx.font = '500 52px Barlow, sans-serif'; ctx.fillText('LIVE MUSIC · MUSIC LOUNGE', w / 2, h * 0.78);
+    ctx.font = '600 104px Barlow, sans-serif'; ctx.fillText('ROOTS LOUNGE', w / 2, h * 0.38);
+    ctx.fillStyle = hexCss(PALETTE.purple); ctx.font = '500 52px Barlow, sans-serif'; ctx.fillText('ROOTCEE · LIVE MUSIC · NERDIE CITY', w / 2, h * 0.78);
   },
   noteVertical: (ctx, w, h) => {
     ctx.fillStyle = hexCss(PALETTE.charcoal); ctx.fillRect(0, 0, w, h);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.shadowColor = '#4dffa8'; ctx.shadowBlur = 24; ctx.fillStyle = '#dfffee'; ctx.font = '600 104px Barlow, sans-serif';
-    [...'BLAQNOTE'].forEach((c, i) => ctx.fillText(c, w / 2, 76 + i * ((h - 130) / 7)));
+    [...'ROOTS'].forEach((c, i) => ctx.fillText(c, w / 2, 110 + i * ((h - 220) / 4)));
   },
   northCourt: (ctx, w, h) => {
     ctx.fillStyle = hexCss(PALETTE.green); ctx.fillRect(0, 0, w, h);
@@ -99,7 +99,7 @@ const SIGN_ART = {
   poster: (ctx, w, h) => {
     const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, hexCss(PALETTE.purple)); g.addColorStop(1, hexCss(PALETTE.green)); ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = hexCss(PALETTE.gold); ctx.beginPath(); ctx.arc(w / 2, h * 0.36, w * 0.24, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#fff4dc'; ctx.textAlign = 'center'; ctx.font = '600 58px Barlow, sans-serif'; ctx.fillText('FRIDAY', w / 2, h * 0.72); ctx.font = '500 34px Barlow, sans-serif'; ctx.fillText('THE BLAQ NOTE', w / 2, h * 0.84);
+    ctx.fillStyle = '#fff4dc'; ctx.textAlign = 'center'; ctx.font = '600 58px Barlow, sans-serif'; ctx.fillText('ROOTS', w / 2, h * 0.72); ctx.font = '500 34px Barlow, sans-serif'; ctx.fillText('OFFICIAL TRACKS COMING', w / 2, h * 0.84);
   },
   mural: (ctx, w, h) => { // street art on the side wall: bold shapes in the house colours, a tag
     ctx.fillStyle = '#2b2d33'; ctx.fillRect(0, 0, w, h);
@@ -295,7 +295,7 @@ function threads(batch, kit, b, parent) {
   waterTank(batch, kit, b.x + 3.2, b.height, b.z + 2.2, 1.0); roofUnits(batch, kit, b.x - 3, b.height, b.z + 1, 2, r);
 }
 
-// ------------------------------------------------- The Blaq Note (music lounge)
+// ------------------------------------------------- Roots Lounge (city-owned music lounge)
 function lounge(batch, kit, b, parent) {
   const m = kit.m, f = facade(b, b.front), half = f.length / 2, base = 4.2;
   batch.box(m.tile, b.x, base / 2, b.z, b.width, base, b.depth);
@@ -392,8 +392,14 @@ function gableRoof(batch, kit, b, roofMat, wallMat, rise, overhang = 0.45) {
   batch.box(kit.m.trim, b.x, b.height + rise + 0.03, b.z, alongX ? length + 0.6 : 0.16, 0.1, alongX ? 0.16 : length + 0.6); // ridge cap
 }
 function house(batch, kit, b, parent, { mobile = false } = {}) {
-  const m = kit.m, h = hashId(b.id), r = rng(h), f = facade(b, b.front), half = f.length / 2;
-  const body = [m.houseSage, m.houseSand, m.houseSlate, m.houseBlush, m.creamBrick][h % 5], roofMat = h % 3 ? m.roofCharcoal : m.roofTerracotta;
+  const m = kit.m, h = hashId(b.id), r = rng(h), f = facade(b, b.front), half = f.length / 2, estate = b.propertyTier === 'estate';
+  const palettes = {
+    'dark-alley-residential': [m.houseSlate, m.darkBrick, m.creamBrick],
+    'neon-residential': [m.houseBlush, m.purple, m.houseSand],
+    'cyber-residential': [m.houseSlate, m.stucco, m.houseSand],
+  };
+  const palette = palettes[b.residentialStyle] || [m.houseSage, m.houseSand, m.houseSlate, m.houseBlush, m.creamBrick];
+  const body = palette[h % palette.length], roofMat = h % 3 ? m.roofCharcoal : m.roofTerracotta;
   const accent = [m.green, m.purple, m.charcoal, m.green][(h >>> 3) % 4];
   batch.box(body, b.x, b.height / 2, b.z, b.width, b.height, b.depth);
   batch.box(m.concrete, b.x, 0.3, b.z, b.width + 0.16, 0.6, b.depth + 0.16);
@@ -405,6 +411,12 @@ function house(batch, kit, b, parent, { mobile = false } = {}) {
   // M7.1B: the door sits on the foundation, up a stoop (a landing and two steps; entry-steps.js)
   const sill = HOUSE_STOOP.height;
   for (const st of entrySteps(b)) batch.box(m.concrete, (st.minX + st.maxX) / 2, st.top / 2, (st.minZ + st.maxZ) / 2, st.maxX - st.minX, st.top, st.maxZ - st.minZ);
+  if (estate) {
+    const column = Math.min(3.2, half - 1.4);
+    fbox(batch, m.concrete, f, 0, sill + 0.12, 0.15, Math.min(half * 1.75, f.length - 1), 0.18, 0.6);
+    for (const side of [-1, 1]) fbox(batch, m.trim, f, side * column, sill + 1.35, 0.15, 0.2, 2.55, 0.2);
+    fbox(batch, roofMat, f, 0, sill + 2.72, 0.15, Math.min(half * 1.9, f.length), 0.16, 0.45);
+  }
   // porch: a roof on two slim posts, a light; the enterable house's door comes from its interior system
   fbox(batch, m.trim, f, doorAt, sill + 2.72, 0.55, 2.1, 0.12, 1.1); fbox(batch, roofMat, f, doorAt, sill + 2.8, 0.55, 2.2, 0.06, 1.2);
   for (const s of [-1, 1]) fbox(batch, m.trim, f, doorAt + s * 0.95, sill + 1.36, 0.42, 0.1, 2.72, 0.1);
@@ -884,6 +896,47 @@ function casino(batch, kit, b, parent) {
   signPlane(parent, sign, f, 0, 7.0, 0.2, Math.min(18, 2 * half - 3), 2.2, 'showcase-dark-alley-casino-sign');
   parapet(batch, kit, b, m.charcoal, 0.8, 0.45);
 }
+const venueMarquee = (title, subtitle, background, foreground) => (ctx, w, h) => {
+  ctx.fillStyle = background; ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = foreground; ctx.lineWidth = 8; ctx.strokeRect(12, 12, w - 24, h - 24);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = foreground;
+  ctx.font = '700 110px Barlow, sans-serif'; ctx.fillText(title, w / 2, h * 0.43, w * 0.88);
+  ctx.font = '500 34px Barlow, sans-serif'; ctx.fillText(subtitle, w / 2, h * 0.8, w * 0.9);
+};
+function undergroundVenue(batch, kit, b, parent) {
+  const m = kit.m, f = facade(b, b.front), half = f.length / 2;
+  batch.box(m.darkBrick, b.x, b.height / 2, b.z, b.width, b.height, b.depth);
+  batch.box(m.charcoal, b.x, 0.65, b.z, b.width + 0.3, 1.3, b.depth + 0.3);
+  for (const side of ['north', 'south', 'east', 'west']) {
+    const g = facade(b, side), n = Math.max(3, Math.floor(g.length / 4));
+    for (let i = 0; i <= n; i++) fbox(batch, m.metal, g, -g.length / 2 + i * (g.length / n), b.height / 2, 0.08, 0.22, b.height, 0.18);
+    fbox(batch, m.neonPurple, g, 0, 6.7, 0.13, g.length - 1.2, 0.08, 0.08);
+    fbox(batch, m.neonPink, g, 0, 1.9, 0.14, g.length - 1.2, 0.08, 0.08);
+  }
+  fbox(batch, m.charcoal, f, 0, 3.2, 0.8, Math.min(15, 2 * half - 2), 0.22, 1.6);
+  fbox(batch, m.metal, f, 0, 1.45, 0.16, 3.2, 2.9, 0.12);
+  fbox(batch, m.glassWarm, f, 0, 1.45, 0.24, 2.6, 2.45, 0.06);
+  fbox(batch, m.neonCyan, f, 0, 3.45, 0.22, 3.4, 0.08, 0.08);
+  signPlane(parent, drawn(kit, venueMarquee('SHADOWBOX LIVE', 'UNDERGROUND MUSIC · NIGHTLIFE', '#17131d', '#d2a4ff'), { w: 1024, h: 220, day: 0.16, night: 1.35, preview: 0x17131d }), f, 0, 5.2, 0.2, Math.min(16, 2 * half - 2), 1.6, `showcase-${b.id}-marquee`);
+  parapet(batch, kit, b, m.charcoal, 0.55, 0.3);
+}
+function cyberArena(batch, kit, b, parent) {
+  const m = kit.m, f = facade(b, b.front), half = f.length / 2;
+  batch.box(m.charcoal, b.x, b.height / 2, b.z, b.width, b.height, b.depth);
+  batch.box(m.glassCool, b.x, 6.8, b.z, b.width - 1.2, 11.6, b.depth - 1.2);
+  batch.box(m.charcoal, b.x, 1.6, b.z, b.width + 0.25, 3.2, b.depth + 0.25);
+  for (const side of ['north', 'south', 'east', 'west']) {
+    const g = facade(b, side), n = Math.max(3, Math.floor(g.length / 5));
+    fbox(batch, m.glassCool, g, 0, 7.8, 0.08, g.length - 1.4, 9.2, 0.05);
+    for (let i = 0; i <= n; i++) fbox(batch, m.frame, g, -g.length / 2 + i * (g.length / n), 7.8, 0.17, 0.28, 12.2, 0.24);
+    fbox(batch, m.neonCyan, g, 0, 13.2, 0.22, g.length - 0.8, 0.12, 0.08);
+    fbox(batch, m.neonPurple, g, 0, 3.5, 0.2, g.length - 0.8, 0.08, 0.08);
+  }
+  batch.box(m.charcoal, b.x, b.height - 0.6, b.z, b.width + 0.45, 0.8, b.depth + 0.45);
+  fbox(batch, m.glassWarm, f, 0, 2.25, 0.2, Math.min(9, 2 * half - 2), 3.2, 0.06);
+  fbox(batch, m.neonCyan, f, 0, 4.1, 0.65, Math.min(12, 2 * half - 2), 0.1, 1.3);
+  signPlane(parent, drawn(kit, venueMarquee('NERDIE ARENA', 'LIVE EVENTS · CYBER CITY', '#101c2a', '#8eeaff'), { w: 1024, h: 220, day: 0.2, night: 1.35, preview: 0x101c2a }), f, 0, 6.2, 0.24, Math.min(18, 2 * half - 2), 1.6, `showcase-${b.id}-marquee`);
+}
 // The Neon Tower: twenty floors of glass between dark stone fins, a lit band every fourth floor, a neon crown,
 // and a double-height lobby with a canopy facing Main Street.
 function neonTower(batch, kit, b, parent, { mobile = false } = {}) {
@@ -910,7 +963,7 @@ export function showcaseBuilding(batch, kit, b, parent, opts = {}) {
   const from = kit.night.length, store = storeForBuilding(b.id), shared = kit.m;
   // a store gets its own copies of the lit trims and warm window glass (canopy lamps, neon, lit windows), so they go dark with it
   if (store) { kit.m = Object.create(shared); for (const k of ['lamp', 'neonPurple', 'neonGreen', 'glassWarm']) { const n = kit.night.find((x) => x.m === shared[k]), c = shared[k].clone(); kit.m[k] = c; kit.night.push({ m: c, day: n.day, night: n.night }); } }
-  try { (SHOWCASE_DESIGNS[b.id] || (b.kind === 'neon-shop' ? neonShop : b.kind === 'casino' ? casino : b.kind === 'neon-tower' || b.kind === 'cyber-tower' ? neonTower : b.kind === 'house' ? house : b.kind === 'warehouse' ? warehouse : b.kind === 'civic' ? cityHall : b.kind === 'library' ? library : b.kind === 'academy-hall' ? academyHall : b.kind === 'clock-tower' ? clockTower : b.kind === 'pavilion' ? pavilion : b.kind === 'bleachers' ? bleachers : midrise))(batch, kit, b, parent, opts); } finally { kit.m = shared; }
+  try { (SHOWCASE_DESIGNS[b.id] || (b.kind === 'neon-shop' ? neonShop : b.kind === 'casino' ? casino : b.kind === 'venue' ? (b.venueType === 'underground' ? undergroundVenue : cyberArena) : b.kind === 'neon-tower' || b.kind === 'cyber-tower' ? neonTower : b.kind === 'house' ? house : b.kind === 'warehouse' ? warehouse : b.kind === 'civic' ? cityHall : b.kind === 'library' ? library : b.kind === 'academy-hall' ? academyHall : b.kind === 'clock-tower' ? clockTower : b.kind === 'pavilion' ? pavilion : b.kind === 'bleachers' ? bleachers : midrise))(batch, kit, b, parent, opts); } finally { kit.m = shared; }
   // a store's own signs, shop windows and trims go dark when it closes (store-hours.js, kit.setClosed)
   if (store) for (let k = from; k < kit.night.length; k++) kit.night[k].store = store.id;
 }

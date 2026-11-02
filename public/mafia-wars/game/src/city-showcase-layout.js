@@ -11,13 +11,11 @@ export const inShowcase = (x, z) => x > SHOWCASE.minX && x < SHOWCASE.maxX && z 
 
 export const SHOWCASE_HEROES = Object.freeze({ bank: 'west-mixed-north-1', boutique: 'west-mixed-north-2', lounge: 'west-mixed-north-0', apartment: 'north-court' });
 
-// Storefront identities, mapped to the Business NFT playable types (website
-// src/config/gameplay/business.ts): 3 Piece sells three-piece suits (Retail Business, class 1;
-// streetwear_boutique is the closest apparel type) and The Blaq Note is a music_lounge
-// (Entertainment Venue, class 3). Names confirmed by the founder.
+// Storefront identities. NC-ECO-01 activates the existing lounge shell as the
+// permanently city-owned Roots Lounge; it is never an NFT or lease listing.
 export const SHOWCASE_BUSINESSES = Object.freeze({
   'west-mixed-north-2': Object.freeze({ id: 'three-piece', name: '3 Piece', category: 'Three-Piece Suits', businessTypeId: 'streetwear_boutique', nftClass: 'retail_business', status: 'coming-soon' }),
-  'west-mixed-north-0': Object.freeze({ id: 'the-blaq-note', name: 'The Blaq Note', category: 'Music Lounge', businessTypeId: 'music_lounge', nftClass: 'entertainment_venue', status: 'coming-soon' }),
+  'west-mixed-north-0': Object.freeze({ id: 'roots-lounge', name: 'Roots Lounge', category: 'Live Music & Social Lounge', businessTypeId: 'music_lounge', nftClass: 'entertainment_venue', status: 'open', spaceId: 'roots-lounge', kind: 'venue', ownerId: 'nerdie-city', leaseEligible: false }),
 });
 
 const FURNITURE_SIZE = Object.freeze({ tree: [0.3, 0.3, 5.2], planter: [1.7, 0.9, 0.9], bench: [1.8, 0.6, 0.85], bollard: [0.3, 0.3, 0.95] });
@@ -32,7 +30,13 @@ const item = (id, kind, x, z, rotated = false, extra = {}) => {
 export function showcaseFurniture(plan = createCityPlan(), ground = cityGroundLayout(plan)) {
   const out = [];
   const keepouts = frontageKeepouts(plan);
-  const clearOf = (x, z, r) => !keepouts.some((k) => Math.hypot(x - k.x, z - k.z) < k.r + r)
+  const buildings = plan.districts.flatMap((district) => district.buildings);
+  const treeHalfWidth = FURNITURE_SIZE.tree[0] / 2, treeHalfDepth = FURNITURE_SIZE.tree[1] / 2;
+  const clearOf = (x, z, r) => !ground.roads.some((road) => x + treeHalfWidth > road.minX && x - treeHalfWidth < road.maxX && z + treeHalfDepth > road.minZ && z - treeHalfDepth < road.maxZ)
+    && !ground.paths.some((path) => x + treeHalfWidth > path.minX && x - treeHalfWidth < path.maxX && z + treeHalfDepth > path.minZ && z - treeHalfDepth < path.maxZ)
+    && !keepouts.some((k) => Math.hypot(x - k.x, z - k.z) < k.r + r)
+    && !buildings.some((building) => x + r > building.x - building.width / 2 && x - r < building.x + building.width / 2
+      && z + r > building.z - building.depth / 2 && z - r < building.z + building.depth / 2)
     && !ground.streetlights.some((l) => Math.hypot(x - l.x, z - l.z) < 6)
     && !ground.intersections.some((i) => x > i.minX - GROUND.lightIntersectionClear && x < i.maxX + GROUND.lightIntersectionClear && z > i.minZ - GROUND.lightIntersectionClear && z < i.maxZ + GROUND.lightIntersectionClear);
   const heroes = plan.districts.flatMap((d) => d.buildings).filter((b) => b.id === SHOWCASE_HEROES.bank || b.id === SHOWCASE_HEROES.boutique || b.id === SHOWCASE_HEROES.lounge);
@@ -51,6 +55,20 @@ export function showcaseFurniture(plan = createCityPlan(), ground = cityGroundLa
       if (heroAxes.some(([ax, az, axis]) => (axis === 'x' ? Math.abs(x - ax) < 5 && Math.abs(z - az) < 14 : Math.abs(z - az) < 5 && Math.abs(x - ax) < 14))) continue; // keep hero facades in view
       if (!ground.sidewalks.some((w) => x > w.minX && x < w.maxX && z > w.minZ && z < w.maxZ)) continue;
       out.push(item(`tree-${a.street}-${out.length}`, 'tree', x, z));
+    }
+  }
+  for (const path of (plan.pedestrianPaths || []).filter((p) => p.id.endsWith('-spine'))) {
+    for (const z of [424, 448, 500, 524]) for (const side of [-1, 1]) {
+      const x = path.x + side * 8;
+      if (clearOf(x, z, 0.6)) out.push(item(`greenway-tree-${path.id}-${z}-${side}`, 'tree', x, z));
+    }
+    for (const z of [436, 510]) for (const side of [-1, 1]) {
+      const x = path.x + side * 5;
+      if (clearOf(x, z, 1.2)) out.push(item(`greenway-bench-${path.id}-${z}-${side}`, 'bench', x, z, true));
+    }
+    for (const z of [412, 466, 508, 536]) for (const side of [-1, 1]) {
+      const x = path.x + side * 5;
+      if (clearOf(x, z, 0.6)) out.push(item(`greenway-light-${path.id}-${z}-${side}`, 'bollard', x, z));
     }
   }
   // forecourts: the bank (north-market, facing north), 3 Piece (facing south), North Court (facing west)

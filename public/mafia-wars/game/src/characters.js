@@ -21,7 +21,7 @@ export const ROSTER = {
   red: ['red_hoodie', 'red_jersey'],
 };
 const HEIGHT = 1.8; // metres, top of head
-const CLIP_MAP = { Idle_Gun: 'idle', Idle_Gun_Shoot: 'idle', Run: 'run', Run_Shoot: 'run', Walk: 'walk', Death: 'fall', HitRecieve: 'hit_to_body_01' };
+const CLIP_MAP = { Idle_Gun: 'idle', Idle_Gun_Shoot: 'idle', Idle_Unarmed: 'idle', Run: 'run', Run_Shoot: 'run', Walk: 'walk', Death: 'fall', HitRecieve: 'hit_to_body_01' };
 
 const lib = { models: {}, loading: {}, clips: {}, weapons: new Map(), ready: false };
 
@@ -138,7 +138,7 @@ function disposeWeaponClone(gun) {
 }
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _t = new THREE.Vector3(), _p = new THREE.Vector3();
-const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _q3 = new THREE.Quaternion(), _q4 = new THREE.Quaternion();
+const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _q3 = new THREE.Quaternion(), _q4 = new THREE.Quaternion(), _q5 = new THREE.Quaternion(), _q6 = new THREE.Quaternion();
 // rotate `bone` (in world space) so the direction from bone to child goes from `from` to `to`
 function aimBone(bone, from, to) {
   _q.setFromUnitVectors(from, to);
@@ -197,6 +197,7 @@ const GRIP_HAND_DIR = Object.freeze(new THREE.Vector3(-0.25, -0.45, -0.85).norma
 const SUPPORT_HAND_DIR = Object.freeze(new THREE.Vector3(0.5, 0.15, -0.85).normalize());
 
 const UP = new THREE.Vector3(0, 1, 0);
+const LOCAL_Z = new THREE.Vector3(0, 0, 1);
 // M6.9 weapon holds. Offsets are metres from the upper chest (Spine2) in the aim
 // frame (x the character's right, y up, z along the aim): `ready` is the low
 // carry, `raised` the aimed hold. Raised, the muzzle points down the aim; at
@@ -248,10 +249,18 @@ export class Character {
     this.obj = new THREE.Group(); this.obj.add(root); scene.add(this.obj);
     const bone = (n) => { let b = null; root.traverse((o) => { if (!b && o.isBone && o.name.replace(/^mixamorig:?/, '') === n) b = o; }); return b; };
     this.b = { rPalm: bone('RightHandMiddle1'), lPalm: bone('LeftHandMiddle1'), lClav: bone('LeftShoulder'), spine0: bone('Spine'), spine1: bone('Spine1'), neck: bone('Neck'), spine: bone('Spine2'), rArm: bone('RightArm'), rFore: bone('RightForeArm'), rHand: bone('RightHand'), lArm: bone('LeftArm'), lFore: bone('LeftForeArm'), lHand: bone('LeftHand'), head: bone('Head') };
+    this.unarmedPoseBones = [];
+    root.traverse((object) => {
+      if (!object.isBone) return;
+      const name = object.name.replace(/^mixamorig:?/, '');
+      if (!/^(?:Neck|Spine(?:1|2)?|LeftShoulder|RightShoulder|(?:Left|Right)(?:Arm|ForeArm|Hand.*))$/.test(name)) return;
+      this.unarmedPoseBones.push({ bone: object, name, side: name.startsWith('Right') ? 1 : -1, rest: object.quaternion.clone() });
+    });
     this.mixer = new THREE.AnimationMixer(root); this.actions = {};
     for (const [k, c] of Object.entries(lib.clips)) this.actions[k] = this.mixer.clipAction(c);
     this.gun = null; this.weaponId = null; this.holstered = true; this.setWeapon(weaponId, holstered);
     this.aimPitch = 0; this.ready = 0; this.raise = 0; this.fastRaise = false; this.dead = false; this.recoil = 0;
+    this.unarmedPoseWeight = 0; this.unarmedGaitPhase = 0;
     this.bodyYaw = null; this.turning = false; this.fireHold = 0; this.switchDip = 0; this.shotAim = { yaw: 0, pitch: 0, t: 0 };
     this.contacts = null; // body contact points, measured from this character's mesh on the first posed update
     this.visualOffset = new THREE.Vector3();
@@ -309,10 +318,39 @@ export class Character {
     else if (Math.abs(diff) < AIM_RULES.turnStop) this.turning = false;
     if (this.turning) { this.bodyYaw = wrapAngle(this.bodyYaw + diff * Math.min(1, dt * (moving ? AIM_RULES.moveTurnRate : AIM_RULES.turnRate))); diff = wrapAngle(aimYaw - this.bodyYaw); }
     this.obj.position.copy(pos).add(this.visualOffset); this.obj.rotation.y = this.bodyYaw; this.mixer.update(dt);
+    const weaponless = (!this.gun || this.holstered) && !dead;
+    this.unarmedPoseWeight += ((weaponless ? 1 : 0) - this.unarmedPoseWeight) * (1 - Math.exp(-Math.max(0, dt) * 12));
+    // The walk/run clips already contain a full-body Mixamo gait: shoulder roll,
+    // bent elbows, and hands driving opposite the feet.  Do not replace those
+    // authored upper-body tracks with the bind pose.  The previous unarmed
+    // override did exactly that after mixer.update(), leaving only a tiny
+    // shoulder rotation and making both hands appear to hang at the hips.
+    // Only idle needs a relaxed override because the shared idle clip is the
+    // gun-ready source pose used by armed characters.
+    const locomoting = moving && LOCOMOTION.has(this.cur);
+    if (weaponless && !locomoting && this.unarmedPoseWeight > 0.001) {
+      this.unarmedGaitPhase += Math.max(0, dt) * 1.6;
+      const breath = Math.sin(this.unarmedGaitPhase);
+      for (const pose of this.unarmedPoseBones) {
+        _q5.copy(pose.rest);
+        if (pose.name === 'Spine' || pose.name === 'Spine1') {
+          _q6.setFromAxisAngle(LOCAL_Z, breath * 0.008);
+          _q5.multiply(_q6);
+        } else if (/^(?:Left|Right)Arm$/.test(pose.name)) {
+          _q6.setFromAxisAngle(LOCAL_Z, breath * 0.012 * pose.side);
+          _q5.multiply(_q6);
+        }
+        pose.bone.quaternion.slerp(_q5, this.unarmedPoseWeight);
+      }
+    }
+    if (!this.gun || this.holstered) {
+      this.raise = this.ready = 0; this.fastRaise = false;
+      if (this.gun) this.gun.visible = false;
+      return;
+    }
     const hold = holdFor(this.weaponId);
     this.recoil *= Math.exp(-dt * hold.recover);
     this.fireHold = Math.max(0, this.fireHold - dt); this.switchDip = Math.max(0, this.switchDip - dt);
-    if (!this.gun) return;
     this.obj.updateMatrixWorld(true);
     const want = (aiming || this.fireHold > 0) && this.switchDip <= 0 ? 1 : 0, rate = this.fastRaise && want ? AIM_RULES.fireRaiseRate : AIM_RULES.raiseRate;
     this.raise = THREE.MathUtils.clamp(this.raise + Math.sign(want - this.raise) * Math.min(Math.abs(want - this.raise), rate * dt), 0, 1);

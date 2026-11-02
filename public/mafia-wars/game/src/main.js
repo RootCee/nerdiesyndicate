@@ -18,9 +18,8 @@ import { FX, Weapon, GUN_SPECS } from './weapon.js';
 import { Bot, buildNav, rayVsBots, freeCellNear } from './bots.js';
 import { Character, LOCOMOTION_FADE, loadCharacters, ensureCharacterModel, characterAssetStats, registerCharacterWeaponTemplate } from './characters.js';
 import { Launcher } from './rocket.js';
-import { addWall, wallSpec, initDestruction, updateDestruction, updateDestructionStreaming, beginDestructionPrewarm, destruction, blast, applyStructureState, destructibleStructure } from './destruction.js';
+import { addWall, wallSpec, addHouse, initDestruction, updateDestruction, updateDestructionStreaming, beginDestructionPrewarm, configureDestructionRendering, destruction, blast, applyStructureState, destructibleStructure } from './destruction.js';
 import { WALL_LOTS, GEO, houseDescs, setWorldNightLevel } from './world.js';
-import { addHouse } from './destruction.js';
 import { initHud, hud } from './hud.js';
 import { renderLadder } from './ladder.js';
 import { initInput, input, poll, requestLock, TOUCH } from './input.js';
@@ -31,6 +30,7 @@ import { buildCityExpansion } from './city-expansion.js';
 import { createCollisionDebug } from './collision-debug.js';
 import { requestedWeapon, weaponOrderForProfile } from './weapon-cycle.js';
 import { DUPLICATED_ORIGINAL_NEIGHBORHOOD, ORIGINAL_NEIGHBORHOOD_LAYOUT } from './city-layout.js';
+import { ORIGINAL_STYLE_NEIGHBORHOODS } from './hood-neighborhood-layout.js';
 import { createPerformanceProfiler } from './performance-profiler.js';
 import { restorePracticeLoadout } from './loadout.js';
 import { PracticeResupply } from './practice-resupply.js';
@@ -65,14 +65,16 @@ import { UNDERGROUND_SPAWNS } from './multiplayer-combat.js';
 import * as npcLibrary from './npc-library.js';
 import { StoreStaff } from './store-staff.js';
 import { isStoreOpen } from './store-hours.js';
-import { economicMinuteOfDay } from './resident-schedule.js';
+import { economicMinuteOfDay, setEconomicClock } from './resident-schedule.js';
 import { NpcRenderer, NPC_RENDER_RULES } from './npc-renderer.js';
 import { MULTIPLAYER_SPACES } from './multiplayer-spaces.js';
 import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=bank-m2.2-rel16';
+import { createMobilePerformanceOverlay } from './mobile-performance-overlay.js';
+import { createAdaptiveResolution } from './adaptive-resolution.js';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-life-01a-prod1';
 
-const GAME_BUILD_ID = 'bank-m2.2-rel16';
+const GAME_BUILD_ID = 'nc-life-01a-prod1';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -86,6 +88,12 @@ if (qs.get('devLoadTest') === '1' && isPrivateLanIPv4) {
 }
 const multiplayerServiceUrl = resolveMultiplayerService(location);
 const performanceProfile = createPerformanceProfiler(qs.get('perf') === '1');
+const performanceControlsAllowed = performanceProfile.enabled && (
+  location.hostname === 'localhost'
+  || location.hostname === '127.0.0.1'
+  || location.hostname.endsWith('.vercel.app')
+);
+const diagnosticFlag = (name) => performanceControlsAllowed ? qs.get(name) : null;
 // Legacy ladder support remains developer-only. Public Base identity and rankings are coming later.
 const API = qs.get('api') || '';
 const ident = (() => { try { return JSON.parse(localStorage.getItem('nerdie-city-mafia-wars.identity') || '{}') || {}; } catch { return {}; } })();
@@ -117,6 +125,17 @@ Q.cityExpansion = qs.get('city') !== '0';
 Q.showcase = qs.get('showcase') !== '0'; // M7.0B1 North Market showcase (?showcase=0: the city without it)
 Q.dayNight = qs.get('daynight') !== '0'; // M7.0A2 solo day/night (?daynight=0: the fixed dusk look)
 Q.roadPaint = qs.get('roadPaint') !== '0';
+Q.perfReducedLights = diagnosticFlag('perfLights') === '0';
+Q.perfReducedNpcs = diagnosticFlag('perfNpcs') === '0';
+Q.perfReducedDecor = diagnosticFlag('perfDecor') === '0';
+if (Q.perfReducedDecor) Q.showcase = false;
+const diagnosticScaleValue = Number(diagnosticFlag('perfRes'));
+const diagnosticRenderScale = Number.isFinite(diagnosticScaleValue) && diagnosticScaleValue >= 0.5 && diagnosticScaleValue <= 1
+  ? diagnosticScaleValue
+  : null;
+const destructionControl = diagnosticFlag('perfDestruction');
+const panelDistance = destructionControl === '0' ? 0 : destructionControl === '1' ? Infinity : 30;
+configureDestructionRendering({ mobileLod: Q.lowMemory, panelDistance });
 setLowMemoryAssets(Q.lowMemory);
 const $ = (id) => document.getElementById(id);
 const canvas = $('gl');
@@ -144,10 +163,14 @@ $('cityBankButton')?.addEventListener('click', () => walletBridge.openBank());
 
 // ---------- renderer ----------
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', alpha: false, stencil: false });
-function dpr(w, h) { return Math.min(devicePixelRatio || 1, Q.lowMemory ? 1 : Q.mobile ? 1.6 : 2, Math.sqrt((Q.lowMemory ? 1.2e6 : Q.mobile ? 3.0e6 : 4.6e6) / (w * h))); }
+let mobileRenderScale = diagnosticRenderScale ?? 1;
+function dpr(w, h) {
+  const base = Math.min(devicePixelRatio || 1, Q.lowMemory ? 1 : Q.mobile ? 1.6 : 2, Math.sqrt((Q.lowMemory ? 1.2e6 : Q.mobile ? 3.0e6 : 4.6e6) / (w * h)));
+  return base * mobileRenderScale;
+}
 renderer.setPixelRatio(dpr(innerWidth, innerHeight)); renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
-renderer.shadowMap.enabled = !Q.lowMemory; renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.shadowMap.enabled = !Q.lowMemory && diagnosticFlag('perfShadows') !== '0'; renderer.shadowMap.type = THREE.PCFShadowMap;
 setAniso(Q.lowMemory ? 1 : Math.min(8, renderer.capabilities.getMaxAnisotropy()));
 
 const scene = new THREE.Scene();
@@ -208,6 +231,13 @@ function resize() {
 }
 addEventListener('resize', resize);
 setTimeout(resize, 0);
+const adaptiveResolution = createAdaptiveResolution({
+  enabled: Q.lowMemory && diagnosticRenderScale === null,
+  initial: mobileRenderScale,
+  minimum: 0.65,
+  maximum: 1,
+  onChange(scale) { mobileRenderScale = scale; resize(); },
+});
 
 // ---------- game state ----------
 const player = new Player(camera);
@@ -218,6 +248,64 @@ let preferThirdPerson = (() => { try { return localStorage.getItem(CAMERA_STORAG
 // multiplayer service, and markers come from the same list as the minimap.
 let cityMap = null, cityNav = null, cityPoiList = [], waypoint = null, waypointRoute = null, waypointNote = '', waypointCheckAt = 0;
 let cityInteriorName = '', cityInteriorId = '', mapDots = [], mapSnitch = false;
+let latestEconomy = null, rootsConversationResident = null;
+const economyPanelOpen = () => ['rootsTreasury', 'rootsDemand', 'rootsConversation'].some((id) => !$(id).hidden);
+const simCash = (cents = 0) => `$${(Number(cents || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SIM`;
+function closeEconomyPanel(id) { $(id).hidden = true; if (!economyPanelOpen() && MATCH.started && !TOUCH) requestLock(); }
+// NC-LIFE-01A: with the bank's residents running the economy, the console is the City Economy board (City
+// Service /v1/economy/activity): today's wages and sales, Roots visits, stock, decisions and manager changes.
+const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+// A preview room on the bank's accelerated clock sends it; store hours, staff and talk then follow it too.
+function followEconomicClock(e) { const c = e?.life?.clock; if (c) setEconomicClock({ minute: c.minute, acceleration: c.acceleration, at: c.at - multiplayerServerOffset }); }
+function openCityEconomy() {
+  const a = cityService.activity?.() || { status: 'offline' };
+  $('rootsTreasuryTitle').textContent = 'City Economy';
+  if (a.status !== 'ok') {
+    const loading = a.status === 'loading';
+    $('rootsTreasuryGrid').innerHTML = `<div class="eco-stat"><small>City Service</small><strong>${loading ? 'Loading today\'s activity…' : 'Unavailable right now. Try again shortly.'}</strong></div>`; $('rootsTransactions').innerHTML = '';
+    if (loading) setTimeout(() => { if (!$('rootsTreasury').hidden) openCityEconomy(); }, 1500);
+  } else {
+    const sold = (business) => a.sales.filter((s) => s.business === business).reduce((n, s) => n + s.total, 0), stock = Object.entries(a.stock || {}).map(([p, s]) => `${p.replace('prd_', '').replaceAll('_', ' ')} ${s.quantity}/${s.capacity}`).join(' · ');
+    const stats = [['Wages paid today', `${a.wages} sNERDIE`], ['Corner Market sales', `${sold('biz_corner_market')} sNERDIE`], ['Roots Lounge visits', `${a.rootsVisits} · ${sold('biz_roots_lounge')} sNERDIE`], ['City treasury', `${a.treasury} sNERDIE`],
+      ['Market stock', stock || '—'], ['Managers', `Restock covers ${a.policy?.biz_corner_market?.restockDays ?? '—'} days · Roots ${a.policy?.biz_roots_lounge?.rootsShifts ?? '—'} bartender shift(s)`], ['Deciding residents', `${a.participants} · city day ${a.day}`]];
+    $('rootsTreasuryGrid').innerHTML = stats.map(([label, value]) => `<div class="eco-stat"><small>${label}</small><strong>${esc(value)}</strong></div>`).join('');
+    const managers = (a.managers || []).slice(0, 3).map((m) => `<li><strong>${m.business === 'biz_roots_lounge' ? 'Roots manager' : 'Corner Market manager'}</strong> · day ${m.day}<br><small>${esc(m.reason)}</small></li>`);
+    const decisions = (a.decisions || []).slice(0, 12).map((d) => `<li><strong>${esc(d.resident)}</strong> · ${d.phase === 'plan' ? 'morning plan' : 'after work'} · day ${d.day}<br><small>${esc(d.reason)}</small></li>`);
+    $('rootsTransactions').innerHTML = [...managers, ...decisions].join('') || '<li>No decisions yet today.</li>';
+  }
+  $('rootsTreasury').hidden = false; document.exitPointerLock?.();
+}
+function openTreasury() {
+  if (latestEconomy?.life?.enabled) return openCityEconomy();
+  $('rootsTreasuryTitle').textContent = 'City Treasury';
+  const e = latestEconomy; if (!e) return hud.callout('SIMULATED TREASURY', 'JOIN MULTIPLAYER TO LOAD ECONOMY DATA');
+  const stats = [['Treasury balance', e.treasury?.balance], ['Roots admission revenue', e.roots?.admissionRevenue], ['Other business revenue', e.reports?.otherBusinessRevenue], ['Operating expenses', e.reports?.operatingExpenses], ['Net income', e.reports?.netIncome], ['Your simulated balance', e.player?.balance], ['Simulation hour', e.hour]];
+  $('rootsTreasuryGrid').innerHTML = stats.map(([label, value]) => `<div class="eco-stat"><small>${label}</small><strong>${label === 'Simulation hour' ? Number(value || 0) : simCash(value)}</strong></div>`).join('');
+  $('rootsTransactions').innerHTML = (e.recentTransactions || []).map((tx) => `<li><strong>${String(tx.type).replaceAll('-', ' ')}</strong> · ${simCash(tx.amount)}<br><small>${tx.source} → ${tx.destination} · hour ${tx.hour}</small></li>`).join('') || '<li>No transactions yet.</li>';
+  $('rootsTreasury').hidden = false; document.exitPointerLock?.();
+}
+function openDemand() {
+  const demand = latestEconomy?.demand || [];
+  $('rootsDemandList').innerHTML = demand.map((d) => `<li><strong>${d.text}</strong><br><small>${d.category.replaceAll('-', ' ')} · ${d.requests} request${d.requests === 1 ? '' : 's'} · demand ${Number(d.demand).toFixed(1)}</small></li>`).join('') || '<li>No requests yet. Add the first verified suggestion.</li>';
+  $('rootsSuggestionStatus').textContent = ''; $('rootsDemand').hidden = false; document.exitPointerLock?.();
+}
+function openConversation(residentId) {
+  $('rootsConversation').querySelector('.simulated').textContent = latestEconomy?.life?.enabled ? 'Permanent resident · today\'s decision from the city bank' : 'Persistent resident relationship';
+  rootsConversationResident = residentId; const resident = latestEconomy?.roots?.residents?.find((r) => r.id === residentId);
+  $('rootsConversationTitle').textContent = resident?.name || 'Roots Host';
+  $('rootsResidentIdentity').textContent = resident ? `${resident.occupation.replaceAll('-', ' ')} · ${resident.neighborhood.replaceAll('-', ' ')} · ${resident.activity}` : 'Roots Lounge host';
+  $('rootsDialogue').textContent = 'Choose a topic.'; $('rootsConversation').hidden = false; document.exitPointerLock?.();
+}
+$('rootsTreasuryClose').onclick = () => closeEconomyPanel('rootsTreasury');
+$('rootsDemandClose').onclick = () => closeEconomyPanel('rootsDemand');
+$('rootsConversationClose').onclick = () => closeEconomyPanel('rootsConversation');
+$('rootsSuggestionSubmit').onclick = () => {
+  const text = $('rootsSuggestionText').value.replace(/\s+/g, ' ').trim();
+  if (text.length < 3) return void ($('rootsSuggestionStatus').textContent = 'Enter at least three characters.');
+  if (!multiplayer || multiplayer.state !== 'connected') return void ($('rootsSuggestionStatus').textContent = 'Join multiplayer to submit.');
+  multiplayer.sendEconomy({ action: 'suggest', category: $('rootsSuggestionCategory').value, text }); $('rootsSuggestionStatus').textContent = 'Submitting to the city server…';
+};
+for (const button of $('rootsTopics').querySelectorAll('[data-topic]')) button.onclick = () => multiplayer?.sendEconomy?.({ action: 'interact-resident', residentId: rootsConversationResident, station: 'resident', topic: button.dataset.topic });
 // M7.1D chess at the Central Park tables: the panel pauses movement and releases the mouse while open.
 const chessClient = new ChessClient({ send: (body) => multiplayer?.sendChess(body), mobile: Q.mobile, onOpen: (open) => {
   if (open) { input.moveX = input.moveY = 0; input.fire = input.ads = input.sprint = false; document.exitPointerLock?.(); } else if (MATCH.started && !MATCH.over && !TOUCH) requestLock();
@@ -253,6 +341,7 @@ const bankPanel = new BankPanel({ cityService, founderAccess, onOpen: (open) => 
 const TALK_RANGE_M = 2.6, TALK_REFRESH_MS = 8000;
 const residentPanel = new ResidentPanel({
   founder: { signedIn: () => !!cityService.founderSignedIn, resident: (id) => cityService.founderResident(id) },
+  life: { plan: (id) => cityService.lifePlans?.().plans?.find((p) => p.residentId === id) || null },
   onWaypoint: (placeId) => {
     const poi = cityPoiList?.find((p) => p.id === placeId); if (!poi) return;
     const route = findRoute(navGraph(), player.pos, poi.entry, poi); if (route?.ok) setWaypoint(poi, route);
@@ -327,6 +416,7 @@ const waypointBeacon = new THREE.Mesh(
 waypointBeacon.name = 'waypoint-beacon'; waypointBeacon.visible = false; waypointBeacon.renderOrder = 5; scene.add(waypointBeacon);
 // M6.7A city residents: server-run, drawn nearest-first (iPhone 10, Mac 16).
 const npcRenderer = new NpcRenderer(scene, { mobile: !!Q.mobile, library: npcLibrary, groundAt: (x, z) => groundAt(x, z, 0), castShadow: !Q.lowMemory });
+if (Q.perfReducedNpcs) npcRenderer.maxDrawn = Math.min(2, npcRenderer.maxDrawn);
 const fx = new FX(scene);
 const weapon = new Weapon(scene, camera, player, fx);
 // the arsenal: AK (also the bots' third-person gun), MAC-10, MP5, M700 sniper, plus the RPG-7 launcher
@@ -335,6 +425,8 @@ const ORDER = weaponOrderForProfile(Q.lowMemory);
 const curGun = () => guns[arsenal.cur] || null;
 const launcher = new Launcher(scene, camera, player, fx);
 const arsenal = { cur: 'ak', switchT: 0 };
+let soloEquipment = { weaponId: 'ak', holstered: false };
+const effectiveEquipment = () => multiplayerActive ? localEquipment : soloEquipment;
 // M6.9: single-player shots recoil the third-person avatar (multiplayer shots do so from the server's shot event).
 for (const shooter of [...Object.values(guns), launcher]) shooter.onFire = (dir) => { if (!multiplayerActive) localAvatar?.triggerFire(dir); };
 const practiceResupply = new PracticeResupply(scene, guns, launcher);
@@ -348,7 +440,7 @@ async function ensureWeaponVisual(weaponId) {
 }
 async function selectWeapon(command) {
   const want = requestedWeapon(arsenal.cur, command, ORDER);
-  if (!ORDER.includes(want) || want === arsenal.cur) return;
+  if (!ORDER.includes(want) || (want === arsenal.cur && soloEquipment.weaponId === want && !soloEquipment.holstered)) return;
   pendingWeapon = want;
   const asset = want === 'rpg' ? launcher : guns[want];
   try {
@@ -358,6 +450,7 @@ async function selectWeapon(command) {
     }
     if (pendingWeapon !== want || player.dead) return;
     arsenal.cur = want; for (const k in guns) guns[k].holstered = k !== want;
+    soloEquipment = { weaponId: want, holstered: false };
     await ensureWeaponVisual(want); localAvatar?.setWeapon(want, false);
     const g = guns[want]; hud.callout(want === 'rpg' ? 'RPG-7' : g.name, want === 'rpg' ? `${launcher.loaded + launcher.reserve} ROCKETS` : `${g.mag + g.reserve} ROUNDS`);
   } catch (error) {
@@ -378,7 +471,7 @@ const multiplayerAim = new THREE.Vector3(), aimForward = new THREE.Vector3(), ai
 // barrel, the tracer, and the server's ray agree; otherwise along the camera.
 const localAim = { raised: false, yaw: 0, pitch: 0 }, aimButton = document.getElementById('tAds');
 function updateLocalAim() {
-  const weaponId = multiplayerActive ? localEquipment.weaponId : arsenal.cur, holstered = multiplayerActive && localEquipment.holstered;
+  const { weaponId, holstered } = effectiveEquipment();
   localAim.raised = aimRaised(input, { dead: player.dead, holstered, weaponId });
   if (localAim.raised && thirdCamera.enabled) directionToAim(crosshairAim((MULTIPLAYER_WEAPON_RULES[weaponId] || MULTIPLAYER_WEAPON_RULES.ak).range), localAim);
   else { localAim.yaw = player.yaw + Math.PI; localAim.pitch = player.pitch; }
@@ -430,6 +523,7 @@ let modeCalloutTimer = 0;
 let destructionStreamingStats = { activeStructures: 0, activeHouses: 0, activePanels: 0 };
 const neighborhoodLightPool = [];
 let neighborhoodLightSpecs = [], neighborhoodLightBlock = null;
+const neighborhoodLightFocus = { x: Infinity, z: Infinity };
 // M7.0A2: the Hood lamps (bulbs, glows, pooled lights) follow the city clock's night level
 let lampLevel = 1, lampBulbMat = null, dayNight = null, nightApplied = -1;
 const lampGlows = [];
@@ -474,13 +568,22 @@ function mountDevTimePanel() {
   document.body.append(panel);
 }
 function updateNeighborhoodLights(blockId) {
-  if (blockId === neighborhoodLightBlock) return;
+  const moved = (player.pos.x - neighborhoodLightFocus.x) ** 2 + (player.pos.z - neighborhoodLightFocus.z) ** 2 >= 16;
+  if (blockId === neighborhoodLightBlock && !moved) return;
   neighborhoodLightBlock = blockId;
-  const offsetX = blockId === DUPLICATED_ORIGINAL_NEIGHBORHOOD.id ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX : 0;
-  neighborhoodLightPool.forEach((light, index) => {
-    const spec = neighborhoodLightSpecs[index];
-    light.position.set(spec.x + offsetX, spec.y, spec.z);
-    light.intensity = blockId ? (spec.alley ? 90 : 150) * lampLevel : 0;
+  neighborhoodLightFocus.x = player.pos.x; neighborhoodLightFocus.z = player.pos.z;
+  const playerFill = neighborhoodLightPool[0];
+  if (playerFill) {
+    playerFill.position.set(player.pos.x, player.pos.y + 1.8, player.pos.z);
+    playerFill.color.setHex(0xd6e5ff);
+    playerFill.intensity = 4 * lampLevel;
+  }
+  const nearest = neighborhoodLightSpecs.filter((spec) => spec.blockId === blockId)
+    .sort((a, b) => (a.x - player.pos.x) ** 2 + (a.z - player.pos.z) ** 2 - ((b.x - player.pos.x) ** 2 + (b.z - player.pos.z) ** 2));
+  neighborhoodLightPool.slice(1).forEach((light, index) => {
+    const spec = nearest[index];
+    if (spec) { light.position.set(spec.x, spec.y, spec.z); light.color.setHex(spec.alley ? 0xffc27a : 0xffb46a); light.intensity = (spec.alley ? 72 : 120) * lampLevel; }
+    else light.intensity = 0;
   });
 }
 // Free Roam now loads only the selected local preset. The complete actor roster
@@ -500,7 +603,7 @@ const renderDiagnostics = createRendererDiagnostics({
   scene,
   camera,
   buildId: GAME_BUILD_ID,
-  diagnosticsBuildId: 'm6.3-mobile-render-diagnostics-rc1',
+  diagnosticsBuildId: 'critical-mobile-performance-rc1',
   enabled: renderDiagnosticsEnabled,
   getWorldState: () => ({
     city: city?.stats() || null,
@@ -511,6 +614,39 @@ const renderDiagnostics = createRendererDiagnostics({
 if (renderDiagnosticsEnabled) {
   window.__nerdieRenderDiagnostics = renderDiagnostics.snapshot;
 }
+const mobilePerformanceOverlay = createMobilePerformanceOverlay({
+  enabled: performanceProfile.enabled,
+  renderer,
+  getMetrics: () => {
+    let activeLights = 0;
+    scene.traverseVisible((object) => { if (object.isLight && object.intensity > 0) activeLights++; });
+    const cityStats = city?.stats() || null;
+    const visibleChunks = cityStats?.visibleChunks || [];
+    return {
+      activeLights,
+      activeNpcs: npcRenderer.stats.drawn,
+      loadedChunks: visibleChunks.length,
+      loadedNeighborhoods: destructionStreamingStats.activeStreamingId ? 1 : 0,
+      activeDestructionPanels: destructionStreamingStats.submittedPanels ?? destructionStreamingStats.activePanels,
+      panelLodHouses: destructionStreamingStats.panelLodHouses ?? 0,
+      district: destructionStreamingStats.activeStreamingId || visibleChunks.join(',') || 'N/A',
+    };
+  },
+  getDiagnostics: () => ({
+    buildId: GAME_BUILD_ID,
+    mobile: Q.mobile,
+    lowMemory: Q.lowMemory,
+    adaptiveResolution: adaptiveResolution.snapshot(),
+    controlledExperiment: {
+      resolutionScale: diagnosticRenderScale,
+      reducedShadows: diagnosticFlag('perfShadows') === '0',
+      reducedLights: Q.perfReducedLights,
+      reducedDecor: Q.perfReducedDecor,
+      reducedNpcs: Q.perfReducedNpcs,
+      destructionPanels: destructionControl ?? 'adaptive-distance-lod',
+    },
+  }),
+});
 
 function syncAvatarSelectors(status = '') {
   for (const containerId of ['avatarPresets', 'avatarPresetsLive']) for (const button of $(containerId)?.querySelectorAll('[data-avatar-preset]') || []) button.setAttribute('aria-checked', String(button.dataset.avatarPreset === localAppearance.preset));
@@ -541,7 +677,8 @@ async function applyLocalEquipment(equipment, revision = localEquipmentRevision 
   if (request !== localEquipmentRequest) return false;
   localAvatar?.setWeapon(canonical.weaponId, canonical.holstered);
   if (localAvatar?.gun) localAvatar.gun.visible = localAvatar.obj.visible && !canonical.holstered && !player.dead;
-  if (canonical.weaponId) { arsenal.cur = canonical.weaponId; for (const key in guns) guns[key].holstered = key !== canonical.weaponId; }
+  if (canonical.weaponId) arsenal.cur = canonical.weaponId;
+  for (const key in guns) guns[key].holstered = canonical.holstered || key !== canonical.weaponId;
   for (const button of document.querySelectorAll('#weaponTray [data-weapon]')) button.classList.toggle('selected', button.dataset.weapon === canonical.weaponId && !canonical.holstered);
   hud.callout(canonical.weaponId ? (canonical.holstered ? 'WEAPON HOLSTERED' : `${canonical.weaponId === 'rpg' ? 'RPG-7' : guns[canonical.weaponId]?.name || canonical.weaponId.toUpperCase()} EQUIPPED`) : 'UNARMED', 'SERVER-AUTHORITATIVE CITY PVP');
   return true;
@@ -810,7 +947,7 @@ function startGame(mode = selectedMode, options = {}) {
   practiceResupply.setEnabled(practiceCombat);
   setCombatLobby(false);
   score.red = score.blue = 0; MATCH.left = MATCH.time; MATCH.over = false; MATCH.started = true; for (const n in ab) ab[n].have = 0; snitchUntil = 0;
-  for (const interior of [city?.gunShop, city?.library, city?.bankInterior, city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = false; interior.interior.visible = false; }
+  for (const interior of [city?.rootsLounge, city?.gunShop, city?.library, city?.bankInterior, city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = false; interior.interior.visible = false; }
   city?.interiors?.reset(); floorPanel.close();
   libraryPanel.close(); bankPanel.close(); residentPanel.close();
   setInteriorRenderLayer(false);
@@ -821,7 +958,7 @@ function startGame(mode = selectedMode, options = {}) {
     for (let i = 0; i < 6; i++) bots.push(new Bot(ctx, trooper, 'red', selectArenaSpawn('red').position));
   }
   city?.setMode(combat ? 'combat' : 'free-roam');
-  const freeRoamSpawn = options.spawn?.clone?.() || (city?.apartment && qs.get('spawn') === 'apartment' ? city.apartment.outsideSpawn.clone() : freeCellNear(0, 28, 5));
+  const freeRoamSpawn = options.spawn?.clone?.() || (city?.rootsLounge && qs.get('spawn') === 'roots' ? city.rootsLounge.outsideSpawn.clone() : city?.apartment && qs.get('spawn') === 'apartment' ? city.apartment.outsideSpawn.clone() : freeCellNear(0, 28, 5));
   player.respawn(combat ? selectArenaSpawn('blue', player).position : freeRoamSpawn);
   if (combat) player.protectedUntil = time + RESPAWN_CONFIG.spawnProtectionSeconds;
   else player.protectedUntil = 0;
@@ -837,7 +974,7 @@ function startGame(mode = selectedMode, options = {}) {
   updateNeighborhoodLights(destructionStreamingStats.activeStreamingId);
   if (!combat && Number.isFinite(options.yaw)) player.yaw = options.yaw;
   for (const k in guns) guns[k].holstered = k !== 'ak'; arsenal.cur = 'ak'; pendingWeapon = ''; player.kills = 0; player.deaths = 0;
-  if (!multiplayerActive) { localEquipment = normalizeEquipment(DEFAULT_EQUIPMENT); localEquipmentRevision = 0; localAvatar?.setWeapon('ak', false); }
+  if (!multiplayerActive) { localEquipment = normalizeEquipment(DEFAULT_EQUIPMENT); localEquipmentRevision = 0; soloEquipment = { weaponId: 'ak', holstered: false }; localAvatar?.setWeapon('ak', false); }
   if (freshCombatSession) console.log('new combat ammunition lifecycle:', MATCH.id);
   setCameraMode(!combat && preferThirdPerson);
   document.body.classList.toggle('free-roam', !combat); $('modebadge').textContent = combat ? 'Original Combat' : 'Free Roam · V Camera';
@@ -947,7 +1084,7 @@ function setLocalSafeZone(active) {
 }
 function interiorForSpace(spaceId) {
   if (!city) return null;
-  return spaceId === 'nerdie-arms' ? city.gunShop : spaceId === 'academy-library' ? city.library : spaceId === 'nerdie-city-bank' ? city.bankInterior : spaceId === 'north-court' ? city.apartment : spaceId === 'east-73' ? city.house : spaceId === 'hood-cross-west' ? city.originalHouse : spaceId === 'hood-duplicate-west-5' ? city.duplicatedHouse : null;
+  return spaceId === 'roots-lounge' ? city.rootsLounge : spaceId === 'nerdie-arms' ? city.gunShop : spaceId === 'academy-library' ? city.library : spaceId === 'nerdie-city-bank' ? city.bankInterior : spaceId === 'north-court' ? city.apartment : spaceId === 'east-73' ? city.house : spaceId === 'hood-cross-west' ? city.originalHouse : spaceId === 'hood-duplicate-west-5' ? city.duplicatedHouse : null;
 }
 function applyLocalContext(context, revision = localContextRevision + 1, state = null, safeZone = null) {
   if (!context || revision < localContextRevision) return;
@@ -957,7 +1094,7 @@ function applyLocalContext(context, revision = localContextRevision + 1, state =
   if (spaceId !== 'city') npcRenderer.clear(); // residents are city-only
   if ((spaceId === 'underground') !== (priorSpace === 'underground')) syncStructures();
   setLocalSafeZone(typeof safeZone === 'boolean' ? safeZone : MULTIPLAYER_SPACES[spaceId]?.safeZone === true);
-  for (const interior of [city?.gunShop, city?.library, city?.bankInterior, city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = interior === target; interior.interior.visible = interior === target; }
+  for (const interior of [city?.rootsLounge, city?.gunShop, city?.library, city?.bankInterior, city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = interior === target; interior.interior.visible = interior === target; if (interior === city?.rootsLounge) target === interior ? interior.audio.enter() : interior.audio.exit(); }
   if (target !== city?.library) libraryPanel.close();
   if (target !== city?.bankInterior) bankPanel.close();
   residentPanel.close();
@@ -1098,7 +1235,13 @@ function configureMultiplayerClient() {
       if (message.equipment) applyLocalEquipment(message.equipment, message.equipmentRevision);
       if (message.combat) applyLocalCombat(message.combat);
       if (message.context) applyLocalContext(message.context, message.contextRevision, message.state);
+      if (message.economy) { latestEconomy = message.economy; city?.rootsLounge?.setEconomy(latestEconomy); followEconomicClock(latestEconomy); }
       for (const peer of message.peers || []) { const remote = ensureRemote(peer); if (remote && peer.state) remote.push(peer.state); }
+    } else if (message.type === 'economy') {
+      if (message.snapshot) { latestEconomy = message.snapshot; city?.rootsLounge?.setEconomy(latestEconomy); followEconomicClock(latestEconomy); }
+      if (message.dialogue) $('rootsDialogue').textContent = message.dialogue;
+      if (message.confirmation) { $('rootsSuggestionStatus').textContent = message.confirmation; if (message.suggestion) { $('rootsSuggestionText').value = ''; openDemand(); } }
+      if (message.payment) hud.callout('ROOTS ADMISSION · SIMULATED', `${simCash(message.payment.amount)} · BALANCE ${simCash(message.snapshot?.player?.balance)}`);
     } else if (message.type === 'peer-joined') {
       if (message.player?.bot && !inLocalUnderground()) return;
       ensureRemote(message.player); if (Number.isInteger(message.playerCount)) multiplayerPlayerCount = message.playerCount;
@@ -1157,6 +1300,10 @@ function configureMultiplayerClient() {
     else if (message.type === 'shop') { hud.callout('AMMO RESTOCKED', 'ALL RESERVES FULL · FREE'); sfx.ding(); }
     else if (message.type === 'reject' && message.chess) chessClient.onReject(message);
     else if (message.type === 'reject' && message.talk) { /* a busy resident just keeps walking; the card still works */ }
+    else if (message.type === 'reject' && message.economy) {
+      const copy = { duplicate_suggestion: 'That suggestion is already on the board.', suggestion_rate_limited: 'Suggestion limit reached for this simulation hour.', invalid_suggestion: 'Enter a valid suggestion.', resident_not_in_roots: 'That resident has moved away.', insufficient_simulated_funds: 'Not enough simulated funds.' };
+      $($('rootsConversation').hidden ? 'rootsSuggestionStatus' : 'rootsDialogue').textContent = copy[message.reason] || `Request rejected: ${message.reason}`;
+    }
     else if (message.type === 'reject') { showShopReject(message); if (message.context) applyLocalContext(message.context, message.contextRevision || localContextRevision, message.state, message.safeZone); if (message.combat) applyLocalCombat(message.combat); }
     else if (message.type === 'correction' && message.state) applyServerCorrection(message.state);
   });
@@ -1285,36 +1432,40 @@ async function boot() {
   }
   pmsg.textContent = 'Building the block…';
   await buildWorld(scene, Q, (f) => { loadedFrac = f; pbar.style.width = Math.round(f * 100) + '%'; });
-  if (Q.cityExpansion) { city = buildCityExpansion(scene, { ...Q, cityService }); console.log('city expansion:', JSON.stringify(city.stats())); }
+  if (Q.cityExpansion) { city = buildCityExpansion(scene, { ...Q, cityService, npcLibrary }); console.log('city expansion:', JSON.stringify(city.stats())); }
   // street lamp lights (real point lights) + emissive bulbs
   const bulbGeo = new THREE.SphereGeometry(0.11, 10, 8), bulbMat = new THREE.MeshBasicMaterial({ color: 0xffd9a0, toneMapped: false }); lampBulbMat = bulbMat;
   for (const l of lamps) {
-    const parent = l.cityChunk ? scene.getObjectByName(`city-chunk-${l.cityChunk}`) || scene : scene;
+    const parent = l.parentName ? scene.getObjectByName(l.parentName) || scene : scene;
     const bulb = new THREE.Mesh(bulbGeo, bulbMat); bulb.position.set(l.x, l.y + 0.05, l.z); bulb.scale.set(1, 1.3, 1); parent.add(bulb);
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: fx.flashMat.map, color: 0xffb060, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.55, toneMapped: false })); glow.position.copy(bulb.position); glow.scale.setScalar(1.6); parent.add(glow); lampGlows.push(glow);
   }
   // Original and copied neighborhood lamps share a fixed light pool. Moving
   // the pool when the nearest destructible block changes keeps the Three.js
   // point-light count stable, avoiding runtime shader recompilation.
-  neighborhoodLightSpecs = lamps.filter((lamp) => !lamp.far && !lamp.cityChunk);
-  for (let i = 0; i < neighborhoodLightSpecs.length; i++) {
-    const spec = neighborhoodLightSpecs[i];
-    const light = new THREE.PointLight(spec.alley ? 0xffc27a : 0xffb46a, 0, spec.alley ? 20 : 28, 2);
-    light.name = `neighborhood-stream-light-${i}`; scene.add(light); neighborhoodLightPool.push(light);
+  neighborhoodLightSpecs = lamps.filter((lamp) => !lamp.far && lamp.blockId);
+  const hoodLightBudget = Q.perfReducedLights ? 1 : Q.lowMemory ? 3 : 6;
+  for (let i = 0; i < hoodLightBudget; i++) {
+    const playerFill = i === 0;
+    const light = new THREE.PointLight(playerFill ? 0xd6e5ff : 0xffb46a, 0, playerFill ? 6 : Q.lowMemory ? 17 : 24, 2);
+    light.name = playerFill ? 'neighborhood-player-fill' : `neighborhood-stream-light-${i}`; scene.add(light); neighborhoodLightPool.push(light);
   }
   // destructible brick walls: front-yard walls on the WALL_LOTS lots (two segments each, a gap at the walkway) + two free-standing ones
-  for (const neighborhood of [ORIGINAL_NEIGHBORHOOD_LAYOUT, DUPLICATED_ORIGINAL_NEIGHBORHOOD]) for (const key of WALL_LOTS) {
-    const [s, i] = key.split(':').map(Number); const z0 = -40 + i * GEO.LOT, z1 = z0 + GEO.LOT, x = neighborhood.centerX + s * (GEO.ROAD_HALF + GEO.SIDEWALK + 1.4);
+  const hoodNeighborhoods = [ORIGINAL_NEIGHBORHOOD_LAYOUT, DUPLICATED_ORIGINAL_NEIGHBORHOOD, ...ORIGINAL_STYLE_NEIGHBORHOODS];
+  for (const neighborhood of hoodNeighborhoods) for (const key of WALL_LOTS) {
+    const centerZ = neighborhood.centerZ || 0;
+    const [s, i] = key.split(':').map(Number); const z0 = centerZ - 40 + i * GEO.LOT, z1 = z0 + GEO.LOT, x = neighborhood.centerX + s * (GEO.ROAD_HALF + GEO.SIDEWALK + 1.4);
     const wz = (z0 + z1) / 2 + (s < 0 ? GEO.HOUSE_W / 4 : -GEO.HOUSE_W / 4);
     const a0 = z0 + 0.3, a1 = wz - 0.9, b0 = wz + 0.9, b1 = z1 - 0.3;
-    const streaming = { id: neighborhood.id, centerX: neighborhood.centerX, centerZ: neighborhood.centerZ };
+    const streaming = { id: neighborhood.id, centerX: neighborhood.centerX, centerZ };
     addWall(scene, wallSpec(x, (a0 + a1) / 2, a1 - a0, 7, 1, { id: `${neighborhood.id}-wall-${s}-${i}-a`, streaming }));
     addWall(scene, wallSpec(x, (b0 + b1) / 2, b1 - b0, 7, 1, { id: `${neighborhood.id}-wall-${s}-${i}-b`, streaming }));
   }
-  for (const neighborhood of [ORIGINAL_NEIGHBORHOOD_LAYOUT, DUPLICATED_ORIGINAL_NEIGHBORHOOD]) {
-    const streaming = { id: neighborhood.id, centerX: neighborhood.centerX, centerZ: neighborhood.centerZ };
-    addWall(scene, wallSpec(neighborhood.centerX - 12, 42.2, 6.4, 8, 0, { id: `${neighborhood.id}-freestanding-north`, streaming }));
-    addWall(scene, wallSpec(neighborhood.centerX + 12, -42.2, 6.4, 8, 0, { id: `${neighborhood.id}-freestanding-south`, streaming }));
+  for (const neighborhood of hoodNeighborhoods) {
+    const centerZ = neighborhood.centerZ || 0;
+    const streaming = { id: neighborhood.id, centerX: neighborhood.centerX, centerZ };
+    addWall(scene, wallSpec(neighborhood.centerX - 12, centerZ + 42.2, 6.4, 8, 0, { id: `${neighborhood.id}-freestanding-north`, streaming }));
+    addWall(scene, wallSpec(neighborhood.centerX + 12, centerZ - 42.2, 6.4, 8, 0, { id: `${neighborhood.id}-freestanding-south`, streaming }));
   }
   const houseStructures = new Map();
   const nh = qs.get('nhouses') ? +qs.get('nhouses') : houseDescs.length;
@@ -1469,9 +1620,10 @@ function loop(now) {
   const frameStarted = performanceProfile.start();
   requestAnimationFrame(loop);
   const dt = Math.min(0.1, (now - last) / 1000); last = now; time += dt;
+  if (MATCH.started) adaptiveResolution.frame(dt * 1000, now);
   fpsAcc += dt; fpsN++; if (fpsAcc > 0.5) { hud.fps(Math.round(fpsN / fpsAcc)); fpsAcc = 0; fpsN = 0; }
   const look = poll();
-  if (!MATCH.started || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open || (!input.locked && !TOUCH && !MATCH.over && MATCH.started)) { look.dx = look.dy = 0; }
+  if (!MATCH.started || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open || economyPanelOpen() || (!input.locked && !TOUCH && !MATCH.over && MATCH.started)) { look.dx = look.dy = 0; }
   if (!MATCH.started) { // idle camera drift on the title
     player.yaw += dt * 0.03; player.update(dt, { moveX: 0, moveY: 0 }, { dx: 0, dy: 0 }, time); input.camera = false;
   } else {
@@ -1485,8 +1637,8 @@ function loop(now) {
     if (input.ab) { if (isCombatMode(MATCH.mode)) useAbility(input.ab); input.ab = 0; }
     if (input.camera) { input.camera = false; if (!combatLobbyOpen) toggleCamera(); }
     if (input.map) { input.map = false; setCityMap(!cityMap?.isOpen); }
-    if (cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open) { input.fire = false; input.ads = false; input.jump = false; input.interact = false; input.reload = false; }
-    player.update(dt, MATCH.over || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
+    if (cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open || economyPanelOpen()) { input.moveX = input.moveY = 0; input.fire = false; input.ads = false; input.jump = false; input.interact = false; input.reload = false; }
+    player.update(dt, MATCH.over || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open || economyPanelOpen() ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
     blendServerCorrection(dt);
     if (multiplayerActive && Number.isFinite(localCombat?.health)) {
       player.hp = localCombat.health; player.dead = localCombat.dead === true;
@@ -1504,13 +1656,15 @@ function loop(now) {
       destructionStreamingStats = updateDestructionStreaming(player.pos, Q.lowMemory ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.mobile : DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.desktop, ORIGINAL_NEIGHBORHOOD_LAYOUT.id);
       updateNeighborhoodLights(destructionStreamingStats.activeStreamingId);
     } else if (city && MATCH.mode === GAME_MODES.FREE_ROAM) {
+      city.rootsLounge?.setEconomy(latestEconomy); city.rootsLounge?.updateResidents(dt);
+      const rootsState = city.rootsLounge ? city.rootsLounge.update(player, input, time) : { active: false, transitioned: false, prompt: '' };
       // Ammo (the gun shop) first: while inside it (or stepping through its door) the other interiors stand still
-      const gunShopState = city.gunShop ? city.gunShop.update(player, input, time) : { active: false, transitioned: false, prompt: '' };
+      const gunShopState = rootsState.active || rootsState.transitioned || rootsState.prompt || !city.gunShop ? { active: !!city.gunShop?.active, transitioned: false, prompt: '' } : city.gunShop.update(player, input, time);
       // M7.2 the Academy Library, next: its stations open the reading panel
-      const libraryState = gunShopState.active || gunShopState.transitioned || !city.library || libraryPanel.open ? { active: !!city.library?.active, transitioned: false, prompt: '' } : city.library.update(player, input, time);
+      const libraryState = rootsState.active || rootsState.transitioned || gunShopState.active || gunShopState.transitioned || !city.library || libraryPanel.open ? { active: !!city.library?.active, transitioned: false, prompt: '' } : city.library.update(player, input, time);
       // Phase 2.1 the Nerdie City Bank: an explicit ENTER at the North Market door; its stations open the bank panel or the wallet
-      const bankInteriorState = gunShopState.active || gunShopState.transitioned || libraryState.active || libraryState.transitioned || !city.bankInterior || bankPanel.open ? { active: !!city.bankInterior?.active, transitioned: false, prompt: '' } : city.bankInterior.update(player, input, time, dt);
-      const apartmentState = gunShopState.active || gunShopState.transitioned || libraryState.active || libraryState.transitioned || bankInteriorState.active || bankInteriorState.transitioned ? { active: false, transitioned: false, prompt: '' } : city.apartment.update(player, input, time);
+      const bankInteriorState = rootsState.active || rootsState.transitioned || gunShopState.active || gunShopState.transitioned || libraryState.active || libraryState.transitioned || !city.bankInterior || bankPanel.open ? { active: !!city.bankInterior?.active, transitioned: false, prompt: '' } : city.bankInterior.update(player, input, time, dt);
+      const apartmentState = rootsState.active || rootsState.transitioned || gunShopState.active || gunShopState.transitioned || libraryState.active || libraryState.transitioned || bankInteriorState.active || bankInteriorState.transitioned ? { active: false, transitioned: false, prompt: '' } : city.apartment.update(player, input, time);
       const originalHouseState = apartmentState.active || apartmentState.transitioned
         ? { active: false, transitioned: false, prompt: '' }
         : city.originalHouse.update(player, input, time);
@@ -1521,15 +1675,15 @@ function loop(now) {
         ? { active: false, transitioned: false, prompt: '' }
         : city.house.update(player, input, time);
       // Stage 2: every other building (generic-interiors.js); the hand-built doors above come first
-      const handBuiltBusy = gunShopState.active || gunShopState.transitioned || gunShopState.prompt || libraryState.active || libraryState.transitioned || libraryState.prompt || bankInteriorState.active || bankInteriorState.transitioned || bankInteriorState.prompt
+      const handBuiltBusy = rootsState.active || rootsState.transitioned || rootsState.prompt || gunShopState.active || gunShopState.transitioned || gunShopState.prompt || libraryState.active || libraryState.transitioned || libraryState.prompt || bankInteriorState.active || bankInteriorState.transitioned || bankInteriorState.prompt
         || apartmentState.active || apartmentState.transitioned || apartmentState.prompt || originalHouseState.active || originalHouseState.transitioned || originalHouseState.prompt || duplicatedHouseState.active || duplicatedHouseState.transitioned || duplicatedHouseState.prompt || houseState.active || houseState.transitioned || houseState.prompt;
       const buildingState = handBuiltBusy || !city.interiors ? { active: !!city.interiors?.active, transitioned: false, prompt: '' } : city.interiors.update(player, input, time);
-      const interiorActive = gunShopState.active || libraryState.active || bankInteriorState.active || apartmentState.active || originalHouseState.active || duplicatedHouseState.active || houseState.active || buildingState.active;
-      const interiorSite = gunShopState.active ? city.gunShop.site : libraryState.active ? city.library.site : bankInteriorState.active ? city.bankInterior.site : apartmentState.active ? city.apartment.site : originalHouseState.active ? city.originalHouse.site : duplicatedHouseState.active ? city.duplicatedHouse.site : houseState.active ? city.house.site : buildingState.active ? city.interiors.site : null;
+      const interiorActive = rootsState.active || gunShopState.active || libraryState.active || bankInteriorState.active || apartmentState.active || originalHouseState.active || duplicatedHouseState.active || houseState.active || buildingState.active;
+      const interiorSite = rootsState.active ? city.rootsLounge.site : gunShopState.active ? city.gunShop.site : libraryState.active ? city.library.site : bankInteriorState.active ? city.bankInterior.site : apartmentState.active ? city.apartment.site : originalHouseState.active ? city.originalHouse.site : duplicatedHouseState.active ? city.duplicatedHouse.site : houseState.active ? city.house.site : buildingState.active ? city.interiors.site : null;
       cityInteriorName = interiorSite?.name || ''; cityInteriorId = interiorSite?.id || '';
       if (time >= storeHoursCheckAt) { storeHoursCheckAt = time + 5; city.setStoresOpen?.(isStoreOpen(economicMinuteOfDay())); } // lights off after 10 PM Pacific
       storeStaff.update(dt, gunShopState.active ? 'nerdie-arms' : buildingState.active ? city.interiors.site?.id : null, gunShopState.active ? city.gunShop.staffStand : buildingState.active ? city.interiors.staffStand : null, player);
-      const venueState = interiorActive || buildingState.transitioned || libraryState.transitioned || bankInteriorState.transitioned || apartmentState.transitioned || originalHouseState.transitioned || duplicatedHouseState.transitioned || houseState.transitioned
+      const venueState = interiorActive || rootsState.transitioned || buildingState.transitioned || libraryState.transitioned || bankInteriorState.transitioned || apartmentState.transitioned || originalHouseState.transitioned || duplicatedHouseState.transitioned || houseState.transitioned
         ? { prompt: '', requestedLobby: false }
         : city.combatVenue.update(player, !!input.interact, time, combatLobbyOpen);
       if (venueState.requestedLobby) {
@@ -1541,28 +1695,32 @@ function loop(now) {
       const bankState = { prompt: '', opened: false, mobileLabel: '' };
       // M7.1D chess tables (open city only; the server checks the seat and everything after it)
       if (chessClient.open && (!multiplayerActive || (localContext.space?.id || 'city') !== 'city')) chessClient.reset();
-      const chessState = interiorActive || buildingState.transitioned || buildingState.prompt || venueState.prompt || bankState.prompt || libraryState.transitioned || apartmentState.transitioned || originalHouseState.transitioned || duplicatedHouseState.transitioned || houseState.transitioned
+      const chessState = interiorActive || rootsState.transitioned || buildingState.transitioned || buildingState.prompt || venueState.prompt || bankState.prompt || libraryState.transitioned || apartmentState.transitioned || originalHouseState.transitioned || duplicatedHouseState.transitioned || houseState.transitioned
         ? { prompt: '', mobileLabel: '' }
         : chessClient.update(player, !!input.interact, multiplayerActive && multiplayer?.state === 'connected');
-      const otherPrompt = gunShopState.prompt || libraryState.prompt || bankInteriorState.prompt || apartmentState.prompt || originalHouseState.prompt || duplicatedHouseState.prompt || houseState.prompt || buildingState.prompt || venueState.prompt || bankState.prompt || chessState.prompt;
+      const otherPrompt = rootsState.prompt || gunShopState.prompt || libraryState.prompt || bankInteriorState.prompt || apartmentState.prompt || originalHouseState.prompt || duplicatedHouseState.prompt || houseState.prompt || buildingState.prompt || venueState.prompt || bankState.prompt || chessState.prompt;
       // Talking to a resident is offered only when nothing else is (doors, counters and tables come first).
       const talkState = otherPrompt ? { prompt: '', mobileLabel: '' } : interiorActive ? staffTalk.update(!!input.interact) : residentTalk.update(!!input.interact);
       const prompt = otherPrompt || talkState.prompt;
       const activeHouseState = [originalHouseState, duplicatedHouseState, houseState].find((state) => state.prompt) || houseState;
-      const mobileLabel = gunShopState.mobileLabel ? gunShopState.mobileLabel : libraryState.mobileLabel ? libraryState.mobileLabel : bankInteriorState.mobileLabel ? bankInteriorState.mobileLabel : venueState.prompt ? 'ENTER COMBAT' : bankState.prompt ? bankState.mobileLabel : chessState.prompt ? chessState.mobileLabel : activeHouseState.prompt && !activeHouseState.blocked ? (activeHouseState.active ? 'EXIT HOUSE' : 'ENTER HOUSE') : buildingState.prompt ? buildingState.mobileLabel : talkState.prompt ? talkState.mobileLabel : '';
+      const mobileLabel = rootsState.mobileLabel ? rootsState.mobileLabel : gunShopState.mobileLabel ? gunShopState.mobileLabel : libraryState.mobileLabel ? libraryState.mobileLabel : bankInteriorState.mobileLabel ? bankInteriorState.mobileLabel : venueState.prompt ? 'ENTER COMBAT' : bankState.prompt ? bankState.mobileLabel : chessState.prompt ? chessState.mobileLabel : activeHouseState.prompt && !activeHouseState.blocked ? (activeHouseState.active ? 'EXIT HOUSE' : 'ENTER HOUSE') : buildingState.prompt ? buildingState.mobileLabel : talkState.prompt ? talkState.mobileLabel : '';
       hud.prompt(prompt, interiorActive, mobileLabel);
       input.interact = false;
       if (gunShopState.action) handleGunShopAction(gunShopState);
       if (libraryState.open) libraryPanel.openStation(libraryState.open);
       if (bankInteriorState.open) { if (bankInteriorState.open.kind === 'wallet') walletBridge.openBank(); else bankPanel.openStation(bankInteriorState.open); }
+      if (rootsState.action === 'resident-conversation') { openConversation(rootsState.station); multiplayer?.sendEconomy?.({ action: 'interact-resident', residentId: rootsState.station, station: 'resident', topic: 'roots' }); }
+      else if (rootsState.action === 'demand') { multiplayer?.sendEconomy?.({ action: 'snapshot' }); openDemand(); }
+      else if (rootsState.action === 'treasury') { multiplayer?.sendEconomy?.({ action: 'snapshot' }); openTreasury(); }
+      else if (rootsState.action === 'volume') hud.callout('ROOTS MUSIC', `VOLUME ${Math.round(city.rootsLounge.audio.volume * 100)}% · OFFICIAL ROOTCEE TRACKS REQUIRED`);
       if (buildingState.floorMenu) floorPanel.show(buildingState.floorMenu);
       if (buildingState.transitioned) applyBuildingTransition(buildingState);
-      const transition = gunShopState.transitioned ? { type: 'shop', spaceId: 'nerdie-arms', state: gunShopState } : libraryState.transitioned ? { type: 'library', spaceId: 'academy-library', state: libraryState } : bankInteriorState.transitioned ? { type: 'bank', spaceId: 'nerdie-city-bank', state: bankInteriorState } : apartmentState.transitioned ? { type: 'apartment', spaceId: 'north-court', state: apartmentState } : originalHouseState.transitioned ? { type: 'house', spaceId: 'hood-cross-west', state: originalHouseState } : duplicatedHouseState.transitioned ? { type: 'house', spaceId: 'hood-duplicate-west-5', state: duplicatedHouseState } : houseState.transitioned ? { type: 'house', spaceId: 'east-73', state: houseState } : null;
+      const transition = rootsState.transitioned ? { type: 'roots', spaceId: 'roots-lounge', state: rootsState } : gunShopState.transitioned ? { type: 'shop', spaceId: 'nerdie-arms', state: gunShopState } : libraryState.transitioned ? { type: 'library', spaceId: 'academy-library', state: libraryState } : bankInteriorState.transitioned ? { type: 'bank', spaceId: 'nerdie-city-bank', state: bankInteriorState } : apartmentState.transitioned ? { type: 'apartment', spaceId: 'north-court', state: apartmentState } : originalHouseState.transitioned ? { type: 'house', spaceId: 'hood-cross-west', state: originalHouseState } : duplicatedHouseState.transitioned ? { type: 'house', spaceId: 'hood-duplicate-west-5', state: duplicatedHouseState } : houseState.transitioned ? { type: 'house', spaceId: 'east-73', state: houseState } : null;
       if (transition) {
         setInteriorRenderLayer(transition.state.active);
         setCameraMode(thirdCamera.enabled); // re-snap after the teleport, keeping the player's view
         console.log(`${transition.type} transition:`, transition.state.active ? 'inside' : 'outside');
-        hud.callout(transition.state.active ? transition.state.name.toUpperCase() : 'BACK ON THE BLOCK', transition.state.active ? (transition.type === 'shop' ? 'GUNS · AMMO · SAFE ZONE' : transition.type === 'library' ? 'GUIDES · PRACTICE EXAMS · SAFE ZONE' : transition.type === 'bank' ? 'TELLERS · ECONOMY BOARD · MARKET INTELLIGENCE · SAFE ZONE' : transition.type === 'house' ? 'PRIVATE HOUSE INTERIOR' : 'APARTMENT INTERIOR PROTOTYPE') : 'EXPLORE THE CITY');
+        hud.callout(transition.state.active ? transition.state.name.toUpperCase() : 'BACK ON THE BLOCK', transition.state.active ? (transition.type === 'roots' ? 'LIVE MUSIC · RESIDENTS · SIMULATED ECONOMY · SAFE ZONE' : transition.type === 'shop' ? 'GUNS · AMMO · SAFE ZONE' : transition.type === 'library' ? 'GUIDES · PRACTICE EXAMS · SAFE ZONE' : transition.type === 'bank' ? 'TELLERS · ECONOMY BOARD · MARKET INTELLIGENCE · SAFE ZONE' : transition.type === 'house' ? 'PRIVATE HOUSE INTERIOR' : 'APARTMENT INTERIOR PROTOTYPE') : 'EXPLORE THE CITY');
         if (multiplayerActive) multiplayer?.updateSpace(transition.spaceId, transition.state.active ? 'enter' : 'exit');
       }
       city.update(player);
@@ -1583,14 +1741,15 @@ function loop(now) {
       input.interact = false;
     } else { hud.prompt(''); input.interact = false; }
     performanceProfile.end('city-interactions-streaming', systemStarted); systemStarted = performanceProfile.start();
-    thirdCamera.update(dt, false, { combat: multiplayerUnderground || isCombatMode(MATCH.mode), aim: !!input.ads && !player.dead });
+    const equipment = effectiveEquipment(), drawnWeapon = equipment.weaponId && !equipment.holstered ? equipment.weaponId : null;
+    thirdCamera.update(dt, false, { combat: multiplayerUnderground || isCombatMode(MATCH.mode), aim: !!input.ads && !player.dead && !!drawnWeapon });
     city?.apartment?.updateCameraVisibility(camera, player, dt);
     city?.originalHouse?.updateCameraVisibility(camera, player, dt);
     city?.duplicatedHouse?.updateCameraVisibility(camera, player, dt);
     city?.house?.updateCameraVisibility(camera, player, dt);
     if (localAvatar) {
       const show = thirdCamera.enabled && !player.dead && !thirdCamera.obstructed;
-      if (show) localAvatar.play(player.sprinting ? 'Run' : player.planar > 0.25 ? 'Walk' : 'Idle_Gun', LOCOMOTION_FADE);
+      if (show) localAvatar.play(player.sprinting ? 'Run' : player.planar > 0.25 ? 'Walk' : drawnWeapon ? 'Idle_Gun' : 'Idle_Unarmed', LOCOMOTION_FADE);
       // The physics root now remains outside solids; add a small visual-only
       // contact clearance so the run clip's leaning torso/stride does not draw
       // through the surface. This does not alter doorway or physics dimensions.
@@ -1619,7 +1778,13 @@ function loop(now) {
     performanceProfile.end('camera-avatar', systemStarted); systemStarted = performanceProfile.start();
     if (input.swap && !player.dead) {
       if (multiplayerActive) requestMultiplayerEquipment(input.swap);
-      else if (input.swap !== 'holster' && input.swap !== 'unarmed') selectWeapon(input.swap);
+      else if (input.swap === 'unarmed') {
+        soloEquipment = { weaponId: null, holstered: true }; for (const gun of Object.values(guns)) gun.holstered = true; localAvatar?.setWeapon(null, true); input.ads = false;
+      } else if (input.swap === 'holster') {
+        soloEquipment = { weaponId: arsenal.cur, holstered: !soloEquipment.holstered && soloEquipment.weaponId === arsenal.cur };
+        for (const [id, gun] of Object.entries(guns)) gun.holstered = soloEquipment.holstered || id !== arsenal.cur;
+        ensureWeaponVisual(arsenal.cur).then(() => localAvatar?.setWeapon(arsenal.cur, soloEquipment.holstered)); if (soloEquipment.holstered) input.ads = false;
+      } else selectWeapon(input.swap);
     }
     input.swap = '';
     // The attack that cancels protection is consumed before any weapon update,
@@ -1638,11 +1803,11 @@ function loop(now) {
       if (input.reload && weaponId && !localEquipment.holstered) { multiplayer.reloadWeapon(weaponId); input.reload = false; }
       multiplayerTriggerHeld = !!input.fire;
     } else multiplayerTriggerHeld = false;
-    const idle = { fire: false, ads: false, reload: false }, multiplayerVisual = { fire: false, ads: input.ads, reload: false }, live = multiplayerActive ? multiplayerVisual : MATCH.over ? { fire: false } : input;
-    for (const k in guns) { const g = guns[k]; g.baseFov = weapon.baseFov; g.portrait = weapon.portrait; g.fovOwner = arsenal.cur === k || (arsenal.cur === 'rpg' && k === 'ak'); g.update(dt, arsenal.cur === k ? live : idle, look, time); }
+    const idle = { fire: false, ads: false, reload: false }, multiplayerVisual = { fire: false, ads: input.ads && !!drawnWeapon, reload: false }, live = multiplayerActive ? multiplayerVisual : MATCH.over ? { fire: false } : input;
+    for (const k in guns) { const g = guns[k]; g.baseFov = weapon.baseFov; g.portrait = weapon.portrait; g.fovOwner = drawnWeapon === k || (drawnWeapon === 'rpg' && k === 'ak'); g.holstered = drawnWeapon !== k; g.update(dt, drawnWeapon === k ? live : idle, look, time); }
     if (thirdCamera.enabled) for (const g of Object.values(guns)) g.rig.visible = false;
     { const g = guns.m700, on = !thirdCamera.enabled && arsenal.cur === 'm700' && g.ads > 0.85; document.getElementById('scope').classList.toggle('on', on); document.getElementById('xh').style.visibility = on ? 'hidden' : ''; }
-    launcher.portrait = weapon.portrait; launcher.update(dt, multiplayerActive ? multiplayerVisual : MATCH.over ? { fire: false } : input, look, time, !multiplayerActive && arsenal.cur === 'rpg');
+    launcher.portrait = weapon.portrait; launcher.update(dt, multiplayerActive ? multiplayerVisual : MATCH.over ? { fire: false } : input, look, time, !thirdCamera.enabled && drawnWeapon === 'rpg');
     if (thirdCamera.enabled) launcher.rig.visible = false;
     for (const b of bots) {
       if (b.dead && b.respawnAt && time > b.respawnAt && !b.expires && !MATCH.over) { const spawn = selectArenaSpawn(b.team, b); b.respawn(spawn.position, time, spawn.protectionSeconds); }
@@ -1694,6 +1859,7 @@ function loop(now) {
   if (composer) composer.render(); else renderer.render(scene, camera);
   performanceProfile.end('render', systemStarted);
   performanceProfile.frame(frameStarted);
+  mobilePerformanceOverlay.frame(now);
 }
 boot().catch((e) => {
   console.error(e);
@@ -1701,4 +1867,4 @@ boot().catch((e) => {
   window.__showGameEntryFeedback?.(`The city could not finish loading: ${e.message}`, { error: true, retryLabel: 'Reload and retry' });
 });
 // expose for QA
-window.__hw = { npcRenderer, npcLibrary, scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, remotePlayers, applyLocalAppearance, applyLocalEquipment, requestMultiplayerEquipment, ensureWeaponVisual, characterAssetStats, get localAppearance() { return localAppearance; }, get localEquipment() { return localEquipment; }, get localEquipmentRevision() { return localEquipmentRevision; }, get localCombat() { return localCombat; }, get localContext() { return localContext; }, get undergroundMatch() { return undergroundMatch; }, get multiplayer() { return multiplayer; }, get multiplayerActive() { return multiplayerActive; }, get multiplayerDiagnostics() { return { client: multiplayer?.diagnostics?.() || null, localEquipment, localEquipmentRevision, localCombat, localContext, remotes: [...remotePlayers.values()].map((remote) => ({ id: remote.id, appearance: remote.appearance, ...remote.diagnostics() })) }; }, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };
+window.__hw = { npcRenderer, npcLibrary, scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, configureDestructionRendering, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, mobilePerformanceOverlay, adaptiveResolution, remotePlayers, applyLocalAppearance, applyLocalEquipment, requestMultiplayerEquipment, ensureWeaponVisual, characterAssetStats, get localAppearance() { return localAppearance; }, get localEquipment() { return localEquipment; }, get localEquipmentRevision() { return localEquipmentRevision; }, get localCombat() { return localCombat; }, get localContext() { return localContext; }, get undergroundMatch() { return undergroundMatch; }, get multiplayer() { return multiplayer; }, get multiplayerActive() { return multiplayerActive; }, get multiplayerDiagnostics() { return { client: multiplayer?.diagnostics?.() || null, localEquipment, localEquipmentRevision, localCombat, localContext, remotes: [...remotePlayers.values()].map((remote) => ({ id: remote.id, appearance: remote.appearance, ...remote.diagnostics() })) }; }, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };

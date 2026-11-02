@@ -62,7 +62,12 @@ export function entranceWalkways(plan = createCityPlan(), ground = cityGroundLay
     for (const [a, b] of runs) {
       const len = Math.hypot(b.x - a.x, b.z - a.z); if (len < 0.5) continue;
       const dx = (b.x - a.x) / len, dz = (b.z - a.z) / len, px = -dz, pz = dx;
-      for (let t = 0.8; t < len - 0.4; t += len > 3 ? 3 : len) for (const s of [-1, 1]) lamps.push({ x: r2(a.x + dx * t + px * s * (width / 2 + 0.3)), z: r2(a.z + dz * t + pz * s * (width / 2 + 0.3)) });
+      const positions = [];
+      for (let t = 0.8; t < len - 0.4; t += len > 3 ? 3 : len) positions.push(t);
+      if (!positions.length) positions.push(len / 2);
+      const last = positions.at(-1), far = len - 0.8;
+      if (len > 3 && (last === undefined || far - last > 1.2)) positions.push(far);
+      for (const t of positions) for (const s of [-1, 1]) lamps.push({ x: r2(a.x + dx * t + px * s * (width / 2 + 0.3)), z: r2(a.z + dz * t + pz * s * (width / 2 + 0.3)) });
     }
     out.push(Object.freeze({ spaceId: e.spaceId, buildingId: e.buildingId, facing: e.facing, foot: Object.freeze(foot), length, width, segments: Object.freeze(segments), rect: segments[0], lamps: Object.freeze(lamps), setBack: length > 0.45 }));
   }

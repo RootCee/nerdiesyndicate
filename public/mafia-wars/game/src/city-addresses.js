@@ -24,8 +24,11 @@ export function streetAddress(door, facing = null, plan = null) {
   road ||= named.reduce((best, r) => (!best || toRoad(door, r) < toRoad(door, best) ? r : best), null);
   if (!road) return null;
   const vertical = road.depth > road.width, along = vertical ? door.z : door.x, side = vertical ? door.x - road.x : door.z - road.z;
-  const number = 2 * Math.round((along + 300) / 4) + (side >= 0 ? 1 : 0);
-  return { number, street: streetName(road.id), text: `${number} ${streetName(road.id)}` };
+  const street = streetName(road.id), axisRoads = named.filter((r) => streetName(r.id) === street && (r.depth > r.width) === vertical);
+  const minAlong = Math.min(...axisRoads.map((r) => vertical ? r.z - r.depth / 2 : r.x - r.width / 2));
+  const origin = minAlong < -300 ? minAlong : -300;
+  const number = Math.max(0, 2 * Math.round((along - origin) / 4)) + (side >= 0 ? 1 : 0);
+  return { number, street, text: `${number} ${street}` };
 }
 
 // North Court's 36 homes: nine apartments a floor on floors 1-4 (north-court-001 is Apt 101).

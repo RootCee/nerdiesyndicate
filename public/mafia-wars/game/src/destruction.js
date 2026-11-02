@@ -8,7 +8,7 @@
 // breakForce never lets go under a blast: measured in qa/avbd-smoke.html, the wall just topples whole).
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { pbr } from './assets.js';
-import { colliders } from './world.js';
+import { colliders, setNeighborhoodCollisionStream } from './world.js';
 import { selectStreamingDistrict } from './city-layout.js';
 
 export const BLOCK = { x: 0.4, y: 0.2, z: 0.2 };   // garden-wall block (a chunk of mortared bricks)
@@ -25,6 +25,12 @@ const D = { log: new URLSearchParams(location.search).has('breaklog') ? [] : nul
 export const destruction = D;
 let activeStreamingId = null;
 const STREAM_SWITCH_HYSTERESIS = 8;
+let renderProfile = { mobileLod: false, panelDistance: 30 };
+
+export function configureDestructionRendering({ mobileLod = false, panelDistance = 30 } = {}) {
+  renderProfile = { mobileLod: !!mobileLod, panelDistance: Math.max(0, Number(panelDistance) || 0) };
+  return { ...renderProfile };
+}
 
 // ---------- materials ----------
 const mats = {};
@@ -58,17 +64,22 @@ function blockGeometry(sz, tile, swap) {
 function makeStructure(scene, items, geo, mat, extra) {
   const unit = extra.kind === 'house' ? PANEL.x : BLOCK.x;
   const solid = items.filter((it) => !it.pane), panes = items.filter((it) => it.pane);
-  const mesh = new THREE.InstancedMesh(geo, mat, Math.max(1, solid.length)); mesh.castShadow = true; mesh.receiveShadow = true; mesh.frustumCulled = false; mesh.count = solid.length;
+  const mesh = new THREE.InstancedMesh(geo, mat, Math.max(1, solid.length)); mesh.castShadow = true; mesh.receiveShadow = true; mesh.count = solid.length;
   mesh.name = extra.id ? `destructible-${extra.id}-solid-panels` : `destructible-${extra.kind}-solid-panels`;
   const m = new THREE.Matrix4(), s = new THREE.Vector3(1, 1, 1);
   solid.forEach((it, i) => { it.mesh = mesh; it.mi = i; s.set(it.size.x / unit, 1, 1); mesh.setMatrixAt(i, m.compose(it.p, it.q, s)); });
-  mesh.instanceMatrix.needsUpdate = true; scene.add(mesh);
+  mesh.instanceMatrix.needsUpdate = true;
+  // Each destructible structure is its own InstancedMesh, so its instance
+  // bounds are a safe and useful mobile LOD boundary.  Keeping frustum culling
+  // disabled submitted every panel in all 20 streamed houses even when half
+  // the street was behind the camera.
+  mesh.computeBoundingSphere(); mesh.frustumCulled = true; scene.add(mesh);
   let paneMesh = null;
   if (panes.length) {
-    paneMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(PANEL.x, PANEL.y, 0.1), paneMaterial(), panes.length); paneMesh.castShadow = false; paneMesh.receiveShadow = true; paneMesh.frustumCulled = false;
+    paneMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(PANEL.x, PANEL.y, 0.1), paneMaterial(), panes.length); paneMesh.castShadow = false; paneMesh.receiveShadow = true;
     paneMesh.name = extra.id ? `destructible-${extra.id}-pane-panels` : `destructible-${extra.kind}-pane-panels`;
     panes.forEach((it, i) => { it.mesh = paneMesh; it.mi = i; s.set(it.size.x / unit, 1, 1); paneMesh.setMatrixAt(i, m.compose(it.p, it.q, s)); });
-    paneMesh.instanceMatrix.needsUpdate = true; scene.add(paneMesh);
+    paneMesh.instanceMatrix.needsUpdate = true; paneMesh.computeBoundingSphere(); paneMesh.frustumCulled = true; scene.add(paneMesh);
   }
   const bounds = items.reduce((box, item) => ({
     minX: Math.min(box.minX, item.p.x - item.size.x / 2), maxX: Math.max(box.maxX, item.p.x + item.size.x / 2),
@@ -138,6 +149,20 @@ export function addHouse(scene, h) {
   const items = local.map((b) => ({ p: b.c.clone().applyMatrix4(M), q: b.rot ? Mrot.clone().multiply(rotZ) : Mrot.clone(), size: b.size, face: b.face, pane: b.pane }));
   const kind = h.brick ? 'brick' : (h.worn ? 'siding2' : 'siding');
   const spec = makeStructure(scene, items, blockGeometry(PANEL, h.brick ? 1.6 : 1.25, !h.brick), wallMaterial(kind, h.tint), { kind: 'house', id: h.id || null, streaming: h.streaming || null, mass: PANEL.x * PANEL.y * PANEL.z * DENSITY, house: h, Mrot });
+  // Mobile draws intact distant houses as one textured shell instead of
+  // submitting hundreds of independently destructible panels.  Nearby houses
+  // and every damaged house keep the original panel meshes, bodies and
+  // authoritative face state, so this is a presentation LOD—not a gameplay or
+  // destruction simplification.
+  if (renderProfile.mobileLod) {
+    const H = top - base;
+    const shellGeometry = blockGeometry({ x: d, y: H, z: w }, h.brick ? 1.6 : 1.25, !h.brick);
+    shellGeometry.translate(0, base + H / 2, 0);
+    const shell = new THREE.Mesh(shellGeometry, wallMaterial(kind, h.tint));
+    shell.name = h.id ? `destructible-${h.id}-intact-lod-shell` : 'destructible-house-intact-lod-shell';
+    shell.applyMatrix4(M); shell.castShadow = false; shell.receiveShadow = true; shell.visible = false;
+    scene.add(shell); spec.lodShell = shell;
+  }
   for (const [slabIndex, s] of slabs.entries()) {
     const mesh = new THREE.Mesh(blockGeometry(s.size, 1.4, false), wallMaterial('roof', 0)); mesh.castShadow = true; mesh.receiveShadow = true;
     mesh.name = h.id ? `destructible-${h.id}-roof-${slabIndex}` : `destructible-house-roof-${slabIndex}`;
@@ -232,7 +257,8 @@ export function updateDestruction(dt) {
     for (const spec of D.walls) {
       if (!spec.touched) continue;
       spec.bodies.forEach((b, i) => { const p = b.position, r = b.rotation; const it = spec.items[i]; _p.set(p[0], p[1], p[2]); _q.set(r[0], r[1], r[2], r[3]); _s.set(it.size.x / spec.unit, 1, 1); it.mesh.setMatrixAt(it.mi, _m.compose(_p, _q, _s)); });
-      spec.mesh.instanceMatrix.needsUpdate = true; if (spec.paneMesh) spec.paneMesh.instanceMatrix.needsUpdate = true;
+      spec.mesh.instanceMatrix.needsUpdate = true; spec.mesh.computeBoundingSphere();
+      if (spec.paneMesh) { spec.paneMesh.instanceMatrix.needsUpdate = true; spec.paneMesh.computeBoundingSphere(); }
       for (const s of spec.slabs) { const p = s.body.position, r = s.body.rotation; s.mesh.position.set(p[0], p[1], p[2]); s.mesh.quaternion.set(r[0], r[1], r[2], r[3]); }
     }
   } else if (D.mode === 'lite') {
@@ -243,7 +269,10 @@ export function updateDestruction(dt) {
         if (k.p.y < k.size.y / 2) { k.p.y = k.size.y / 2; k.v.set(k.v.x * 0.4, -k.v.y * 0.25, k.v.z * 0.4); k.w.multiplyScalar(0.5); }
         k.q.multiply(_q.setFromAxisAngle(k.w.clone().normalize(), k.w.length() * dt)); _s.set(k.size.x / spec.unit, 1, 1); const it = spec.items[k.i]; it.mesh.setMatrixAt(it.mi, _m.compose(k.p, k.q, _s));
       }
-      if (any) { spec.mesh.instanceMatrix.needsUpdate = true; if (spec.paneMesh) spec.paneMesh.instanceMatrix.needsUpdate = true; }
+      if (any) {
+        spec.mesh.instanceMatrix.needsUpdate = true; spec.mesh.computeBoundingSphere();
+        if (spec.paneMesh) { spec.paneMesh.instanceMatrix.needsUpdate = true; spec.paneMesh.computeBoundingSphere(); }
+      }
       if (spec.roofFall) for (const f of spec.roofFall) {
         if (f.mesh.position.y <= f.restY) continue;
         f.vy -= 9.8 * dt; f.mesh.position.y = Math.max(f.restY, f.mesh.position.y + f.vy * dt);
@@ -271,8 +300,9 @@ export function updateDestructionStreaming(playerPosition, radius = 112, require
   activeStreamingId = requiredStreamingId && groups.has(requiredStreamingId)
     ? requiredStreamingId
     : selectStreamingDistrict([...groups.values()], playerPosition, radius, activeStreamingId, STREAM_SWITCH_HYSTERESIS);
+  setNeighborhoodCollisionStream(activeStreamingId);
 
-  let activeStructures = 0, activeHouses = 0, activePanels = 0;
+  let activeStructures = 0, activeHouses = 0, activePanels = 0, submittedPanels = 0, panelLodHouses = 0;
   for (const spec of D.walls) {
     const stream = spec.streaming;
     // Original and copied Hood Warfare blocks have identical, heavy panel
@@ -282,24 +312,27 @@ export function updateDestructionStreaming(playerPosition, radius = 112, require
     // nearest streamed block active, with hysteresis to prevent midpoint
     // thrashing. Non-streamed structures remain visible.
     const visible = !stream || stream.id === activeStreamingId;
-    if (visible !== spec.streamVisible) {
-      spec.streamVisible = visible;
-      spec.mesh.visible = visible;
-      if (spec.paneMesh) spec.paneMesh.visible = visible;
-      for (const slab of spec.slabs) slab.mesh.visible = visible;
-      if (spec.statics) for (const object of spec.statics) object.visible = visible && !spec.touched;
-    }
+    spec.streamVisible = visible;
+    const centerX = (spec.bounds.minX + spec.bounds.maxX) / 2, centerZ = (spec.bounds.minZ + spec.bounds.maxZ) / 2;
+    const useLodShell = visible && !!spec.lodShell && !spec.touched
+      && Math.hypot(centerX - playerPosition.x, centerZ - playerPosition.z) > renderProfile.panelDistance;
+    spec.mesh.visible = visible && !useLodShell;
+    if (spec.paneMesh) spec.paneMesh.visible = visible && !useLodShell;
+    if (spec.lodShell) spec.lodShell.visible = useLodShell;
+    for (const slab of spec.slabs) slab.mesh.visible = visible;
+    if (spec.statics) for (const object of spec.statics) object.visible = visible && !spec.touched;
     if (!visible) continue;
     activeStructures++; activePanels += spec.items.length;
-    if (spec.kind === 'house') activeHouses++;
+    if (spec.kind === 'house') { activeHouses++; if (useLodShell) panelLodHouses++; }
+    if (!useLodShell) submittedPanels += spec.items.length;
   }
-  return { activeStructures, activeHouses, activePanels, activeStreamingId };
+  return { activeStructures, activeHouses, activePanels, submittedPanels, panelLodHouses, activeStreamingId };
 }
 
 export function beginDestructionPrewarm() {
   const state = [];
   for (const spec of D.walls) {
-    for (const object of [spec.mesh, spec.paneMesh, ...spec.slabs.map((slab) => slab.mesh), ...(spec.statics || [])]) {
+    for (const object of [spec.mesh, spec.paneMesh, spec.lodShell, ...spec.slabs.map((slab) => slab.mesh), ...(spec.statics || [])]) {
       if (!object) continue;
       state.push([object, object.visible, object.frustumCulled]);
       object.visible = true; object.frustumCulled = false;

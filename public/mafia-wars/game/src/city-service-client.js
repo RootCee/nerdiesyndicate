@@ -3,12 +3,18 @@
 // read the same service. Requests are GET only, cached, and polled at most once a minute.
 export const CITY_SERVICE_ENDPOINT = 'https://nerdie-city-service.buddieroots.workers.dev';
 export const REVIEW_CITY_SERVICE_ENDPOINT = 'https://nerdie-city-service.buddieroots.workers.dev';
+// A preview host (Vercel preview, localhost, a private LAN address) may name its own isolated City Service with
+// ?cityService=<origin> (NC-LIFE-01A founder preview). The production site never honours it.
+const previewHost = (host) => host.endsWith('.vercel.app') || host === 'localhost' || /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)\d{1,3}\.\d{1,3}(\.\d{1,3})?$/.test(host);
 export function resolveCityServiceEndpoint(locationLike = globalThis.location) {
   const host = String(locationLike?.hostname || '').toLowerCase();
+  const named = previewHost(host) ? new URLSearchParams(locationLike?.search || '').get('cityService') : null;
+  if (named && /^https?:\/\/[a-z0-9.-]+(:\d{2,5})?\/?$/i.test(named)) return named.replace(/\/+$/, '');
   if (host.endsWith('.vercel.app')) return REVIEW_CITY_SERVICE_ENDPOINT;
   return CITY_SERVICE_ENDPOINT;
 }
 const ECONOMY_TTL_MS = 60_000, MARKET_TTL_MS = 5 * 60_000;
+const ACTIVITY_TTL_MS = 30_000;
 
 export class CityServiceClient {
   constructor({ endpoint = resolveCityServiceEndpoint(), fetchImpl = globalThis.fetch?.bind(globalThis), now = () => Date.now() } = {}) {
@@ -28,6 +34,11 @@ export class CityServiceClient {
       ...signalLines].filter(Boolean);
     return { ...body, status: 'ok', lastRecorded: recorded, lines, ticker: `HISTORICAL MARKET ARCHIVE · LAST RECORD ${recorded} · NOT LIVE PRICES · ` };
   }); }
+  // NC-LIFE-01A: the City Economy board (public aggregates, no balances): wages, sales, Roots visits, stock,
+  // the latest resident decisions and the managers' changes.
+  activity() { return this.#snapshot('/v1/economy/activity', ACTIVITY_TTL_MS, (body) => (body && Array.isArray(body.decisions) ? { status: 'ok', ...body } : { status: 'offline' })); }
+  // Today's recorded decisions (one public line per deciding resident), for the resident talk card.
+  lifePlans() { return this.#snapshot('/v1/life/plans', ACTIVITY_TTL_MS, (body) => (body && Array.isArray(body.plans) ? { status: 'ok', ...body } : { status: 'offline', plans: [] })); }
   // Founder Executive Suite: challenge -> the founder wallet signs (through the website) -> 30-minute pass ->
   // oversight figures. The pass lives only in memory; reloading the game signs out.
   async founderSignIn({ address, sign }) {

@@ -100,7 +100,8 @@ export function cityPois(plan = createCityPlan()) {
       category: business.category, status: business.status, x: building.x, z: building.z, entry: { x: entry.x, z: entry.z }, buildingId: building.id,
       // Step straight out of the door before turning, clear of wider neighbours.
       approach: [{ x: entry.x + FRONT_NORMALS[entry.facing][0] * STEP_OUT, z: entry.z + FRONT_NORMALS[entry.facing][1] * STEP_OUT }],
-      description: business.status === 'wallet' ? BANK_COPY.description
+      description: business.id === 'roots-lounge' ? 'Permanent Nerdie City venue. Live music, dancing, bar, seating, VIP, and resident social activity. Protected safe zone.'
+        : business.status === 'wallet' ? BANK_COPY.description
         : business.status === 'staff-only' ? `${business.category}. Staff operations only.`
           : business.status === 'open' ? (business.id === 'nerdie-arms' ? `${business.category}. Restock ammo at the counter. Safe zone.` : `${business.category}. Open for business.`)
             : `${business.category}. Coming soon.`,

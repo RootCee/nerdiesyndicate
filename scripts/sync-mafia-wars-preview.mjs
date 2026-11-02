@@ -11,9 +11,7 @@ if (!sourceRoot) {
   throw new Error('Usage: node scripts/sync-mafia-wars-preview.mjs /absolute/path/to/game/source');
 }
 
-const expectedCommit = 'de95dca176f4ddee3e638ffe73fb53f9f83380a2';
-// Bank Milestone 2.2 uses an isolated server with permanent residents and schedules; production is unaffected.
-const previewMultiplayerService = 'https://nerdie-city-bank-m2-2-preview.buddieroots.workers.dev';
+const expectedCommit = '2964c582f902091b1e02d89582471cbe8d9da5e2';
 const runtimeFiles = ['index.html', 'version.txt'];
 const characterFiles = ['blue_zip.glb', 'navy.glb', 'red_hoodie.glb', 'red_jersey.glb'];
 const npcFiles = ['npc_women.glb', 'npc_men.glb', 'npc_clips_women.glb', 'npc_clips_men.glb', 'LICENSES.md'];
@@ -107,19 +105,6 @@ async function ensureMobileMemoryProfile() {
   });
 }
 
-async function applyPreviewMultiplayerEndpoint() {
-  const endpointPath = path.join(outputRoot, 'src', 'multiplayer-endpoint.js');
-  const endpointSource = await readFile(endpointPath, 'utf8');
-  const endpointPatched = endpointSource.replace(
-    /export const AVATAR_PREVIEW_MULTIPLAYER_SERVICE = '[^']+';/,
-    `export const AVATAR_PREVIEW_MULTIPLAYER_SERVICE = '${previewMultiplayerService}';`,
-  );
-  if (endpointPatched === endpointSource && !endpointSource.includes(previewMultiplayerService)) {
-    throw new Error('Expected the Mafia Wars preview multiplayer endpoint declaration');
-  }
-  await writeFile(endpointPath, endpointPatched);
-}
-
 async function applyProductionMultiplayerEndpoint() {
   const endpointPath = path.join(outputRoot, 'src', 'multiplayer-endpoint.js');
   const endpointSource = await readFile(endpointPath, 'utf8');
@@ -191,7 +176,6 @@ await applyMobileAudioUnlock();
 // Milestone 4 carries the proven iOS safeguards in source. The legacy patch
 // remains as a fallback so older approved sources cannot silently lose them.
 await ensureMobileMemoryProfile();
-await applyPreviewMultiplayerEndpoint();
 await applyProductionMultiplayerEndpoint();
 const avbdWorldPath = path.join(outputRoot, 'vendor', 'three-avbd', 'lib', 'world.js');
 await writeFile(
@@ -219,4 +203,4 @@ await cp(
   path.join(outputRoot, '_release', 'manifest.json')
 );
 
-console.log(`Synced Mafia Wars preview ${expectedCommit} to ${outputRoot}`);
+console.log(`Synced Mafia Wars production candidate ${expectedCommit} to ${outputRoot}`);

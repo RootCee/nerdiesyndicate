@@ -9,8 +9,8 @@
 export const mapDotVisible = (dot, snitch = false) => dot.team !== 'red' || snitch || !!dot.spotted;
 
 export const MINIMAP_BACKGROUND = Object.freeze({
-  colors: Object.freeze({ park: '#3f6b3a', field: '#5a8a4a', civic: '#6a3fae', road: '#2a2f38', alley: '#35383d', walk: '#737a80', house: '#d8d2c5', apartment: '#b88a4a', venue: '#d9ac58', bank: '#c9a24a', garage: '#b3ada2', fence: '#8a9a88', tree: '#2c5a2e', pole: '#9a9a9a' }),
-  order: Object.freeze(['park', 'field', 'road', 'alley', 'walk', 'fence', 'tree', 'garage', 'house', 'apartment', 'venue', 'bank', 'pole']),
+  colors: Object.freeze({ park: '#3f6b3a', field: '#5a8a4a', reserved: '#646b4d', civic: '#6a3fae', road: '#2a2f38', parking: '#424850', alley: '#35383d', walk: '#737a80', house: '#d8d2c5', apartment: '#b88a4a', venue: '#d9ac58', bank: '#c9a24a', garage: '#b3ada2', fence: '#8a9a88', tree: '#2c5a2e', pole: '#9a9a9a' }),
+  order: Object.freeze(['park', 'field', 'reserved', 'road', 'parking', 'alley', 'walk', 'fence', 'tree', 'garage', 'house', 'apartment', 'venue', 'bank', 'pole']),
 });
 
 // Draws the baked top-down background (x right, z down in canvas pixels; the
@@ -22,8 +22,8 @@ export function drawMapRects(g, rects, bounds, S) {
     g.fillStyle = colors[t];
     if (t === 'tree') { g.beginPath(); g.arc((r.x + r.w / 2 - bounds.minX) * S, (r.z + r.h / 2 - bounds.minZ) * S, r.w / 2 * S, 0, 6.3); g.fill(); continue; }
     g.fillRect((r.x - bounds.minX) * S, (r.z - bounds.minZ) * S, Math.max(1, r.w * S), Math.max(1, r.h * S));
-    if (t === 'house' || t === 'apartment' || t === 'venue' || t === 'bank') {
-      g.strokeStyle = t === 'venue' || t === 'bank' ? '#ffe29a' : '#8c8578'; g.lineWidth = t === 'venue' || t === 'bank' ? 2 : 1;
+    if (t === 'reserved' || t === 'house' || t === 'apartment' || t === 'venue' || t === 'bank') {
+      g.strokeStyle = t === 'venue' || t === 'bank' ? '#ffe29a' : t === 'reserved' ? '#c1ba8c' : '#8c8578'; g.lineWidth = t === 'venue' || t === 'bank' ? 2 : 1;
       g.strokeRect((r.x - bounds.minX) * S, (r.z - bounds.minZ) * S, r.w * S, r.h * S);
     }
   }

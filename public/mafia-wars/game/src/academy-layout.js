@@ -3,7 +3,7 @@ import { LIBRARY_STAIRS, entrySteps, flightDepth } from './entry-steps.js';
 // client (academy.js, library-system.js), resident navigation, the map, the server, and the tests
 // all read it.
 //
-// The city grows east from x 244 to x 420. Academy Avenue (x 252) runs the city's full depth along
+// The Academy occupies the original east expansion from x 244 to x 420. Academy Avenue (x 252) runs the city's full depth along
 // the park's east edge; North Cross, South Cross and South Market now end at it (T junctions), so no
 // street runs into the campus. The campus fills x 261..418, z -42..146 (157 x 188 m): a walled street
 // front with a gate facing North Cross, an avenue of trees to a central quad with the Syndicate

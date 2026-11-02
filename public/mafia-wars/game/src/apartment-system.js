@@ -136,7 +136,7 @@ export class HybridApartmentSystem {
     box(g, metal, [1.2, 1.8, 0.75], [cx + 5.4, y + 0.9, cz - 4.25], 'apartment-fridge');
     box(g, accent, [3.4, 0.65, 1.8], [cx + 3.4, y + 0.325, cz + 2.7], 'apartment-sofa');
     box(g, floor, [2.8, 0.45, 4.2], [cx - 2.4, y + 0.225, cz - 2.25], 'apartment-bed');
-    const fill = new THREE.AmbientLight(0xffead6, this.mobile ? 0.62 : 0.78); fill.name = 'apartment-interior-fill'; g.add(fill);
+    const fill = new THREE.AmbientLight(0xffead6, this.mobile ? 0.72 : 0.82); fill.name = 'apartment-interior-fill'; g.add(fill);
     const light = new THREE.PointLight(0xffd19a, this.mobile ? 35 : 55, 14, 2); light.position.set(cx, y + 2.7, cz); light.name = 'apartment-interior-key'; g.add(light);
     wallCollider(this.addCollider, cx, y - 0.05, cz, w, 0.2, d, { step: true, interior: s.id });
     wallCollider(this.addCollider, cx, y + h / 2, cz - d / 2, w, h, t, { interior: s.id });

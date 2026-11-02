@@ -1,6 +1,21 @@
 export const PRODUCTION_MULTIPLAYER_SERVICE = 'https://nerdie-city-multiplayer-v4.buddieroots.workers.dev';
-export const AVATAR_PREVIEW_MULTIPLAYER_SERVICE = 'https://nerdie-city-bank-m2-2-preview.buddieroots.workers.dev';
+export const HOOD_EXPANSION_PREVIEW_HOST = 'nerdie-city-hood-expansion-preview.vercel.app';
+export const HOOD_EXPANSION_PREVIEW_ORIGIN = `https://${HOOD_EXPANSION_PREVIEW_HOST}`;
+export const PREVIEW_MULTIPLAYER_SERVICES = Object.freeze({
+  'nerdie-city-hood-expansion-preview-3tr17yz05-rootcees-projects.vercel.app':
+    'https://nerdie-city-hood-expansion-preview.buddieroots.workers.dev',
+  [HOOD_EXPANSION_PREVIEW_HOST]: 'https://nerdie-city-hood-expansion-preview.buddieroots.workers.dev',
+});
 export const LOCAL_MULTIPLAYER_SERVICE = 'http://127.0.0.1:8787';
+
+export function isHoodExpansionPreviewDeploymentHost(hostname) {
+  return /^nerdie-city-hood-expansion-preview-[a-z0-9]{9}-rootcees-projects\.vercel\.app$/.test(hostname);
+}
+
+export function isHoodExpansionPreviewDeploymentOrigin(origin) {
+  return origin.startsWith('https://')
+    && isHoodExpansionPreviewDeploymentHost(origin.slice('https://'.length));
+}
 
 export function resolveMultiplayerService(locationLike = globalThis.location) {
   const hostname = (locationLike?.hostname || '').toLowerCase();
@@ -11,6 +26,11 @@ export function resolveMultiplayerService(locationLike = globalThis.location) {
   const override = new URLSearchParams(locationLike?.search || '').get('mp');
   if (override && (isLocal || isPrivateLan)) return override.replace(/\/$/, '');
   if (isLocal) return LOCAL_MULTIPLAYER_SERVICE;
-  if (hostname.endsWith('.vercel.app')) return AVATAR_PREVIEW_MULTIPLAYER_SERVICE;
+  const previewService = PREVIEW_MULTIPLAYER_SERVICES[hostname]
+    || (isHoodExpansionPreviewDeploymentHost(hostname)
+      ? PREVIEW_MULTIPLAYER_SERVICES[HOOD_EXPANSION_PREVIEW_HOST]
+      : null);
+  if (previewService) return previewService;
+  if (hostname.endsWith('.vercel.app')) throw new Error('This preview build has no isolated multiplayer Worker configured.');
   return PRODUCTION_MULTIPLAYER_SERVICE;
 }

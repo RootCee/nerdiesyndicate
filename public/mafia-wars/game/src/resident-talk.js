@@ -5,12 +5,12 @@ import { scheduledPlace } from './resident-schedule.js';
 
 export const TALK_PLACES = Object.freeze([
   { id: 'nerdie-city-bank', name: 'the bank' }, { id: 'nerdie-arms', name: 'Ammo' }, { id: 'corner-market', name: 'the Corner Market' },
-  { id: 'three-piece', name: '3 Piece' }, { id: 'the-blaq-note', name: 'The Blaq Note' }, { id: 'city-wholesaler', name: 'the City Wholesaler' },
+  { id: 'three-piece', name: '3 Piece' }, { id: 'roots-lounge', name: 'Roots Lounge' }, { id: 'city-wholesaler', name: 'the City Wholesaler' },
   { id: 'laundromat', name: 'the Laundromat' }, { id: 'sneaker-shop', name: 'the Sneaker Shop' },
   { id: 'city-hall', name: 'City Hall' }, { id: 'academy-library', name: 'the Library' }, { id: 'central-park', name: 'Central Park' },
   { id: 'north-court', name: 'North Court Apartments' },
 ]);
-const NAMED = Object.freeze(['City Hall', 'Corner Market', 'Ammo', '3 Piece', 'The Blaq Note', 'City Wholesaler', 'Laundromat', 'Sneaker Shop']);
+const NAMED = Object.freeze(['City Hall', 'Corner Market', 'Ammo', '3 Piece', 'Roots Lounge', 'City Wholesaler', 'Laundromat', 'Sneaker Shop']);
 const placeName = (id) => TALK_PLACES.find((p) => p.id === id)?.name || 'work';
 const PLACE_TITLE = (name) => name.charAt(0).toUpperCase() + name.slice(1);
 

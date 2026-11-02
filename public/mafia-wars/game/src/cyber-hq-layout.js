@@ -1,7 +1,7 @@
 // Stage 2, step 3: Cyber HQ, the upscale tech neighbourhood (founder-approved plan, 27 October 2026). The
-// land kept east of Neon Market (x 140 to 420, z 148 to 356), north of Central Park and the Academy: Neon
-// Boulevard, Neon Cross and Neon Row carry on east as Cyber Boulevard, Cyber Cross and Cyber Row; Academy
-// Avenue carries on north; Cyber Lane, Cyber Way and Circuit Street run between. Eight blocks:
+// land now sits east of the Neon/Cyber transition strip (x 196 to 476, z 148 to 356), north of Central
+// Park and the Academy. Neon Boulevard, Neon Cross and Neon Row carry on east as Cyber Boulevard, Cyber
+// Cross and Cyber Row; Cyber Avenue, Cyber Lane, Cyber Way and Circuit Street run north/south. Eight blocks:
 //
 //   - 95 business lots, one per Business NFT license assigned to Cyber HQ: 40 Tech, 35 Manufacturing,
 //     10 Financial, 5 Retail, 5 Entertainment. Wider lots than Neon Market's (14 m: studios and workshops);
@@ -13,27 +13,28 @@ import { ACADEMY_AVENUE } from './academy-layout.js';
 import { assignLicenses, mergeToCount, shopRow } from './lot-district.js';
 
 const r2 = (v) => Math.round(v * 100) / 100;
+const X_OFFSET = 56;
 
-export const CYBER_HQ = Object.freeze({ id: 'cyber-hq', name: 'Cyber HQ', minX: 140, maxX: 420, minZ: 148, maxZ: 356 });
+export const CYBER_HQ = Object.freeze({ id: 'cyber-hq', name: 'Cyber HQ', minX: 196, maxX: 476, minZ: 148, maxZ: 356 });
 
 export const CYBER_ROADS = Object.freeze([
   { id: 'cyber-boulevard', x: 279, z: 156, width: 278, depth: 12 },
   { id: 'cyber-cross', x: 279, z: 252, width: 278, depth: 10 },
   { id: 'cyber-row', x: 279, z: 349, width: 278, depth: 10 },
-  // Academy Avenue carries on north from the old city edge (z 148)
+  // The Cyber grid sits beyond the transition strip; Academy Avenue remains west of it.
   { id: 'cyber-avenue', x: ACADEMY_AVENUE.x, z: 252, width: ACADEMY_AVENUE.width, depth: 208 },
   // from Cyber Boulevard (T junctions) to the north edge
   { id: 'cyber-lane', x: 194, z: 252, width: 8, depth: 204 },
   { id: 'cyber-way', x: 336, z: 253, width: 10, depth: 206 },
   { id: 'circuit-street', x: 414, z: 253, width: 8, depth: 206 },
-].map((r) => Object.freeze(r)));
+].map((r) => Object.freeze({ ...r, x: r.x + X_OFFSET })));
 export const CYBER_STREET_NAMES = Object.freeze({
-  'cyber-boulevard': 'Cyber Boulevard', 'cyber-cross': 'Cyber Cross', 'cyber-row': 'Cyber Row', 'cyber-avenue': 'Academy Avenue',
+  'cyber-boulevard': 'Cyber Boulevard', 'cyber-cross': 'Cyber Cross', 'cyber-row': 'Cyber Row', 'cyber-avenue': 'Cyber Avenue',
   'cyber-lane': 'Cyber Lane', 'cyber-way': 'Cyber Way', 'circuit-street': 'Circuit Street',
 });
 
-const COLS = [[142, 188], [200, 245], [259, 329], [343, 408]], ROWS = [[164, 245], [259, 342]];
-export const CYBER_TOWER = Object.freeze({ id: 'cyber-tower', name: 'Cyber Tower', kind: 'cyber-tower', x: 294, z: 200, width: 28, depth: 30, height: 75.2, floors: 22, apartments: 100, penthouses: 4, fixedFront: 'south' });
+const COLS = [[144, 188], [200, 245], [259, 329], [343, 408]].map(([min, max]) => [min + X_OFFSET, max + X_OFFSET]), ROWS = [[164, 245], [259, 342]];
+export const CYBER_TOWER = Object.freeze({ id: 'cyber-tower', name: 'Cyber Tower', kind: 'cyber-tower', x: 294 + X_OFFSET, z: 200, width: 28, depth: 30, height: 75.2, floors: 22, apartments: 100, penthouses: 4, fixedFront: 'south' });
 
 const LOT = 14, SHOP_HEIGHTS = [9.2, 10.4, 8.8, 11.2];
 const BLOCKS = {
@@ -42,8 +43,8 @@ const BLOCKS = {
 };
 
 export const CYBER_LICENSES = Object.freeze({ tech: 40, manufacturing: 35, financial: 10, retail: 5, entertainment: 5 });
-// Financial and Tech on Cyber Boulevard, Tech on Academy Avenue, Manufacturing on the quieter streets.
-const STREET_OF = (b) => (b.front === 'south' && b.z < 200 ? 'boulevard' : (b.front === 'west' && Math.abs(b.x - 265) < 10) || (b.front === 'east' && Math.abs(b.x - 239) < 10) ? 'avenue' : (b.front === 'north' && b.z < 250) || (b.front === 'south' && b.z > 250 && b.z < 270) ? 'cross' : 'other');
+// Financial and Tech on Cyber Boulevard, Tech on Cyber Avenue, Manufacturing on the quieter streets.
+const STREET_OF = (b) => (b.front === 'south' && b.z < 200 ? 'boulevard' : (b.front === 'west' && Math.abs(b.x - (265 + X_OFFSET)) < 10) || (b.front === 'east' && Math.abs(b.x - (239 + X_OFFSET)) < 10) ? 'avenue' : (b.front === 'north' && b.z < 250) || (b.front === 'south' && b.z > 250 && b.z < 270) ? 'cross' : 'other');
 const PREFER = { boulevard: ['financial', 'tech', 'retail'], avenue: ['tech', 'financial', 'entertainment'], cross: ['tech', 'entertainment', 'retail'], other: ['manufacturing', 'tech', 'retail', 'entertainment', 'financial'] };
 
 // Twenty townhomes on the residential block: six along Cyber Cross and Cyber Row, four along Cyber Way and

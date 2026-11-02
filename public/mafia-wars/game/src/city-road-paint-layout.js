@@ -1,6 +1,7 @@
 const PAINT = Object.freeze({ lane: 'lane', crosswalk: 'crosswalk' });
 // M7.0A: lane dashes stop this far past a cross street, clear of its crosswalk (stripes reach ~4.1 m)
 const CROSSWALK_CLEAR = 4.6;
+const CROSSWALK_REACH = 4.2;
 
 function overlap(a0, a1, b0, b1) {
   return Math.max(a0, b0) <= Math.min(a1, b1);
@@ -36,16 +37,90 @@ function addDashes(rects, start, end, fixed, vertical, offset) {
   }
 }
 
-function addCrosswalk(rects, x, z, span, vertical, direction) {
+function addCrosswalk(rects, x, z, span, vertical, direction, group) {
   const approach = 0.85;
   const stripe = 0.34;
   const step = 0.78;
   for (let i = 0; i < 5; i++) {
     const shift = direction * (approach + i * step);
     rects.push(vertical
-      ? { x, z: z + shift, width: Math.max(2, span - 1), depth: stripe, kind: PAINT.crosswalk }
-      : { x: x + shift, z, width: stripe, depth: Math.max(2, span - 1), kind: PAINT.crosswalk });
+      ? { x, z: z + shift, width: Math.max(2, span - 1), depth: stripe, kind: PAINT.crosswalk, group }
+      : { x: x + shift, z, width: stripe, depth: Math.max(2, span - 1), kind: PAINT.crosswalk, group });
   }
+}
+
+const extent = (road) => ({
+  minX: road.x - road.width / 2, maxX: road.x + road.width / 2,
+  minZ: road.z - road.depth / 2, maxZ: road.z + road.depth / 2,
+});
+
+// A junction owns only the approaches on which road surface actually continues
+// beyond the crossing. This distinguishes a four-way crossing from a T junction
+// and prevents endpoint-touching roads from producing fragments of a crosswalk.
+export function classifyRoadJunctions(roads) {
+  const vertical = roads.filter((road) => road.depth > road.width && road.width >= 8);
+  const horizontal = roads.filter((road) => road.width > road.depth && road.depth >= 8);
+  const junctions = [];
+  for (const northSouth of vertical) for (const eastWest of horizontal) {
+    const v = extent(northSouth), h = extent(eastWest);
+    const minX = Math.max(v.minX, h.minX), maxX = Math.min(v.maxX, h.maxX);
+    const minZ = Math.max(v.minZ, h.minZ), maxZ = Math.min(v.maxZ, h.maxZ);
+    if (maxX - minX <= 0.01 || maxZ - minZ <= 0.01) continue;
+    const approaches = Object.freeze({
+      north: v.maxZ >= h.maxZ + CROSSWALK_REACH,
+      south: v.minZ <= h.minZ - CROSSWALK_REACH,
+      east: h.maxX >= v.maxX + CROSSWALK_REACH,
+      west: h.minX <= v.minX - CROSSWALK_REACH,
+    });
+    const count = Object.values(approaches).filter(Boolean).length;
+    if (count < 2) continue;
+    junctions.push(Object.freeze({
+      vertical: northSouth.id, horizontal: eastWest.id,
+      x: northSouth.x, z: eastWest.z, minX, maxX, minZ, maxZ,
+      approaches, type: count === 4 ? 'four-way' : count === 3 ? 't-junction' : 'corner',
+    }));
+  }
+  return junctions;
+}
+
+export function classifyRoadEndpoints(roads, sidewalkWidth = 2) {
+  const streets = roads.filter((road) => road.width >= 8 && road.depth >= 8);
+  const endpoints = [];
+  for (const road of streets) {
+    const vertical = road.depth > road.width;
+    for (const direction of [-1, 1]) {
+      const cap = vertical
+        ? {
+          minX: road.x - road.width / 2 - sidewalkWidth,
+          maxX: road.x + road.width / 2 + sidewalkWidth,
+          minZ: direction < 0 ? road.z - road.depth / 2 - sidewalkWidth : road.z + road.depth / 2,
+          maxZ: direction < 0 ? road.z - road.depth / 2 : road.z + road.depth / 2 + sidewalkWidth,
+        }
+        : {
+          minX: direction < 0 ? road.x - road.width / 2 - sidewalkWidth : road.x + road.width / 2,
+          maxX: direction < 0 ? road.x - road.width / 2 : road.x + road.width / 2 + sidewalkWidth,
+          minZ: road.z - road.depth / 2 - sidewalkWidth,
+          maxZ: road.z + road.depth / 2 + sidewalkWidth,
+        };
+      const connectedBy = streets
+        .filter((other) => other.id !== road.id)
+        .filter((other) => {
+          const box = extent(other);
+          return Math.min(cap.maxX, box.maxX) - Math.max(cap.minX, box.minX) > 0.01
+            && Math.min(cap.maxZ, box.maxZ) - Math.max(cap.minZ, box.minZ) > 0.01;
+        })
+        .map((other) => other.id);
+      endpoints.push(Object.freeze({
+        id: `${road.id}:${vertical ? (direction < 0 ? 'south' : 'north') : (direction < 0 ? 'west' : 'east')}`,
+        road: road.id,
+        direction: vertical ? (direction < 0 ? 'south' : 'north') : (direction < 0 ? 'west' : 'east'),
+        type: connectedBy.length ? 'junction' : 'endpoint',
+        connectedBy: Object.freeze(connectedBy),
+        ...cap,
+      }));
+    }
+  }
+  return endpoints;
 }
 
 export function createRoadPaintLayout(roads) {
@@ -71,14 +146,14 @@ export function createRoadPaintLayout(roads) {
     for (const [a, b] of subtractIntervals(start, end, blockers)) addDashes(rects, a, b, road.z, false, 0.14);
   }
 
-  for (const northSouth of vertical) for (const eastWest of horizontal) {
-    const intersects = overlap(northSouth.x, northSouth.x, eastWest.x - eastWest.width / 2, eastWest.x + eastWest.width / 2)
-      && overlap(eastWest.z, eastWest.z, northSouth.z - northSouth.depth / 2, northSouth.z + northSouth.depth / 2);
-    if (!intersects) continue;
-    addCrosswalk(rects, northSouth.x, eastWest.z + eastWest.depth / 2, northSouth.width, true, 1);
-    addCrosswalk(rects, northSouth.x, eastWest.z - eastWest.depth / 2, northSouth.width, true, -1);
-    addCrosswalk(rects, northSouth.x + northSouth.width / 2, eastWest.z, eastWest.depth, false, 1);
-    addCrosswalk(rects, northSouth.x - northSouth.width / 2, eastWest.z, eastWest.depth, false, -1);
+  const byId = new Map(roads.map((road) => [road.id, road]));
+  for (const junction of classifyRoadJunctions(roads)) {
+    const northSouth = byId.get(junction.vertical), eastWest = byId.get(junction.horizontal);
+    const id = `${junction.vertical}:${junction.horizontal}`;
+    if (junction.approaches.north) addCrosswalk(rects, northSouth.x, eastWest.z + eastWest.depth / 2, northSouth.width, true, 1, `${id}:north`);
+    if (junction.approaches.south) addCrosswalk(rects, northSouth.x, eastWest.z - eastWest.depth / 2, northSouth.width, true, -1, `${id}:south`);
+    if (junction.approaches.east) addCrosswalk(rects, northSouth.x + northSouth.width / 2, eastWest.z, eastWest.depth, false, 1, `${id}:east`);
+    if (junction.approaches.west) addCrosswalk(rects, northSouth.x - northSouth.width / 2, eastWest.z, eastWest.depth, false, -1, `${id}:west`);
   }
 
   // Intersections near road endpoints used to leave paint floating on grass or
@@ -89,8 +164,24 @@ export function createRoadPaintLayout(roads) {
     && rect.x + rect.width / 2 <= road.x + road.width / 2 + 0.01
     && rect.z - rect.depth / 2 >= road.z - road.depth / 2 - 0.01
     && rect.z + rect.depth / 2 <= road.z + road.depth / 2 + 0.01);
+  // Keep or reject a five-stripe crosswalk as one unit. Individual clipping was
+  // the source of the broken two- and three-stripe crossings seen on iPhone.
+  const grouped = new Map();
+  rects.forEach((rect, index) => {
+    if (rect.kind !== PAINT.crosswalk) return;
+    (grouped.get(rect.group) || grouped.set(rect.group, []).get(rect.group)).push(index);
+  });
+  const invalidCrosswalk = new Set();
+  for (const indices of grouped.values()) if (indices.length !== 5 || indices.some((index) => !onRoad(rects[index]))) indices.forEach((index) => invalidCrosswalk.add(index));
+  const completeRects = rects.filter((rect, index) => rect.kind !== PAINT.crosswalk || !invalidCrosswalk.has(index));
+  const crosswalks = completeRects.filter((rect) => rect.kind === PAINT.crosswalk);
+  const clearOfCrosswalks = (rect) => rect.kind === PAINT.crosswalk || !crosswalks.some((crosswalk) =>
+    rect.x - rect.width / 2 < crosswalk.x + crosswalk.width / 2
+    && rect.x + rect.width / 2 > crosswalk.x - crosswalk.width / 2
+    && rect.z - rect.depth / 2 < crosswalk.z + crosswalk.depth / 2
+    && rect.z + rect.depth / 2 > crosswalk.z - crosswalk.depth / 2);
   const seen = new Set();
-  return rects.filter(onRoad).filter((rect) => {
+  return completeRects.filter(onRoad).filter(clearOfCrosswalks).filter((rect) => {
     const key = `${rect.kind}:${rect.x.toFixed(3)}:${rect.z.toFixed(3)}:${rect.width.toFixed(3)}:${rect.depth.toFixed(3)}`;
     if (seen.has(key)) return false; seen.add(key); return true;
   });

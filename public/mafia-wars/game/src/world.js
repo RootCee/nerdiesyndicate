@@ -4,9 +4,16 @@ import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { mergeGeometries } from '/mafia-wars/game/vendor/three/jsm/utils/BufferGeometryUtils.js';
 import { pbr, weather, prep, loadGLB } from './assets.js';
 import { moveCircleWithSubsteps, resolveCircleAabbs } from './collision-math.js';
-import { DUPLICATED_ORIGINAL_NEIGHBORHOOD, ORIGINAL_EXPANSION_HOUSES, ORIGINAL_NEIGHBORHOOD_LAYOUT } from './city-layout.js';
+import { CITY_BOUNDS, createCityPlan, DUPLICATED_ORIGINAL_NEIGHBORHOOD, ORIGINAL_EXPANSION_HOUSES, ORIGINAL_NEIGHBORHOOD_LAYOUT } from './city-layout.js';
+import { GROUND } from './city-ground-layout.js';
+import { hoodFrontage, ORIGINAL_STYLE_NEIGHBORHOODS } from './hood-neighborhood-layout.js';
 
-export const MAP = { minX: -43, maxX: 43, minZ: -46, maxZ: 46 };
+const ORIGINAL_MAP_BOUNDS = Object.freeze({ minX: -43, maxX: 43, minZ: -46, maxZ: 46 });
+export const MAP = { ...ORIGINAL_MAP_BOUNDS };
+export function configureWorldBounds(cityExpansion) {
+  Object.assign(MAP, cityExpansion ? CITY_BOUNDS : ORIGINAL_MAP_BOUNDS);
+  return MAP;
+}
 // front yards that get a brick wall (destructible) instead of chain-link: 'side:lotIndex'
 export const WALL_LOTS = new Set(['-1:1', '-1:4', '-1:7', '1:2', '1:5', '1:8']);
 export const GEO = { ROAD_HALF: 4.5, SIDEWALK: 2, LOT: 8, HOUSE_W: 6.2 };
@@ -79,6 +86,8 @@ export function removeColliders(list) { const gone = new Set(list); for (let i =
 const solid = addCollider;
 export const houseDescs = [];   // destructible houses (see destruction.js addHouse)
 let curWindows = null;
+let activeNeighborhoodCollisionStream = null;
+export function setNeighborhoodCollisionStream(id) { activeNeighborhoodCollisionStream = id; }
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1);
 function mat(x, y, z, rotY) { _q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotY); _p.set(x, y, z); return _m.compose(_p, _q, _s).clone(); }
@@ -209,12 +218,13 @@ function buildHouse(b, M, spec, hb = null) {
   curWindows = null;
   if (blocks && spec.id) colliders.slice(colliderStart).forEach((collider, index) => {
     if (!collider.destructionId) Object.assign(collider, { destructionId: spec.id, destructionCollider: index });
+    if (spec.streaming?.id) collider.streamingId = spec.streaming.id;
   });
   const c = new THREE.Vector3(0, 0, 0).applyMatrix4(M); const e = new THREE.Vector3(d / 2 + (porch ? 2.4 : 0), 0, w / 2).applyMatrix4(M); const o = new THREE.Vector3(-d / 2, 0, -w / 2).applyMatrix4(M);
   mapRects.push({ x: Math.min(e.x, o.x), z: Math.min(e.z, o.z), w: Math.abs(e.x - o.x), h: Math.abs(e.z - o.z), type: 'house' });
 }
 
-function buildGarage(b, M) {
+function buildGarage(b, M, streamingId = null) {
   const d = 5.6, w = 5.8, H = 2.6, brick = rnd() < 0.5;
   b.add(brick ? 'brick' : 'siding', boxGeo(d, H, w, brick ? 1.6 : 2.2, pick(TINTS)).translate(0, H / 2, 0), M);
   const Rh = 0.9, L = Math.hypot(w / 2 + 0.3, Rh), ang = Math.atan2(Rh, w / 2 + 0.3);
@@ -222,7 +232,10 @@ function buildGarage(b, M) {
   for (const s of [-1, 1]) { const g = gableGeo(w, Rh, 2.2, 0xffffff); g.rotateY(s * Math.PI / 2); g.translate(s * d / 2, H, 0); b.add(brick ? 'brick' : 'siding', g, M); }
   b.add('roll', boxGeo(0.1, 2.2, 2.8, 0.9, 0xffffff).translate(d / 2 + 0.02, 1.12, 0.6), M);
   b.add('trim', boxGeo(0.14, 2.3, 3.0, 1, 0xffffff).translate(d / 2 - 0.02, 1.15, 0.6), M);
-  solidLocal(M, 0, (H + 1) / 2, 0, d, H + 1, w);
+  // One emissive bulkhead per garage improves night wayfinding without adding
+  // a dynamic light or shadow pass on mobile.
+  b.add('glassLit', boxGeo(0.09, 0.18, 0.42, 1, 0xffd39a).translate(d / 2 + 0.08, 2.28, 0.6), M);
+  solidLocal(M, 0, (H + 1) / 2, 0, d, H + 1, w, streamingId ? { streamingId } : {});
   const e = new THREE.Vector3(d / 2, 0, w / 2).applyMatrix4(M), o = new THREE.Vector3(-d / 2, 0, -w / 2).applyMatrix4(M);
   mapRects.push({ x: Math.min(e.x, o.x), z: Math.min(e.z, o.z), w: Math.abs(e.x - o.x), h: Math.abs(e.z - o.z), type: 'garage' });
 }
@@ -268,6 +281,7 @@ export function setWorldNightLevel(level) { if (glassLitMaterial) glassLitMateri
 
 // ---------- main build ----------
 export async function buildWorld(scene, Q, progress = () => {}) {
+  configureWorldBounds(Q.cityExpansion);
   seed = 1337;
   colliders.length = 0; mapRects.length = 0; lamps.length = 0; windowsLit.length = 0; houseDescs.length = 0;
   const materials = {
@@ -287,9 +301,15 @@ export async function buildWorld(scene, Q, progress = () => {}) {
   materials.siding.map.repeat.set(1, 1);
   const b = new Bucket();
   const duplicateWorldGroup = new THREE.Group(); duplicateWorldGroup.name = 'hood-duplicate-world'; scene.add(duplicateWorldGroup);
+  const neighborhoodGroups = new Map(ORIGINAL_STYLE_NEIGHBORHOODS.map((neighborhood) => {
+    const group = new THREE.Group(); group.name = `${neighborhood.id}-world`; scene.add(group);
+    return [neighborhood.id, group];
+  }));
+  const neighborhoodBuckets = new Map(ORIGINAL_STYLE_NEIGHBORHOODS.map((neighborhood) => [neighborhood.id, new Bucket()]));
+  const neighborhoodGroundBuckets = new Map(ORIGINAL_STYLE_NEIGHBORHOODS.map((neighborhood) => [neighborhood.id, new Bucket()]));
 
   // houses: west row faces +x, east row faces -x
-  const lots = [], houseBuckets = [];
+  const lots = [], houseBuckets = [], originalStyleLots = [];
   for (let i = 0; i < 10; i++) {
     const zc = -40 + i * LOT + LOT / 2;
     for (const side of [-1, 1]) {
@@ -298,7 +318,7 @@ export async function buildWorld(scene, Q, progress = () => {}) {
       if (spec.floors === 1.5) spec.floors = 1.4;
       const M = mat(side * (HOUSE_FRONT + HOUSE_DEPTH / 2), 0, zc, side < 0 ? 0 : Math.PI);
       spec.blocks = Q.houses !== false; spec.streaming = { id: ORIGINAL_NEIGHBORHOOD_LAYOUT.id, centerX: 0, centerZ: 0 };
-      const hb = new Bucket(); buildHouse(b, M, spec, hb); houseBuckets.push(hb);
+      const hb = new Bucket(); buildHouse(b, M, spec, hb); houseBuckets.push({ bucket: hb, target: scene });
       const garage = rnd() < 0.75 ? { zOffset: rr(-0.6, 0.6) } : null;
       lots.push({ centerX: 0, side, row, index: i, zc, spec, garage });
       if (garage) buildGarage(b, mat(side * (ALLEY_X + 2 + 2.8 + 0.3), 0, zc + garage.zOffset, side < 0 ? Math.PI : 0));
@@ -317,7 +337,7 @@ export async function buildWorld(scene, Q, progress = () => {}) {
     };
     const hb = new Bucket();
     buildHouse(b, mat(centerX + lot.side * (HOUSE_FRONT + HOUSE_DEPTH / 2), 0, lot.zc, lot.side < 0 ? 0 : Math.PI), spec, hb);
-    houseBuckets.push(hb);
+    houseBuckets.push({ bucket: hb, target: scene });
     if (lot.garage) buildGarage(b, mat(centerX + lot.side * (ALLEY_X + 2 + 2.8 + 0.3), 0, lot.zc + lot.garage.zOffset, lot.side < 0 ? Math.PI : 0));
     return { ...lot, centerX, spec };
   });
@@ -328,7 +348,75 @@ export async function buildWorld(scene, Q, progress = () => {}) {
   for (const site of ORIGINAL_EXPANSION_HOUSES) {
     const hb = new Bucket();
     buildHouse(b, mat(site.x, 0, site.z, site.rotY), { ...site.spec, id: site.id, name: site.name, blocks: Q.houses !== false }, hb);
-    houseBuckets.push(hb);
+    houseBuckets.push({ bucket: hb, target: scene });
+  }
+  if (Q.cityExpansion) for (const neighborhood of ORIGINAL_STYLE_NEIGHBORHOODS) {
+    const centerX = neighborhood.centerX, centerZ = neighborhood.centerZ;
+    const neighborhoodBucket = neighborhoodBuckets.get(neighborhood.id);
+    const target = neighborhoodGroups.get(neighborhood.id);
+    for (let i = 0; i < 10; i++) {
+      const zc = centerZ - 40 + i * LOT + LOT / 2;
+      for (const side of [-1, 1]) {
+        const row = side < 0 ? 'west' : 'east';
+        const spec = {
+          id: `${neighborhood.housePrefix}-${row}-${i}`,
+          name: `${neighborhood.districtId.replaceAll('-', ' ')} Hood House ${row} ${i + 1}`,
+          floors: rnd() < 0.2 ? 1.4 : 2,
+          brick: rnd() < 0.35,
+          worn: rnd() < 0.22,
+          tint: pick(TINTS),
+          ridgeX: rnd() < 0.7,
+          porch: rnd() < 0.85,
+          chimney: rnd() < 0.5,
+          blocks: Q.houses !== false,
+          streaming: { id: neighborhood.id, centerX, centerZ },
+        };
+        const M = mat(centerX + side * (HOUSE_FRONT + HOUSE_DEPTH / 2), 0, zc, side < 0 ? 0 : Math.PI);
+        const hb = new Bucket();
+        buildHouse(neighborhoodBucket, M, spec, hb);
+        houseBuckets.push({ bucket: hb, target });
+        const garage = neighborhood.garageLots.includes(i) ? { zOffset: 0 } : null;
+        if (garage) buildGarage(neighborhoodBucket, mat(centerX + side * (ALLEY_X + 2 + 2.8 + 0.3), 0, zc, side < 0 ? Math.PI : 0), neighborhood.id);
+        originalStyleLots.push({ centerX, centerZ, side, row, index: i, zc, spec, garage, target, neighborhoodId: neighborhood.id });
+      }
+    }
+  }
+  if (Q.cityExpansion) {
+    const expansionPlan = createCityPlan(Q.lowMemory ? 'mobile' : 'desktop');
+    const homes = expansionPlan.districts.flatMap((district) => district.buildings).filter((home) => home.destructible);
+    const streamGroups = new Map();
+    for (const home of homes) {
+      const district = expansionPlan.districts.find((item) => item.id === `residential-${home.districtId}`);
+      const side = home.x < district.center.x ? 'west' : 'east';
+      const id = `residential-${home.districtId}-${side}`;
+      const group = streamGroups.get(id) || { id, centerX: 0, centerZ: 0, count: 0 };
+      group.centerX += home.x; group.centerZ += home.z; group.count++;
+      streamGroups.set(id, group);
+    }
+    for (const [id, group] of streamGroups) streamGroups.set(id, { id, centerX: group.centerX / group.count, centerZ: group.centerZ / group.count });
+    const frontRotation = { east: 0, west: Math.PI, north: -Math.PI / 2, south: Math.PI / 2 };
+    for (const home of homes) {
+      const district = expansionPlan.districts.find((item) => item.id === `residential-${home.districtId}`);
+      const side = home.x < district.center.x ? 'west' : 'east';
+      const alongX = home.front === 'north' || home.front === 'south';
+      const spec = {
+        id: home.id,
+        name: home.name,
+        d: alongX ? home.depth : home.width,
+        w: alongX ? home.width : home.depth,
+        floors: 2,
+        brick: home.districtId === 'dark-alley',
+        tint: home.tint,
+        ridgeX: true,
+        porch: true,
+        blocks: Q.houses !== false,
+          litChance: 0.45,
+        streaming: streamGroups.get(`residential-${home.districtId}-${side}`),
+      };
+      const hb = new Bucket();
+      buildHouse(b, mat(home.x, 0, home.z, frontRotation[home.front]), spec, hb);
+      houseBuckets.push({ bucket: hb, target: scene });
+    }
   }
   // backdrop rows beyond the cross streets (not reachable)
   if (!Q.cityExpansion) for (let i = 0; i < 9; i++) for (const s of [-1, 1]) {
@@ -336,9 +424,10 @@ export async function buildWorld(scene, Q, progress = () => {}) {
     buildHouse(b, mat(x, 0, s * 60, s < 0 ? Math.PI / 2 : -Math.PI / 2), { floors: 2, brick: rnd() < 0.4, tint: pick(TINTS), ridgeX: rnd() < 0.6, porch: true, chimney: rnd() < 0.5, collide: false, litChance: 0.3 });
   }
   const kit = b.build(materials, scene, true);
-  houseBuckets.forEach((hb, i) => {
+  for (const neighborhood of ORIGINAL_STYLE_NEIGHBORHOODS) neighborhoodBuckets.get(neighborhood.id).build(materials, neighborhoodGroups.get(neighborhood.id), true);
+  houseBuckets.forEach(({ bucket: hb, target }, i) => {
     const descriptor = houseDescs[i]; if (!descriptor) return;
-    const built = hb.build(materials, scene, true);
+    const built = hb.build(materials, target, true);
     for (const [key, object] of Object.entries(built)) object.name = `destructible-${descriptor.id || i}-static-${key}`;
     descriptor.statics = Object.values(built);
   });
@@ -365,13 +454,21 @@ export async function buildWorld(scene, Q, progress = () => {}) {
     mapRects.push({ x: -ROAD_HALF, z: -70, w: ROAD_HALF * 2, h: 140, type: 'road' });
     for (const s of [-1, 1]) mapRects.push({ x: -50, z: s * 48.5 - 4.5, w: 100, h: 9, type: 'road' });
   }
-  for (const l of [...lots, ...duplicatedLots]) {
-    const fx = l.centerX + l.side * (HOUSE_FRONT - 0.2);
-    ground.add('walk', planeGeo(1.2, 6.4, 2).translate(l.centerX + l.side * (ROAD_HALF + SIDEWALK + 3.2), 0.035, l.zc + (l.side < 0 ? HOUSE_W / 4 : -HOUSE_W / 4)));
-    if (rnd() < 0.5) ground.add(rnd() < 0.5 ? 'dirt' : 'grass2', planeGeo(rr(4, 8), rr(4, 6), 3).translate(l.centerX + l.side * rr(26, 31), 0.012, l.zc + rr(-2, 2)));
-    if (rnd() < 0.35) ground.add('grass2', planeGeo(rr(3, 5), rr(3, 6), 3).translate(l.centerX + l.side * rr(9, 12), 0.012, l.zc + rr(-2, 2)));
+  for (const l of [...lots, ...duplicatedLots, ...originalStyleLots]) {
+    const bucket = l.neighborhoodId ? neighborhoodGroundBuckets.get(l.neighborhoodId) : ground;
+    const walkwayZ = l.zc + (l.side < 0 ? HOUSE_W / 4 : -HOUSE_W / 4);
+    const walkway = l.neighborhoodId
+      ? hoodFrontage(ORIGINAL_STYLE_NEIGHBORHOODS.find((item) => item.id === l.neighborhoodId), l.side, walkwayZ)
+      : (() => {
+        const direction = l.side < 0 ? -1 : 1, sidewalkEdge = l.centerX + direction * (ROAD_HALF + SIDEWALK), houseEdge = l.centerX + direction * (HOUSE_FRONT - 0.2);
+        return { x: (sidewalkEdge + houseEdge) / 2, width: Math.abs(houseEdge - sidewalkEdge), depth: 1.2 };
+      })();
+    bucket.add('walk', planeGeo(walkway.width, walkway.depth, 2).translate(walkway.x, GROUND.sidewalkTop, walkwayZ));
+    if (rnd() < 0.5) bucket.add(rnd() < 0.5 ? 'dirt' : 'grass2', planeGeo(rr(4, 8), rr(4, 6), 3).translate(l.centerX + l.side * rr(26, 31), 0.012, l.zc + rr(-2, 2)));
+    if (rnd() < 0.35) bucket.add('grass2', planeGeo(rr(3, 5), rr(3, 6), 3).translate(l.centerX + l.side * rr(9, 12), 0.012, l.zc + rr(-2, 2)));
   }
   const gmesh = ground.build(gm, scene, false);
+  for (const neighborhood of ORIGINAL_STYLE_NEIGHBORHOODS) neighborhoodGroundBuckets.get(neighborhood.id).build(gm, neighborhoodGroups.get(neighborhood.id), false);
   for (const k in gmesh) gmesh[k].castShadow = false;
   progress(0.4);
 
@@ -379,16 +476,20 @@ export async function buildWorld(scene, Q, progress = () => {}) {
   const fenceKit = await prop('modular_chainlink_fence');
   const panel = findNode(fenceKit, 'modular_chainlink_fence_double'), post = findNode(fenceKit, 'modular_chainlink_fence_post');
   const panels = [], posts = [];
-  const fenceLine = (x0, z0, x1, z1, h = 1, gapAt = -1) => {
+  const neighborhoodFenceInstances = new Map(ORIGINAL_STYLE_NEIGHBORHOODS.map((neighborhood) => [neighborhood.id, { panels: [], posts: [] }]));
+  const fenceLine = (x0, z0, x1, z1, h = 1, gapAt = -1, instances = { panels, posts }, streamingId = null) => {
     const len = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.round(len / 1.9)), ang = Math.atan2(z1 - z0, x1 - x0);
     for (let i = 0; i < n; i++) {
       if (i === gapAt) continue;
       const t0 = i / n, t1 = (i + 1) / n; const ax = x0 + (x1 - x0) * t1, az = z0 + (z1 - z0) * t1;
-      panels.push({ x: ax, z: az, r: -ang, sy: h, s: 1 });
-      if (i === 0) posts.push({ x: x0, z: z0, sy: h });
-      posts.push({ x: ax, z: az, sy: h });
+      instances.panels.push({ x: ax, z: az, r: -ang, sy: h, s: 1 });
+      if (i === 0) instances.posts.push({ x: x0, z: z0, sy: h });
+      instances.posts.push({ x: ax, z: az, sy: h });
     }
-    const th = 0.12; solid(Math.min(x0, x1) - th, Math.min(z0, z1) - th, Math.max(x0, x1) + th, Math.max(z0, z1) + th, 0, 2.4 * h, { fence: true, gap: gapAt >= 0 ? { x0, z0, x1, z1, i: gapAt, n } : null });
+    const th = 0.12; solid(Math.min(x0, x1) - th, Math.min(z0, z1) - th, Math.max(x0, x1) + th, Math.max(z0, z1) + th, 0, 2.4 * h, {
+      fence: true, ...(streamingId ? { streamingId } : {}),
+      gap: gapAt >= 0 ? { x0, z0, x1, z1, i: gapAt, n } : null,
+    });
     mapRects.push({ x: Math.min(x0, x1) - 0.1, z: Math.min(z0, z1) - 0.1, w: Math.abs(x1 - x0) + 0.2, h: Math.abs(z1 - z0) + 0.2, type: 'fence' });
   };
   // the collider above spans the whole line even with a gap; add gap-aware version: split into two colliders instead
@@ -410,6 +511,29 @@ export async function buildWorld(scene, Q, progress = () => {}) {
       if (rnd() < 0.45 && !WALL_LOTS.has(s + ':' + i)) { const fx = centerX + s * (ROAD_HALF + SIDEWALK + 1.4); const wz = (z0 + z1) / 2 + (s < 0 ? HOUSE_W / 4 : -HOUSE_W / 4); fenceLine(fx, z0 + 0.3, fx, wz - 0.9, 0.5); fenceLine(fx, wz + 0.9, fx, z1 - 0.3, 0.5); }
     }
   }
+  for (const neighborhood of ORIGINAL_STYLE_NEIGHBORHOODS) {
+    const cx = neighborhood.centerX, cz = neighborhood.centerZ, group = neighborhoodFenceInstances.get(neighborhood.id);
+    for (let i = 0; i <= 10; i++) {
+      const z = cz - 40 + i * LOT;
+      for (const side of [-1, 1]) fenceLine(cx + side * (HOUSE_FRONT + HOUSE_DEPTH + 0.3), z, cx + side * (ALLEY_X - 2.2), z, 0.72, -1, group, neighborhood.id);
+    }
+    for (let i = 0; i < 10; i++) {
+      const z0 = cz - 40 + i * LOT, z1 = z0 + LOT;
+      for (const side of [-1, 1]) {
+        const gx = cx + side * (ALLEY_X - 2.2);
+        fenceLine(gx, z0, gx, z0 + 3, 0.72, -1, group, neighborhood.id);
+        fenceLine(gx, z1 - 3, gx, z1, 0.72, -1, group, neighborhood.id);
+        if (rnd() < 0.45 && !WALL_LOTS.has(`${side}:${i}`)) {
+          const fx = cx + side * (ROAD_HALF + SIDEWALK + 1.4), wz = (z0 + z1) / 2 + (side < 0 ? HOUSE_W / 4 : -HOUSE_W / 4);
+          fenceLine(fx, z0 + 0.3, fx, wz - 0.9, 0.5, -1, group, neighborhood.id);
+          fenceLine(fx, wz + 0.9, fx, z1 - 0.3, 0.5, -1, group, neighborhood.id);
+        }
+      }
+    }
+    const target = neighborhoodGroups.get(neighborhood.id);
+    instanced(target, panel, group.panels, { cast: false });
+    instanced(target, post, group.posts);
+  }
   // fix: the alley/front fence colliders were added per segment already; remove the fence 'gap' helper entries
   for (const c of colliders) delete c.gap;
   instanced(scene, panel, panels, { cast: false }); instanced(scene, post, posts);
@@ -418,26 +542,40 @@ export async function buildWorld(scene, Q, progress = () => {}) {
   // ---------- poles, cables, lamps ----------
   const poleKit = await prop('modular_electricity_poles');
   const pole = findNode(poleKit, 'pole_large'), cross = findNode(poleKit, 'connection_large_01'), cross2 = findNode(poleKit, 'support_large_01');
-  const poleItems = [], crossItems = [], cross2Items = [];
   const wireMat = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.8 });
-  const poleTops = {};
-  for (const centerX of [0, DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX]) for (const s of [-1, 1]) for (let z = -44; z <= 44; z += 22) {
-    const key = `${centerX}:${s}`; if (!poleTops[key]) poleTops[key] = [];
-    const x = centerX + s * (ALLEY_X + 2.3); poleItems.push({ x, z, r: Math.PI / 2 }); crossItems.push({ x, y: 1.9, z, r: Math.PI / 2 }); cross2Items.push({ x, y: 1.9, z, r: Math.PI / 2 });
-    solid(x - 0.12, z - 0.12, x + 0.12, z + 0.12, 0, 7); poleTops[key].push(new THREE.Vector3(x, 6.9, z));
-    mapRects.push({ x: x - 0.15, z: z - 0.15, w: 0.3, h: 0.3, type: 'pole' });
+  const hoodLightingBlocks = [
+    { id: ORIGINAL_NEIGHBORHOOD_LAYOUT.id, centerX: 0, centerZ: 0, target: scene, parentName: '' },
+    { id: DUPLICATED_ORIGINAL_NEIGHBORHOOD.id, centerX: DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX, centerZ: 0, target: duplicateWorldGroup, parentName: duplicateWorldGroup.name },
+    ...ORIGINAL_STYLE_NEIGHBORHOODS.map((neighborhood) => ({ ...neighborhood, target: neighborhoodGroups.get(neighborhood.id), parentName: neighborhoodGroups.get(neighborhood.id).name })),
+  ];
+  const poleTops = new Map();
+  for (const block of hoodLightingBlocks) {
+    const poleItems = [], crossItems = [], cross2Items = [];
+    for (const s of [-1, 1]) for (let localZ = -44; localZ <= 44; localZ += 22) {
+      const z = block.centerZ + localZ, x = block.centerX + s * (ALLEY_X + 2.3), key = `${block.id}:${s}`;
+      if (!poleTops.has(key)) poleTops.set(key, []);
+      poleItems.push({ x, z, r: Math.PI / 2 }); crossItems.push({ x, y: 1.9, z, r: Math.PI / 2 }); cross2Items.push({ x, y: 1.9, z, r: Math.PI / 2 });
+      solid(x - 0.12, z - 0.12, x + 0.12, z + 0.12, 0, 7, { streamingId: block.id }); poleTops.get(key).push(new THREE.Vector3(x, 6.9, z));
+      mapRects.push({ x: x - 0.15, z: z - 0.15, w: 0.3, h: 0.3, type: 'pole' });
+    }
+    instanced(block.target, pole, poleItems); instanced(block.target, cross, crossItems); instanced(block.target, cross2, cross2Items);
+    for (const s of [-1, 1]) {
+      const arr = poleTops.get(`${block.id}:${s}`);
+      for (let i = 0; i + 1 < arr.length; i++) for (const off of [-0.5, 0, 0.5]) wire(block.target, arr[i].clone().add(new THREE.Vector3(0, 0, off)), arr[i + 1].clone().add(new THREE.Vector3(0, 0, off)), wireMat, 0.8);
+      // service drops to a few houses
+      for (let i = 0; i < arr.length; i++) {
+        const z = arr[i].z + rr(-3, 3), minZ = block.centerZ - 40, maxZ = block.centerZ + 40;
+        wire(block.target, arr[i], new THREE.Vector3(block.centerX + s * (HOUSE_FRONT + HOUSE_DEPTH - 0.5), 6.2, THREE.MathUtils.clamp(z, minZ, maxZ)), wireMat, 0.5);
+      }
+    }
   }
-  instanced(scene, pole, poleItems); instanced(scene, cross, crossItems); instanced(scene, cross2, cross2Items);
-  for (const [key, arr] of Object.entries(poleTops)) for (let i = 0; i + 1 < arr.length; i++) for (const off of [-0.5, 0, 0.5]) wire(key.startsWith('0:') ? scene : duplicateWorldGroup, arr[i].clone().add(new THREE.Vector3(0, 0, off)), arr[i + 1].clone().add(new THREE.Vector3(0, 0, off)), wireMat, 0.8);
-  // service drops to a few houses
-  for (const centerX of [0, DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX]) for (const s of [-1, 1]) { const arr = poleTops[`${centerX}:${s}`], target = centerX ? duplicateWorldGroup : scene; for (let i = 0; i < arr.length; i++) { const z = arr[i].z + rr(-3, 3); wire(target, arr[i], new THREE.Vector3(centerX + s * (HOUSE_FRONT + HOUSE_DEPTH - 0.5), 6.2, THREE.MathUtils.clamp(z, -40, 40)), wireMat, 0.5); } }
   // alley security lights on poles
   const secLight = await prop('security_light');
-  for (const centerX of [0, DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX]) for (const s of [-1, 1]) for (let i = 0; i < poleTops[`${centerX}:${s}`].length; i += 2) { const p = poleTops[`${centerX}:${s}`][i], target = centerX ? duplicateWorldGroup : scene; placeClone(target, secLight, p.x - s * 0.1, 5.4, p.z, s < 0 ? Math.PI / 2 : -Math.PI / 2, 1); lamps.push({ x: p.x - s * 0.6, y: 5.2, z: p.z, warm: true, alley: true, cityChunk: centerX ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.id : null }); }
+  for (const block of hoodLightingBlocks) for (const s of [-1, 1]) { const arr = poleTops.get(`${block.id}:${s}`); for (let i = 0; i < arr.length; i += 2) { const p = arr[i]; placeClone(block.target, secLight, p.x - s * 0.1, 5.4, p.z, s < 0 ? Math.PI / 2 : -Math.PI / 2, 1); lamps.push({ x: p.x - s * 0.6, y: 5.2, z: p.z, warm: true, alley: true, blockId: block.id, parentName: block.parentName }); } }
   // street lamps (victorian style, Poly Haven)
   const lamp = await prop('street_lamp_01');
   const lampZ = { '-1': [-36, -12, 12, 36], '1': [-24, 0, 24] };
-  for (const centerX of [0, DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX]) for (const s of [-1, 1]) for (const z of lampZ[s]) { const x = centerX + s * (ROAD_HALF + SIDEWALK - 0.4), target = centerX ? duplicateWorldGroup : scene; placeClone(target, lamp, x, 0, z, 0, 1.15, true); lamps.push({ x, y: 4.1, z, warm: true, cityChunk: centerX ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.id : null }); mapRects.push({ x: x - 0.2, z: z - 0.2, w: 0.4, h: 0.4, type: 'pole' }); }
+  for (const block of hoodLightingBlocks) for (const s of [-1, 1]) for (const localZ of lampZ[s]) { const z = block.centerZ + localZ, roadHalf = block.id.startsWith('hood-') && ORIGINAL_STYLE_NEIGHBORHOODS.some((item) => item.id === block.id) ? 5 : ROAD_HALF, x = block.centerX + s * (roadHalf + SIDEWALK - 0.4); placeClone(block.target, lamp, x, 0, z, 0, 1.15, true); lamps.push({ x, y: 4.1, z, warm: true, blockId: block.id, parentName: block.parentName }); mapRects.push({ x: x - 0.2, z: z - 0.2, w: 0.4, h: 0.4, type: 'pole' }); }
   // lamps over the cross streets (backdrop)
   for (const s of [-1, 1]) for (const x of [-30, 0, 30]) { placeClone(scene, lamp, x, 0, s * 44.2, 0, 1.15, true); lamps.push({ x, y: 4.1, z: s * 44.2, warm: true, far: true }); }
   progress(0.6);
@@ -461,8 +599,8 @@ export async function buildWorld(scene, Q, progress = () => {}) {
     // second vehicle collider for the same mesh, creating conflicting contacts.
     placeClone(centerX ? duplicateWorldGroup : scene, P.covered_car, centerX + x, 0, z, Math.PI / 2 + rr(-0.05, 0.05) + (rnd() < 0.5 ? Math.PI : 0), 1, { vehicle: centerX ? 'hood-duplicate-covered-car' : 'covered-car' });
   }
-  for (const l of [...lots, ...duplicatedLots]) {
-    const s = l.side, bx = l.centerX + s * rr(27, 31), fx = l.centerX + s * rr(9.5, 12.5), target = l.centerX ? duplicateWorldGroup : scene;
+  for (const l of [...lots, ...duplicatedLots, ...originalStyleLots]) {
+    const s = l.side, bx = l.centerX + s * rr(27, 31), fx = l.centerX + s * rr(9.5, 12.5), target = l.target || (l.centerX ? duplicateWorldGroup : scene);
     // backyard clutter
     const k = rnd();
     if (k < 0.3) { placeClone(target, P.old_tyre, bx, 0, l.zc + rr(-2.5, 2.5), rnd() * 6, 1, true); placeClone(target, P.old_tyre, bx + 0.5, 0, l.zc + rr(-2.5, 2.5), rnd() * 6, 1); }
@@ -535,13 +673,14 @@ export async function buildWorld(scene, Q, progress = () => {}) {
 // ---------- queries used by player/bots ----------
 export function groundAt(x, z, feetY) {
   let g = 0;
-  for (const c of colliders) if (c.step && x > c.minX && x < c.maxX && z > c.minZ && z < c.maxZ && c.maxY - feetY <= 0.85 && c.maxY > g) g = c.maxY;
+  for (const c of colliders) if ((!c.streamingId || c.streamingId === activeNeighborhoodCollisionStream) && c.step && x > c.minX && x < c.maxX && z > c.minZ && z < c.maxZ && c.maxY - feetY <= 0.85 && c.maxY > g) g = c.maxY;
   return g;
 }
 // push a circle (x,z, radius r) with vertical span [y0,y1] out of solid colliders. Returns true if blocked.
 export function resolve(p, r, y0, y1, feetY) {
   const active = [];
   for (const c of colliders) {
+    if (c.streamingId && c.streamingId !== activeNeighborhoodCollisionStream) continue;
     if (c.step && c.maxY - feetY <= 0.85) continue;          // climbable
     if (y1 <= c.minY || y0 >= c.maxY) continue;
     if (c.maxX < p.x - r || c.minX > p.x + r || c.maxZ < p.z - r || c.minZ > p.z + r) continue;
@@ -559,6 +698,7 @@ export function moveAndSlide(p, dx, dz, r, y0, y1, feetY, contacts = null) {
   const minX = Math.min(p.x, p.x + dx) - r, maxX = Math.max(p.x, p.x + dx) + r;
   const minZ = Math.min(p.z, p.z + dz) - r, maxZ = Math.max(p.z, p.z + dz) + r;
   for (const c of colliders) {
+    if (c.streamingId && c.streamingId !== activeNeighborhoodCollisionStream) continue;
     if (c.step && c.maxY - feetY <= 0.85) continue;
     if (y1 <= c.minY || y0 >= c.maxY) continue;
     if (c.maxX < minX || c.minX > maxX || c.maxZ < minZ || c.minZ > maxZ) continue;
@@ -573,6 +713,7 @@ const _n = new THREE.Vector3();
 export function raycastWorld(o, d, maxT = 1, ignoreFences = true, out = null) {
   let best = maxT;
   for (const c of colliders) {
+    if (c.streamingId && c.streamingId !== activeNeighborhoodCollisionStream) continue;
     if (ignoreFences && c.fence) continue;
     let tmin = 0, tmax = best, nAxis = -1, nSign = 0;
     const o3 = [o.x, o.y, o.z], d3 = [d.x, d.y, d.z], mn = [c.minX, c.minY, c.minZ], mx = [c.maxX, c.maxY, c.maxZ];

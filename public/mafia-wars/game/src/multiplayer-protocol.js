@@ -1,3 +1,5 @@
+import { CITY_BOUNDS } from './city-layout.js';
+
 export const PROTOCOL_VERSION = 4;
 export const PUBLIC_CITY_MAX_PLAYERS = 20;
 export const UNDERGROUND_TEAM_SIZE = 6;
@@ -24,7 +26,7 @@ export const MULTIPLAYER_LIMITS = Object.freeze({
   maxCombatMessagesPerSecond: 20,
   maxSpaceUpdatesPerSecond: 3,
   maxSpeed: 8.5,
-  bounds: Object.freeze({ minX: -340, maxX: 420, minZ: -148, maxZ: 356 }), // Stage 2: Dark Alley reaches x -340; Academy/Cyber HQ reach x 420
+  bounds: CITY_BOUNDS,
 });
 
 // Server-assigned indices keep joins separated without moving anyone already in

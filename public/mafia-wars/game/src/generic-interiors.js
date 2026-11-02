@@ -6,9 +6,9 @@ import { counterStand } from './store-staff.js';
 import { LICENSE_CLASSES } from './neon-market-layout.js';
 import { addInteriorIsolationShell } from './apartment-system.js';
 import { KitBatch, signMaterial } from './city-showcase-kit.js';
-import { interiorCatalog, interiorLayout, interiorSpace, apartmentUnit, apartmentUnitSpace, neonTowerFloorEntry, neonTowerFloorSpace, neonTowerHomeEntry, neonTowerHomeSpace, LOBBY_LIFT_Z, PROPERTY_TIERS } from './interior-catalog.js';
+import { interiorCatalog, interiorLayout, interiorSpace, apartmentUnit, apartmentUnitSpace, towerFloorEntry, towerFloorSpace, towerHomeEntry, towerHomeSpace, LOBBY_LIFT_Z, PROPERTY_TIERS } from './interior-catalog.js';
 import { APARTMENT_FLOORS } from './apartment-building.js';
-import { NEON_TOWER_HOMES, NEON_TOWER_LOBBY_SPACE, NEON_TOWER_PENTHOUSE_FLOOR, NEON_TOWER_RESIDENTIAL_FLOORS, neonTowerFloor, neonTowerHome } from './neon-tower-residences.js';
+import { towerDefinitionForLobby, towerDefinitionForSpace, towerHomeForSpace } from './tower-residences.js';
 import { streetAddress } from './city-addresses.js';
 
 // Stage 2: every building without a hand-built interior can be entered (interior-catalog.js). One system
@@ -124,15 +124,15 @@ export class GenericInteriorSystem {
   // storeMinute: the economic minute of day (Pacific) that store hours follow.
   constructor(scene, { addCollider, removeColliders, worldColliders = null, mobile = false, storeMinute = () => economicMinuteOfDay() } = {}) {
     Object.assign(this, { scene, addCollider, removeColliders, worldColliders, mobile, storeMinute });
-    this.entries = interiorCatalog().map((e) => ({ e, name: buildingName(e), door: new THREE.Vector3(e.door.x, 0, e.door.z), apartments: e.template === 'apartments' || e.template === 'lofts' || e.template === 'tower', tower: e.template === 'tower' }));
+    this.entries = interiorCatalog().map((e) => { const tower = towerDefinitionForLobby(e.spaceId); return { e, name: buildingName(e), door: new THREE.Vector3(e.door.x, 0, e.door.z), apartments: e.template === 'apartments' || e.template === 'lofts' || !!tower, tower }; });
     this.active = null; this.unit = null; this.towerFloor = null; this.towerHome = null; this.group = null; this.colliders = []; this.shelved = []; this.transitionReadyAt = 0; this.kit = { night: [], mobile };
   }
   get site() { return this.active ? { id: this.unit?.space.id || this.towerFloor?.space.id || this.active.e.spaceId, name: this.towerHome ? `${this.active.name} · ${this.towerHome.title}` : this.towerFloor ? `${this.active.name} · ${this.towerFloor.record.title}` : this.unit ? `${this.active.name} · ${this.unit.U.title}` : this.active.name } : null; }
   // The floors a lift offers: the lobby and storeys 2-6, each with its tier, value and size (all open to visit for now).
   floorMenu() {
     if (!this.active?.apartments) return null;
-    if (this.active.tower) return { building: this.active.name, current: this.towerFloor?.record.floor || this.towerHome?.floor || 1, floors: [{ floor: 1, title: 'Grand Lobby', open: true },
-      ...NEON_TOWER_RESIDENTIAL_FLOORS.map((floor) => ({ floor, title: floor === NEON_TOWER_PENTHOUSE_FLOOR ? 'Penthouse Level · PH1–PH6' : `Residences ${floor}01–${floor}06`, summary: floor === NEON_TOWER_PENTHOUSE_FLOOR ? '6 penthouses · private roof terraces' : '6 luxury residences', open: true }))] };
+    if (this.active.tower) { const tower = this.active.tower; return { building: this.active.name, current: this.towerFloor?.record.floor || this.towerHome?.floor || 1, floors: [{ floor: 1, title: 'Grand Lobby', open: true },
+      ...tower.residentialFloors.map((floor) => { const count = tower.floor(floor).homes.length; return { floor, title: floor === tower.penthouseFloor ? `Penthouse Level · ${count} homes` : `Residences · Floor ${floor}`, summary: floor === tower.penthouseFloor ? `${count} penthouses · private roof terraces` : `${count} luxury residences`, open: true }; })] }; }
     return { building: this.active.name, current: this.unit?.floor || 1, floors: [{ floor: 1, title: 'Lobby', open: true },
       ...APARTMENT_FLOORS.map(({ floor }) => { const U = apartmentUnit(this.active.e, floor); return { floor, title: U.title, tier: PROPERTY_TIERS[U.tier].label, value: PROPERTY_TIERS[U.tier].value, area: U.area, open: true }; })] };
   }
@@ -180,7 +180,8 @@ export class GenericInteriorSystem {
   // Ride the lift: 1 is the lobby, 2-6 the apartments. Returns the same shape as update(), with the space
   // messages the server needs (leave the current apartment, then enter the next).
   goToFloor(floor, player, now = 0) {
-    if (!this.active?.apartments || floor === (this.unit?.floor || 1)) return null;
+    const currentFloor = this.towerHome?.floor || this.towerFloor?.record.floor || this.unit?.floor || 1;
+    if (!this.active?.apartments || floor === currentFloor) return null;
     if (this.active.tower) return this.#goToTowerFloor(floor, player, now);
     const it = this.active, transitions = [];
     if (this.unit) transitions.push({ spaceId: this.unit.space.id, action: 'exit' });
@@ -203,7 +204,7 @@ export class GenericInteriorSystem {
   // that is the one built. The server's state sets the position.
   enterSpace(spaceId) {
     if ((this.unit?.space.id || this.active?.e.spaceId) === spaceId) return true;
-    const tower = this.entries.find((x) => x.e.spaceId === NEON_TOWER_LOBBY_SPACE), towerHomeRecord = neonTowerHome(spaceId), towerFloorMatch = new RegExp(`^${NEON_TOWER_LOBBY_SPACE}-f(\\d+)$`).exec(spaceId);
+    const towerDefinition = towerDefinitionForSpace(spaceId), tower = towerDefinition && this.entries.find((x) => x.e.spaceId === towerDefinition.lobbySpaceId), towerHomeRecord = towerHomeForSpace(spaceId), towerFloorMatch = towerDefinition && new RegExp(`^${towerDefinition.lobbySpaceId}-f(\\d+)$`).exec(spaceId);
     if (tower && (towerHomeRecord || towerFloorMatch)) {
       this.#dispose(); this.active = tower;
       if (towerHomeRecord) this.#buildTowerHome(towerHomeRecord); else this.#buildTowerFloor(Number(towerFloorMatch[1]));
@@ -232,22 +233,22 @@ export class GenericInteriorSystem {
     this.group = this.buildUnit(it.e, U); this.scene.add(this.group);
   }
   #buildTowerFloor(floor) {
-    const record = neonTowerFloor(floor), entry = neonTowerFloorEntry(floor); if (!record || !entry) return false;
-    const layout = interiorLayout(entry), space = neonTowerFloorSpace(floor, interiorSpace(this.active.e));
+    const tower = this.active.tower, record = tower?.floor(floor), entry = towerFloorEntry(tower, floor); if (!record || !entry) return false;
+    const layout = interiorLayout(entry), space = towerFloorSpace(tower, floor, interiorSpace(this.active.e));
     this.towerFloor = { record, entry, layout, space }; this.layout = layout; this.space = { ...space, liftLobby: space.inside };
     this.group = this.build(entry, layout); this.scene.add(this.group); this.exit = new THREE.Vector3(space.exit.x, space.exit.y, space.exit.z);
     return true;
   }
   #buildTowerHome(home) {
-    const entry = neonTowerHomeEntry(home), U = apartmentUnit(entry, home.floor), floorSpace = neonTowerFloorSpace(home.floor, interiorSpace(this.active.e)), space = neonTowerHomeSpace(home, floorSpace);
-    this.towerHome = home; this.towerFloor = { record: neonTowerFloor(home.floor), space: floorSpace }; this.unit = { floor: home.floor, U, space, home, entry };
+    const tower = this.active.tower, entry = towerHomeEntry(tower, home), U = apartmentUnit(entry, home.floor), floorSpace = towerFloorSpace(tower, home.floor, interiorSpace(this.active.e)), space = towerHomeSpace(tower, home, floorSpace);
+    this.towerHome = home; this.towerFloor = { record: tower.floor(home.floor), space: floorSpace }; this.unit = { floor: home.floor, U, space, home, entry };
     if (this.worldColliders && this.removeColliders) { this.shelved = this.worldColliders.filter((c) => c.cityChunk === this.active.e.buildingId && !c.entrySteps && !c.vehicle); this.removeColliders(this.shelved); }
     this.group = this.buildUnit(entry, U); this.scene.add(this.group); return true;
   }
   #goToTowerFloor(floor, player, now) {
-    const currentFloor = this.towerHome?.floor || this.towerFloor?.record.floor || null, transitions = [];
+    const tower = this.active.tower, currentFloor = this.towerHome?.floor || this.towerFloor?.record.floor || null, transitions = [];
     if (this.towerHome) transitions.push({ spaceId: this.towerHome.spaceId, action: 'exit' });
-    if (currentFloor) transitions.push({ spaceId: `${NEON_TOWER_LOBBY_SPACE}-f${currentFloor}`, action: 'exit' });
+    if (currentFloor) transitions.push({ spaceId: `${tower.lobbySpaceId}-f${currentFloor}`, action: 'exit' });
     this.#dispose();
     if (floor === 1) {
       this.#buildLobby(this.active); const l = this.space.liftLobby; player.pos.set(l.x, l.y, l.z + 0.6); player.yaw = Math.PI;
@@ -256,7 +257,7 @@ export class GenericInteriorSystem {
       transitions.push({ spaceId: this.towerFloor.space.id, action: 'enter' }); const p = this.towerFloor.space.inside; player.pos.set(p.x, p.y, p.z + 0.6); player.yaw = 0;
     }
     player.vel.set(0, 0, 0); player.onGround = true; this.transitionReadyAt = now + TRANSITION_COOLDOWN;
-    return { active: true, transitioned: true, prompt: '', name: this.active.name, mobileLabel: '', spaceId: this.towerFloor?.space.id || this.active.e.spaceId, isolated: true, transitions, subtitle: floor === 1 ? 'GRAND LOBBY · SAFE ZONE' : `${this.towerFloor.record.title.toUpperCase()} · SIX PRIVATE RESIDENCES` };
+    return { active: true, transitioned: true, prompt: '', name: this.active.name, mobileLabel: '', spaceId: this.towerFloor?.space.id || this.active.e.spaceId, isolated: true, transitions, subtitle: floor === 1 ? 'GRAND LOBBY · SAFE ZONE' : `${this.towerFloor.record.title.toUpperCase()} · ${this.towerFloor.record.homes.length} PRIVATE RESIDENCES` };
   }
   #enterTowerHome(home, player, now) {
     const floor = this.towerFloor.record, floorSpaceId = this.towerFloor.space.id; this.#dispose(); this.#buildTowerHome(home);
@@ -400,11 +401,11 @@ export class GenericInteriorSystem {
       const fw = Math.min(w - 2, isLobby ? 6 : 9), fh = fw * 0.2, fz = L.minZ + 0.05; // a lobby's sign is above the lifts
       const fm = new THREE.Mesh(new THREE.PlaneGeometry(fw, fh), feature); fm.position.set(cx, y + Math.min(H - 0.4 - fh / 2, isLobby ? 3.05 : H * 0.62), fz); fm.name = `${e.spaceId}-feature`; g.add(fm);
     }
-    // Neon Tower's floor halls are permanent addresses, not anonymous model floors. Give every one of
-    // the six side-wall doors a readable brass unit number so residents and visitors can navigate the
+    // Tower floor halls are permanent addresses, not anonymous model floors. Give every side-wall
+    // door a readable brass unit number so residents and visitors can navigate the
     // hall without relying on the interaction prompt.
     if (e.template === 'tower-floor') {
-      const floor = Number(/-f(\d+)$/.exec(e.spaceId)?.[1]), record = neonTowerFloor(floor);
+      const record = e.towerFloor || towerDefinitionForSpace(e.spaceId)?.floor(Number(/-f(\d+)$/.exec(e.spaceId)?.[1]));
       for (const door of record?.doors || []) {
         const number = signMaterial(this.kit, (ctx, cw, ch) => {
           ctx.fillStyle = '#100e14'; ctx.fillRect(0, 0, cw, ch); ctx.strokeStyle = '#c19a49'; ctx.lineWidth = 10; ctx.strokeRect(7, 7, cw - 14, ch - 14);
@@ -524,7 +525,7 @@ export class GenericInteriorSystem {
     const ly = H * 0.62, reach = Math.hypot(I.maxX - I.minX, I.maxZ - I.minZ), scale = U.tier === 'penthouse' ? 0.62 : 1.0; // measured in the city: lower floors a touch brighter, the pale penthouse softer
     const lights = this.mobile ? [[cx, cz, 60]] : [[cx, cz - (I.maxZ - I.minZ) / 4, 50], [cx, cz + (I.maxZ - I.minZ) / 4, 45]];
     for (const [lx, lz, i] of lights) { const light = new THREE.PointLight(colors[7], i * POINT_SHARE * scale, reach, 2); light.position.set(lx, y + ly, lz); g.add(light); }
-    const fill = new THREE.HemisphereLight(0xfff4e6, 0x4a4036, 0.9); fill.position.set(cx, y + H, cz); g.add(fill);
+    const fill = new THREE.HemisphereLight(0xfff4e6, 0x4a4036, this.mobile ? 1.15 : 1.0); fill.position.set(cx, y + H, cz); g.add(fill);
     if (U.roof) { const lamp = new THREE.PointLight(0xffd9a0, 25, 16, 2); lamp.position.set(cx, U.roof.y + 2.4, cz); g.add(lamp); }
     return g;
   }

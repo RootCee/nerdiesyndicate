@@ -12,6 +12,7 @@ import { entrySteps } from './entry-steps.js';
 import { CHESS_AISLES, CIVIC_PATHS, PARK_PATHS, parkFixtures, parkSoftZones } from './city-park-layout.js';
 import { ACADEMY_PATHS, academyFixtures } from './academy-layout.js';
 import { createCityPlan } from './city-layout.js';
+import { ORIGINAL_STYLE_NEIGHBORHOODS } from './hood-neighborhood-layout.js';
 
 // Mirrors world.js: ROAD_HALF 4.5, SIDEWALK 2, LOT 8, HOUSE_FRONT 14,
 // HOUSE_DEPTH 10, ALLEY_X 35.5; lots run z -40..40 inside the ±43 x block.
@@ -21,20 +22,20 @@ const PAD = 0.3, MAX_CONNECTOR = 35, SHORT_DIAGONAL = 4, SNAP_DISTANCE = 10, ROA
 const rect = (minX, minZ, maxX, maxZ, extra = {}) => ({ minX, minZ, maxX, maxZ, ...extra });
 const around = (x, z, width, depth, extra) => rect(x - width / 2, z - depth / 2, x + width / 2, z + depth / 2, extra);
 
-function neighbourhoodObstacles(centerX) {
+function neighbourhoodObstacles(centerX, centerZ = 0) {
   const out = [];
   for (const s of [-1, 1]) {
     const x0 = centerX + s * BLOCK.streetHalf, x1 = centerX + s * (BLOCK.alley - BLOCK.alleyHalf);
     const x2 = centerX + s * (BLOCK.alley + BLOCK.alleyHalf), x3 = centerX + s * BLOCK.halfX;
     // Soft bands: private lots. Routes never run through them; only a door's
     // own walkway may cross its front yard (see connect()).
-    out.push(rect(Math.min(x0, x1), -BLOCK.lotZ - 0.5, Math.max(x0, x1), BLOCK.lotZ + 0.5, { soft: true }));
-    out.push(rect(Math.min(x2, x3), -BLOCK.lotZ - 0.5, Math.max(x2, x3), BLOCK.lotZ + 0.5, { soft: true }));
+    out.push(rect(Math.min(x0, x1), centerZ - BLOCK.lotZ - 0.5, Math.max(x0, x1), centerZ + BLOCK.lotZ + 0.5, { soft: true }));
+    out.push(rect(Math.min(x2, x3), centerZ - BLOCK.lotZ - 0.5, Math.max(x2, x3), centerZ + BLOCK.lotZ + 0.5, { soft: true }));
     // Hard: each house (front to back wall, 6.2 m wide on its lot), the garage
     // slot beyond the alley, backyard side fences, alley fences (each lot's has
     // a 2 m gate in the middle), lamps, and utility poles.
     for (let i = 0; i < BLOCK.lots; i++) {
-      const zc = BLOCK.firstLot + i * BLOCK.lot + BLOCK.lot / 2;
+      const zc = centerZ + BLOCK.firstLot + i * BLOCK.lot + BLOCK.lot / 2;
       const hf = centerX + s * BLOCK.houseFront, hb = centerX + s * BLOCK.houseBack;
       out.push(rect(Math.min(hf, hb), zc - 3.1, Math.max(hf, hb), zc + 3.1));
       const g0 = centerX + s * 37.8, g1 = centerX + s * 43.4;
@@ -42,14 +43,14 @@ function neighbourhoodObstacles(centerX) {
     }
     for (let i = 0; i <= BLOCK.lots; i++) {
       const z = BLOCK.firstLot + i * BLOCK.lot, a = centerX + s * (BLOCK.houseBack - 0.2), b = centerX + s * (BLOCK.alley - 2.2);
-      out.push(rect(Math.min(a, b), z - 0.12, Math.max(a, b), z + 0.12));
+      out.push(rect(Math.min(a, b), centerZ + z - 0.12, Math.max(a, b), centerZ + z + 0.12));
     }
     for (let i = 0; i < BLOCK.lots; i++) {
-      const z0 = BLOCK.firstLot + i * BLOCK.lot, gx = centerX + s * (BLOCK.alley - 2.2);
+      const z0 = centerZ + BLOCK.firstLot + i * BLOCK.lot, gx = centerX + s * (BLOCK.alley - 2.2);
       out.push(rect(gx - 0.12, z0, gx + 0.12, z0 + 3), rect(gx - 0.12, z0 + BLOCK.lot - 3, gx + 0.12, z0 + BLOCK.lot));
     }
-    for (const z of s < 0 ? [-36, -12, 12, 36] : [-24, 0, 24]) out.push(around(centerX + s * 6.1, z, 0.3, 0.3));
-    for (let z = -44; z <= 44; z += 22) out.push(around(centerX + s * (BLOCK.alley + 2.3), z, 0.3, 0.3));
+    for (const z of s < 0 ? [-36, -12, 12, 36] : [-24, 0, 24]) out.push(around(centerX + s * 6.1, centerZ + z, 0.3, 0.3));
+    for (let z = -44; z <= 44; z += 22) out.push(around(centerX + s * (BLOCK.alley + 2.3), centerZ + z, 0.3, 0.3));
   }
   return out;
 }
@@ -82,6 +83,7 @@ export function buildNavObstacles(plan = createCityPlan()) {
   // world.js kit house (6.2 x 10 m, 2.4 m porch) turned to face south (-z), plus margin.
   for (const site of plan.originalExpansionHouses) out.push(around(site.x, site.z - 1.1, 7.2, 13, { id: site.id }));
   out.push(...neighbourhoodObstacles(0), ...neighbourhoodObstacles(plan.duplicatedOriginalNeighborhood.centerX));
+  for (const neighborhood of ORIGINAL_STYLE_NEIGHBORHOODS) out.push(...neighbourhoodObstacles(neighborhood.centerX, neighborhood.centerZ));
   return out;
 }
 
@@ -126,6 +128,7 @@ export function walkLines(plan = createCityPlan()) {
   for (const p of [...PARK_PATHS, ...CIVIC_PATHS, ...CHESS_AISLES]) add(p.axis, p.c, p.a0, p.a1, p.id);
   // M7.2: the Academy's walks, the fountain plaza and the campus loop
   for (const p of ACADEMY_PATHS) add(p.axis, p.c, p.a0, p.a1, p.id);
+  for (const p of plan.pedestrianPaths || []) add(p.axis, p.c, p.a0, p.a1, p.id);
   return lines;
 }
 

@@ -97,7 +97,8 @@ export class RemotePlayer {
     this.character.obj.visible = !this.combat.dead && distance < 180 && (this.context?.space?.id || 'city') === viewerSpace;
     if (!this.character.obj.visible) return;
     this.character.obj.position.copy(this.position); this.character.obj.rotation.y = state.yaw + Math.PI;
-    this.character.play(state.state === 'run' ? 'Run' : state.state === 'walk' ? 'Walk' : 'Idle_Gun', LOCOMOTION_FADE);
+    const armed = this.equipment.weaponId && !this.equipment.holstered;
+    this.character.play(state.state === 'run' ? 'Run' : state.state === 'walk' ? 'Walk' : armed ? 'Idle_Gun' : 'Idle_Unarmed', LOCOMOTION_FADE);
     this.character.aimPitch = state.pitch || 0; // M6.9: their aim, interpolated like the rest of the state
     this.animationAccum += dt;
     const animationHz = distance < 28 ? 30 : distance < 75 ? 15 : 8, interval = 1 / animationHz;

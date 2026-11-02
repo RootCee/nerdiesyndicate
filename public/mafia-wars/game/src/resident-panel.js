@@ -31,15 +31,16 @@ const STYLE = `
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n = (v) => (v == null ? '—' : esc(Number(v).toLocaleString('en-US')));
 const clock = (minute) => { const m = ((minute % 1440) + 1440) % 1440, h = Math.floor(m / 60); return `${h % 12 || 12}:${String(m % 60).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
-const PLACES = Object.freeze({ 'nerdie-city-bank': 'Nerdie City Bank', 'city-hall': 'City Hall', 'academy-library': 'the Library', 'nerdie-arms': 'Ammo', 'central-park': 'Central Park', 'corner-market': 'Corner Market', 'three-piece': '3 Piece', 'the-blaq-note': 'The Blaq Note', 'city-wholesaler': 'City Wholesaler', 'laundromat': 'Laundromat', 'sneaker-shop': 'Sneaker Shop', 'north-court': 'North Court Apartments' });
+const PLACES = Object.freeze({ 'nerdie-city-bank': 'Nerdie City Bank', 'city-hall': 'City Hall', 'academy-library': 'the Library', 'nerdie-arms': 'Ammo', 'central-park': 'Central Park', 'corner-market': 'Corner Market', 'three-piece': '3 Piece', 'roots-lounge': 'Roots Lounge', 'city-wholesaler': 'City Wholesaler', 'laundromat': 'Laundromat', 'sneaker-shop': 'Sneaker Shop', 'north-court': 'North Court Apartments' });
 const NOW = Object.freeze({ home: 'At home', commute: 'On the way to work at', work: 'Working at', shop: 'Shopping at', social: 'Hanging out at', leisure: 'Relaxing at' });
 const PERSONALITY = Object.freeze({ peaceful: 'Friendly', cautious: 'Shy', defensive: 'Protective', aggressive: 'Blunt' });
 const pacificDay = (ms) => new Date(ms - 7 * 3_600_000).toISOString().slice(0, 10); // a day key; only needs to change once a day
 
 export class ResidentPanel {
   // founder: { signedIn(): boolean, resident(residentId): Promise<{ history }> } or null (balances only when signed in).
-  constructor({ founder = null, onWaypoint = () => {}, onOpen = () => {}, document: doc = globalThis.document, now = () => Date.now() } = {}) {
-    Object.assign(this, { founder, onWaypoint, onOpen, doc, now }); this.resident = null; this.log = []; this.mode = 'topics'; this.private = null;
+  // life (NC-LIFE-01A): { plan(residentId) -> { line, roots } | null }, today's recorded decision from the bank.
+  constructor({ founder = null, life = null, onWaypoint = () => {}, onOpen = () => {}, document: doc = globalThis.document, now = () => Date.now() } = {}) {
+    Object.assign(this, { founder, life, onWaypoint, onOpen, doc, now }); this.resident = null; this.log = []; this.mode = 'topics'; this.private = null;
   }
   get open() { return !!this.resident; }
   // resident: { index, residentId, name, personality, job, chess, housing: { propertyId } }
@@ -91,6 +92,8 @@ export class ResidentPanel {
       `Lives at ${p ? esc(residentAddress(r.housing?.propertyId) || PLACES['north-court']) : esc(PLACES['north-court'])}`,
       `${esc(PERSONALITY[r.personality] || 'Friendly')}${r.chess ? ` · chess: ${esc(r.chess.levelLabel || 'player')}` : ''}`,
     ];
+    const today = r.residentId ? this.life?.plan?.(r.residentId) : null;
+    if (today?.line) facts.push(`Today: <b>${esc(today.line)}</b>`);
     const money = p ? `<div class="rp-money"><div><b>CHECKING</b><span>${n(p.checking)}</span></div><div><b>SAVINGS</b><span>${n(p.savings)}</span></div><div><b>EARNED</b><span>${n(p.lifetime?.wages)}</span></div></div>` : '';
     const log = this.log.map((l) => `<div class="${l.who === 'you' ? 'rp-you' : 'rp-say'}">${esc(l.text)}</div>`).join('');
     const buttons = this.mode === 'places'

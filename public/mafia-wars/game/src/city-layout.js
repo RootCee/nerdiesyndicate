@@ -1,18 +1,27 @@
 import { CITY_HALL, CIVIC_BLOCK, PARK, PARK_BLEACHERS, PARK_PAVILION } from './city-park-layout.js';
 import { ACADEMY_AVENUE, ACADEMY_CHUNKS, ACADEMY_HALLS, CLOCK_TOWER, LIBRARY } from './academy-layout.js';
 import { NEON_MARKET, NEON_ROADS, neonMarketDistricts } from './neon-market-layout.js';
-import { CYBER_ROADS, cyberHqDistricts } from './cyber-hq-layout.js';
+import { CYBER_HQ, CYBER_ROADS, cyberHqDistricts } from './cyber-hq-layout.js';
 import { DARK_ALLEY, DARK_ROADS, darkAlleyDistricts } from './dark-alley-layout.js';
+import { DISTRICT_FUTURE_PLOTS, DISTRICT_TRANSITION_PARKING, DISTRICT_TRANSITION_ROADS, districtTransitionDistricts } from './district-transition-layout.js';
+import {
+  RESIDENTIAL_EXPANSION_BOUNDS, RESIDENTIAL_EXPANSION_ROADS,
+  RESIDENTIAL_FUTURE_PLOTS, RESIDENTIAL_GREENWAY_PATHS, residentialExpansionDistricts,
+} from './residential-expansion-layout.js';
+import {
+  HOOD_EXPANSION_BOUNDS, HOOD_EXPANSION_DRIVING_LOOP, HOOD_EXPANSION_PARKING, HOOD_EXPANSION_ROADS,
+  ORIGINAL_STYLE_NEIGHBORHOODS,
+} from './hood-neighborhood-layout.js';
 // Pure, deterministic city plan. Rendering code consumes this data so desktop
 // and mobile share one collision/layout topology while choosing different
 // visibility and detail budgets.
 // Milestone 5.2C adds a complete 86 m-wide copy of the original Hood Warfare
 // block east of the approved 280 m city. Its 120 m ground/street staging area
 // reaches x=244 without overlapping the existing x=112 residential row.
-// M7.2: the city grows east to x=420 for Academy Avenue and the Nerdie Blaq Academy (academy-layout.js).
-// Stage 2: and north to z=356 for Neon Market and Cyber HQ (neon-market-layout.js, cyber-hq-layout.js).
+// M7.2: Academy Avenue and the Nerdie Blaq Academy occupy the original east expansion.
+// The original-style residential blocks extend the shared northern city boundary to z=704.
 const LEGACY_CITY_MIN_X = -140;
-export const CITY_BOUNDS = Object.freeze({ minX: DARK_ALLEY.minX, maxX: 420, minZ: -148, maxZ: NEON_MARKET.maxZ });
+export const CITY_BOUNDS = Object.freeze({ minX: DARK_ALLEY.minX, maxX: CYBER_HQ.maxX, minZ: -148, maxZ: HOOD_EXPANSION_BOUNDS.maxZ });
 
 export const ORIGINAL_NEIGHBORHOOD_LAYOUT = Object.freeze({
   id: 'hood-original-neighborhood', centerX: 0, centerZ: 0,
@@ -40,8 +49,8 @@ export const DUPLICATED_ENTERABLE_HOUSE_SITE = Object.freeze({
 });
 
 export const CITY_PROFILES = Object.freeze({
-  desktop: Object.freeze({ key: 'desktop', activeRadius: 92, windowStride: 1, roofDetails: true, streetLights: true }),
-  mobile: Object.freeze({ key: 'mobile', activeRadius: 60, windowStride: 2, roofDetails: false, streetLights: false }),
+  desktop: Object.freeze({ key: 'desktop', activeRadius: 92, windowStride: 1, roofDetails: true, streetLights: true, streetLightPool: 3 }),
+  mobile: Object.freeze({ key: 'mobile', activeRadius: 60, windowStride: 2, roofDetails: false, streetLights: true, streetLightPool: 2 }),
 });
 
 // M7.0A: moved north 12 m. At z 100 the building stood on the north-market road (126 m2) and its
@@ -234,7 +243,7 @@ export function createCityPlan(profileName = 'desktop') {
     bounds: { ...CITY_BOUNDS },
     profile,
     roads: [
-      { id: 'main', x: 0, z: 0, width: 9, depth: 296 },
+      { id: 'main', x: 0, z: 0, width: 9, depth: 306 },
       { id: 'west-avenue', x: -88, z: 0, width: 10, depth: 296 },
       { id: 'east-avenue', x: 88, z: 0, width: 10, depth: 296 },
       // M7.1A: its stub north of North Cross (a dead end) gave way to Central Park
@@ -257,7 +266,11 @@ export function createCityPlan(profileName = 'desktop') {
       ...CYBER_ROADS.map((r) => ({ ...r })),
       // Stage 2: Dark Alley extends the market grid west without stretching legacy roads through it.
       ...DARK_ROADS.map((r) => ({ ...r })),
+      ...DISTRICT_TRANSITION_ROADS.map((r) => ({ ...r })),
+      ...RESIDENTIAL_EXPANSION_ROADS.map((r) => ({ ...r })),
+      ...HOOD_EXPANSION_ROADS.map((r) => ({ ...r })),
     ],
+    pedestrianPaths: RESIDENTIAL_GREENWAY_PATHS.map((path) => ({ ...path })),
     districts: [
       district('north', 100, 401), district('south', -100, 809),
       eastResidential('east-residential-north', 96, 1201),
@@ -274,14 +287,28 @@ export function createCityPlan(profileName = 'desktop') {
       // Stage 2: Cyber HQ, one render chunk per block
       ...cyberHqDistricts(),
       ...darkAlleyDistricts(),
+      ...districtTransitionDistricts(),
+      ...residentialExpansionDistricts(),
+      ...ORIGINAL_STYLE_NEIGHBORHOODS.map((n) => ({
+        id: n.id,
+        kind: 'hood-neighborhood',
+        center: { x: n.centerX, z: n.centerZ },
+        radius: Math.hypot((n.footprint.maxX - n.footprint.minX) / 2, (n.footprint.maxZ - n.footprint.minZ) / 2),
+        buildings: [],
+        vehicles: [],
+      })),
       { id: DUPLICATED_ORIGINAL_NEIGHBORHOOD.id, kind: 'original-copy', center: { x: DUPLICATED_ORIGINAL_NEIGHBORHOOD.centerX, z: 0 }, radius: 58, buildings: [], vehicles: [] },
     ],
     apartment: { ...APARTMENT_SITE },
     enterableHouse: { ...ENTERABLE_HOUSE_SITE },
     originalExpansionHouses: ORIGINAL_EXPANSION_HOUSES.map((site) => ({ ...site, entry: site.entry ? { ...site.entry } : null, outsideSpawn: site.outsideSpawn ? { ...site.outsideSpawn } : null, spec: { ...site.spec } })),
     duplicatedOriginalNeighborhood: { ...DUPLICATED_ORIGINAL_NEIGHBORHOOD, footprint: { ...DUPLICATED_ORIGINAL_NEIGHBORHOOD.footprint }, renderRadius: { ...DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius } },
+    originalStyleNeighborhoods: ORIGINAL_STYLE_NEIGHBORHOODS.map((n) => ({ ...n, footprint: { ...n.footprint }, renderRadius: { ...n.renderRadius }, garageLots: [...n.garageLots] })),
+    vehicleRoutes: { hoodExpansionLoop: HOOD_EXPANSION_DRIVING_LOOP.map((point) => ({ ...point })) },
     duplicatedEnterableHouse: { ...DUPLICATED_ENTERABLE_HOUSE_SITE, entry: { ...DUPLICATED_ENTERABLE_HOUSE_SITE.entry }, outsideSpawn: { ...DUPLICATED_ENTERABLE_HOUSE_SITE.outsideSpawn } },
     combatVenue: { ...COMBAT_VENUE_SITE },
+    reservedLots: [...DISTRICT_FUTURE_PLOTS, ...RESIDENTIAL_FUTURE_PLOTS].map((lot) => ({ ...lot })),
+    parkingLots: [...DISTRICT_TRANSITION_PARKING, ...HOOD_EXPANSION_PARKING].map((lot) => ({ ...lot })),
   };
   // (M7.1A park buildings face what they serve, not a street: fixedFront)
   for (const district of plan.districts) for (const building of district.buildings) building.front = building.fixedFront || buildingFront(building, plan.roads);
