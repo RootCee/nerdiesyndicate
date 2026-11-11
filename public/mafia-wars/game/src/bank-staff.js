@@ -6,11 +6,21 @@
 // Bank visits (approved 11 November 2026): the same message lists residents visiting as customers (`visitors`);
 // they stand at customer spots (a step back from the teller windows, by the market terminals, by the benches)
 // and can be talked to like anyone in the city. Visits involve no money.
-import { PERMANENT_RESIDENT_IDENTITIES } from './permanent-residents.js';
+//
+// Teller lifecycle (fix for "a teller disappeared", founder iPhone test 11 November 2026):
+// - Everyone keeps their window or spot until they leave; one person leaving never moves anyone else.
+// - Someone who arrives while the player watches walks in (tellers from the staff gate, visitors from the door);
+//   someone who leaves walks out the same way and only then disappears. Whoever is already there when the
+//   player enters (or after a reconnect resync) is simply there.
+// - A dropped connection does not clear anyone; the room re-sends the current list after every (re)connect.
+// - diagnostics() describes each teller, and `events` keeps the last changes with their reasons.
+import { PERMANENT_RESIDENT_IDENTITIES, PERMANENT_RESIDENT_SCHEDULES } from './permanent-residents.js';
+import { scheduledPlace } from './resident-schedule.js';
 
-const WAVE_MS = 2600, NOTICE_M = 6;
+const WAVE_MS = 2600, NOTICE_M = 6, WALK_SPEED = 1.25, ARRIVED = 0.06, PLACE_WINDOW_S = 1.5, EVENT_LIMIT = 40;
 export const BANK_STAFF_LIMIT = 4; // one per teller window
 export const BANK_VISITOR_LIMITS = Object.freeze({ mobile: 4, desktop: 8 });
+export const BANK_TELLER_INDICES = Object.freeze(PERMANENT_RESIDENT_SCHEDULES.map((s, i) => (s.employment?.workplaceId === 'nerdie-city-bank' ? i : -1)).filter((i) => i >= 0));
 const r2 = (v) => Math.round(v * 100) / 100;
 
 // Where a teller stands: behind the counter (the staff side, east of the line) at their window, facing the
@@ -29,7 +39,17 @@ export function visitorSpots(layout) {
   for (const b of layout.benches) spots.push({ x: r2(b.x + (b.x < layout.medallion.x ? -0.75 : 0.75)), z: r2(b.z + 0.4), yaw: b.x < layout.medallion.x ? Math.PI / 2 : -Math.PI / 2 });
   return spots.map((s) => Object.freeze({ ...s, y }));
 }
-// The residents to draw: valid permanent residents, unique, in window order (lowest resident number first).
+// How someone gets between the way in and their stand (walked in reverse when leaving). Tellers: along the
+// staff side of the counter from the staff gate at its north end. Visitors: from the street door up the centre
+// aisle (between the columns), across past the benches' ends, then to their spot. Pure.
+export function bankRoute(layout, stand, role) {
+  const y = layout.y;
+  if (role === 'teller') return [{ x: stand.x, y, z: r2(layout.counter.z0 + 0.45) }, { x: stand.x, y, z: stand.z }];
+  const aisle = layout.doorX, door = { x: aisle, y, z: r2(layout.maxZ - 1.0) };
+  const clearZ = r2(Math.max(stand.z, ...layout.benches.map((b) => b.z + b.length / 2 + 1.0)));
+  return [door, { x: aisle, y, z: clearZ }, { x: stand.x, y, z: clearZ }, { x: stand.x, y, z: stand.z }];
+}
+// The residents to draw: valid permanent residents, unique, lowest resident number first.
 export function tellersToDraw(residents, limit = BANK_STAFF_LIMIT, exclude = new Set()) {
   const seen = new Set(), out = [];
   for (const r of Array.isArray(residents) ? residents : []) {
@@ -38,48 +58,119 @@ export function tellersToDraw(residents, limit = BANK_STAFF_LIMIT, exclude = new
   }
   return out.sort((a, b) => a - b).slice(0, limit);
 }
+// Keeps everyone where they are: residents already placed keep their slot; newcomers take the first free slot
+// in order. Returns Map(index -> slot number). Pure.
+export function assignSlots(previous, wanted, slotCount) {
+  const out = new Map(), used = new Set();
+  for (const index of wanted) if (previous.has(index) && previous.get(index) < slotCount && !used.has(previous.get(index))) { out.set(index, previous.get(index)); used.add(previous.get(index)); }
+  for (const index of wanted) {
+    if (out.has(index)) continue;
+    let slot = 0; while (used.has(slot)) slot++;
+    if (slot >= slotCount) continue; out.set(index, slot); used.add(slot);
+  }
+  return out;
+}
 
 export class BankStaff {
-  constructor(scene, { library, layout, mobile = false }) {
-    Object.assign(this, { scene, library }); this.stands = tellerStands(layout); this.spots = visitorSpots(layout);
+  constructor(scene, { library, layout, mobile = false, debug = false, now = () => performance.now() }) {
+    Object.assign(this, { scene, library, layout, debug, clock: now }); this.stands = tellerStands(layout); this.spots = visitorSpots(layout);
     this.visitorLimit = Math.min(this.spots.length, mobile ? BANK_VISITOR_LIMITS.mobile : BANK_VISITOR_LIMITS.desktop);
-    this.wanted = []; this.wantedVisitors = []; this.entries = new Map(); this.waveUntil = 0;
+    this.wanted = []; this.wantedVisitors = []; this.slots = { teller: new Map(), visitor: new Map() }; this.entries = new Map(); this.waveUntil = 0;
+    this.inside = false; this.enteredAt = -Infinity; this.lastMessageAt = null; this.firstMessageAt = null; this.events = [];
   }
-  // From the room: who is on shift inside, and who is visiting (empty clears them).
+  #event(index, what, reason) {
+    const e = { at: Math.round(this.clock()), index, residentId: PERMANENT_RESIDENT_SCHEDULES[index]?.residentId || null, what, reason };
+    this.events.push(e); if (this.events.length > EVENT_LIMIT) this.events.shift();
+    if (this.debug) console.info(`[bank] ${e.residentId} ${what} (${reason})`);
+  }
+  // From the room: who is on shift inside, and who is visiting (an empty list means nobody).
   setResidents(residents, visitors = []) {
+    this.lastMessageAt = this.clock();
+    if (this.inside && this.firstMessageAt === null) this.firstMessageAt = this.lastMessageAt; // the room's first answer since entering
     this.wanted = tellersToDraw(residents);
     this.wantedVisitors = tellersToDraw(visitors, this.visitorLimit, new Set(this.wanted));
+    this.slots.teller = assignSlots(this.slots.teller, this.wanted, this.stands.length);
+    this.slots.visitor = assignSlots(this.slots.visitor, this.wantedVisitors, this.spots.length);
   }
-  clear() { this.wanted = []; this.wantedVisitors = []; this.#dropAll(); }
-  get count() { return this.entries.size; }
-  get drawn() { return [...this.entries].filter(([, e]) => e.role === 'teller').map(([i]) => i); }
-  get drawnVisitors() { return [...this.entries].filter(([, e]) => e.role === 'visitor').map(([i]) => i); }
+  // The player's session ended (not a dropped connection: the room re-sends after a reconnect).
+  clear(reason = 'session-ended') {
+    for (const index of this.entries.keys()) this.#event(index, 'removed', reason);
+    this.wanted = []; this.wantedVisitors = []; this.slots = { teller: new Map(), visitor: new Map() }; this.#dropAll();
+  }
+  get count() { return [...this.entries.values()].filter((e) => !e.leaving).length; }
+  get drawn() { return [...this.entries].filter(([, e]) => e.role === 'teller' && !e.leaving).map(([i]) => i).sort((a, b) => a - b); }
+  get drawnVisitors() { return [...this.entries].filter(([, e]) => e.role === 'visitor' && !e.leaving).map(([i]) => i).sort((a, b) => a - b); }
   // A visitor within reach to talk to: { index, identity } or null (tellers are served by the teller station).
   nearbyVisitor(player, reach) {
     let best = null, bestD = reach;
-    for (const [index, e] of this.entries) { if (e.role !== 'visitor') continue; const d = Math.hypot(player.pos.x - e.stand.x, player.pos.z - e.stand.z); if (d < bestD) { best = { index, identity: e.identity }; bestD = d; } }
+    for (const [index, e] of this.entries) { if (e.role !== 'visitor' || e.leaving) continue; const d = Math.hypot(player.pos.x - e.pos.x, player.pos.z - e.pos.z); if (d < bestD) { best = { index, identity: e.identity }; bestD = d; } }
     return best;
   }
   // Each frame: inside the bank or not.
   update(dt, inside, player) {
-    if (!inside) { if (this.entries.size) this.#dropAll(); return; }
-    const want = new Map([...this.wanted.map((index, k) => [index, { stand: this.stands[k], role: 'teller' }]), ...this.wantedVisitors.map((index, k) => [index, { stand: this.spots[k], role: 'visitor' }])]);
-    for (const [index, e] of this.entries) if (!want.has(index) || want.get(index).stand !== e.stand) { e.visual.dispose(); this.entries.delete(index); }
+    if (!inside) { if (this.inside) { for (const index of this.entries.keys()) this.#event(index, 'removed', 'player-left-bank'); this.#dropAll(); } this.inside = false; return; }
+    // On entering: a list already in hand (the room's answer can arrive a frame before the client is inside) counts
+    // as the room's first answer; otherwise wait for it.
+    if (!this.inside) { this.inside = true; this.enteredAt = this.clock(); this.firstMessageAt = this.wanted.length || this.wantedVisitors.length ? this.enteredAt : null; }
+    // Whoever the room lists on entering (however long its first answer takes on a phone network) is already there.
+    const now = this.clock(), placing = now - this.enteredAt < PLACE_WINDOW_S * 1000 || this.firstMessageAt === null || now - this.firstMessageAt < 500;
+    const want = new Map();
+    for (const [index, slot] of this.slots.teller) want.set(index, { stand: this.stands[slot], role: 'teller' });
+    for (const [index, slot] of this.slots.visitor) want.set(index, { stand: this.spots[slot], role: 'visitor' });
+    // leaving: walk out the way they came, then disappear
+    for (const [index, e] of this.entries) {
+      if (e.leaving || (want.has(index) && want.get(index).stand === e.stand)) continue;
+      const route = bankRoute(this.layout, e.stand, e.role).reverse(); route.shift(); // from their stand outwards
+      e.leaving = true; e.path = route; this.#event(index, 'leaving', e.role === 'teller' ? 'shift-over' : 'visit-over');
+    }
     for (const [index, { stand, role }] of want) {
-      if (this.entries.has(index)) continue;
+      if (this.entries.has(index) && !this.entries.get(index).leaving) continue;
+      if (this.entries.has(index)) { this.entries.get(index).visual.dispose(); this.entries.delete(index); } // came back while leaving: start again
       const identity = PERMANENT_RESIDENT_IDENTITIES[index];
       if (!this.library.npcPackReady(identity.appearance.pack)) { this.library.ensureNpcPack(identity.appearance.pack).catch(() => {}); continue; }
       const visual = this.library.buildNpcVisual(identity); if (!visual) continue;
-      visual.root.position.set(stand.x, stand.y, stand.z); visual.root.rotation.y = stand.yaw;
+      const route = bankRoute(this.layout, stand, role), walkIn = !placing, start = walkIn ? route[0] : stand;
+      const e = { visual, stand, identity, role, leaving: false, pos: { x: start.x, z: start.z }, path: walkIn ? route.slice(1) : [] };
+      visual.root.position.set(start.x, stand.y, start.z); visual.root.rotation.y = stand.yaw;
       visual.root.traverse((o) => o.layers.set(1)); this.scene.add(visual.root);
-      this.entries.set(index, { visual, stand, identity, role }); if (role === 'teller') this.waveUntil = performance.now() + WAVE_MS;
+      this.entries.set(index, e); if (role === 'teller') this.waveUntil = now + WAVE_MS;
+      this.#event(index, walkIn ? 'arriving' : 'present', walkIn ? (role === 'teller' ? 'shift-start' : 'visit-start') : 'already-there');
     }
-    for (const e of this.entries.values()) {
-      const near = player && Math.hypot(player.pos.x - e.stand.x, player.pos.z - e.stand.z) < (e.role === 'teller' ? NOTICE_M : 2.5);
-      e.visual.play(e.role === 'teller' && performance.now() < this.waveUntil && near ? 'Wave' : e.identity.traits.sociability > 0.5 ? 'Idle' : 'Idle_Neutral');
-      e.visual.root.rotation.y = near ? Math.atan2(player.pos.x - e.stand.x, player.pos.z - e.stand.z) : e.stand.yaw; // looks at whoever comes up to them
+    const remove = [];
+    for (const [index, e] of this.entries) {
+      if (e.path.length) { // walking
+        const to = e.path[0], dx = to.x - e.pos.x, dz = to.z - e.pos.z, d = Math.hypot(dx, dz), step = Math.min(d, WALK_SPEED * dt);
+        if (d > 1e-6) { e.pos.x += dx / d * step; e.pos.z += dz / d * step; e.visual.root.rotation.y = Math.atan2(dx, dz); }
+        if (d - step <= ARRIVED) e.path.shift();
+        e.visual.root.position.set(e.pos.x, e.stand.y, e.pos.z); e.visual.play('Walk', 0.2);
+        if (!e.path.length && e.leaving) remove.push(index);
+        if (!e.path.length && !e.leaving) e.visual.root.rotation.y = e.stand.yaw;
+      } else {
+        const near = player && Math.hypot(player.pos.x - e.pos.x, player.pos.z - e.pos.z) < (e.role === 'teller' ? NOTICE_M : 2.5);
+        e.visual.play(e.role === 'teller' && now < this.waveUntil && near ? 'Wave' : e.identity.traits.sociability > 0.5 ? 'Idle' : 'Idle_Neutral', 0.25);
+        e.visual.root.rotation.y = near ? Math.atan2(player.pos.x - e.pos.x, player.pos.z - e.pos.z) : e.stand.yaw; // looks at whoever comes up to them
+      }
       e.visual.mixer.update(dt);
     }
+    for (const index of remove) { const e = this.entries.get(index); e.visual.dispose(); this.entries.delete(index); this.#event(index, 'gone', e.role === 'teller' ? 'through-staff-gate' : 'out-the-door'); }
   }
-  #dropAll() { for (const e of this.entries.values()) e.visual.dispose(); this.entries.clear(); }
+  // Development diagnostics (QA, ?bankDebug=1): each teller's schedule, what the room last said, what is drawn.
+  // three: the page's Three.js (window.__hw.THREE) for the in-view test; this module stays Three.js-free for Node.
+  diagnostics({ minute = null, camera = null, three = null } = {}) {
+    const frustum = camera && three ? new three.Frustum().setFromProjectionMatrix(new three.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)) : null;
+    return BANK_TELLER_INDICES.map((index) => {
+      const s = PERMANENT_RESIDENT_SCHEDULES[index], e = this.entries.get(index), job = s.employment;
+      const at = minute === null ? null : scheduledPlace(job, minute, s.homeLocationId, index);
+      return {
+        residentId: s.residentId, index, job: job?.title || null, shift: job ? `${job.shiftStartMinute}-${job.shiftStartMinute + job.shiftDurationMinutes}` : null,
+        minute, scheduled: at ? `${at.activity}@${at.locationId}` : null, inLatestMessage: this.wanted.includes(index), playerInside: this.inside,
+        drawn: !!e, state: !e ? 'none' : e.leaving ? 'leaving' : e.path.length ? 'arriving' : 'at-window',
+        window: this.slots.teller.has(index) ? this.slots.teller.get(index) + 1 : null, position: e ? { x: r2(e.pos.x), z: r2(e.pos.z) } : null,
+        visible: !!e && e.visual.root.visible && e.visual.root.parent === this.scene,
+        inView: !!e && !!frustum && frustum.containsPoint(new three.Vector3(e.pos.x, e.stand.y + 1.0, e.pos.z)),
+        lastChange: [...this.events].reverse().find((ev) => ev.index === index) || null,
+      };
+    });
+  }
+  #dropAll() { for (const e of this.entries.values()) e.visual.dispose(); this.entries.clear(); this.inside = false; }
 }

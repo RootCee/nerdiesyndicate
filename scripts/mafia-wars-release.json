@@ -1,7 +1,7 @@
 {
   "name": "Nerdie City: Mafia Wars",
-  "channel": "nc-0.9.0-rc1-hotfix1",
-  "sourceCommit": "4e4903b5a500eeec2d699e93cb6c34a31b0b25f7",
+  "channel": "nc-0.9.0-rc1-hotfix1b",
+  "sourceCommit": "466ec4488e2849918c4816358f3320ac7aecc345",
   "sourceBranch": "codex/nerdie-city-nc-rc1-hotfix1",
   "entry": "/mafia-wars/game/?phys=0&multiplayer=1"
 }

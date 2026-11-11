@@ -76,9 +76,9 @@ import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
 import { createMobilePerformanceOverlay } from './mobile-performance-overlay.js';
 import { createAdaptiveResolution } from './adaptive-resolution.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-0.9.0-rc1-hotfix1';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-0.9.0-rc1-hotfix1b';
 
-const GAME_BUILD_ID = 'nc-0.9.0-rc1-hotfix1';
+const GAME_BUILD_ID = 'nc-0.9.0-rc1-hotfix1b';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -1249,7 +1249,10 @@ function configureMultiplayerClient() {
         });
       }
     }
-    if (['connection-lost', 'session-expired', 'room-full', 'disconnected'].includes(detail.state)) { clearRemotePlayers(); npcRenderer.clear(); bankStaff?.clear(); }
+    if (['connection-lost', 'session-expired', 'room-full', 'disconnected'].includes(detail.state)) { clearRemotePlayers(); npcRenderer.clear(); }
+    // RC1 hotfix: a dropped connection keeps the bank's tellers (the room re-sends who is there after reconnecting); a
+    // finished session clears them.
+    if (['session-expired', 'room-full', 'disconnected'].includes(detail.state)) bankStaff?.clear(detail.state);
   });
   multiplayer.addEventListener('message', ({ detail: message }) => {
     if (message.type === 'welcome') {
@@ -1555,7 +1558,7 @@ async function boot() {
   };
   bootMark('characters');
   buildNav(); bootMark('bot-grid'); initHud();
-  if (city?.bankInterior) bankStaff = new BankStaff(scene, { library: npcLibrary, layout: city.bankInterior.layout, mobile: !!Q.lowMemory });
+  if (city?.bankInterior) bankStaff = new BankStaff(scene, { library: npcLibrary, layout: city.bankInterior.layout, mobile: !!Q.lowMemory, debug: qs.get('bankDebug') === '1' && devTimeAllowed(location.hostname) });
   if (city) {
     cityPoiList = cityPois(city.plan);
     navLoader = createNavGraphLoader({ plan: city.plan, workerUrl: new URL('./nav-graph-worker.js', import.meta.url) });

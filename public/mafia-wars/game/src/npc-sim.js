@@ -197,6 +197,14 @@ export class CityNpcSimulation {
   // RC1 hotfix: the bank's tellers working inside right now (on shift and arrived), lowest resident first;
   // bankVisitorsInside(): the customers visiting it (bank visits).
   bankStaffInside() { return this.#inBank('work'); }
+  // Development diagnostics (tests, QA): every bank teller's server state right now. Never sent to clients.
+  bankDiagnostics() {
+    const door = this.schedulePois.get(BANK_SPACE_ID)?.entry;
+    return this.residents.filter((r) => this.schedules.get(r.identity.id)?.employment?.workplaceId === BANK_SPACE_ID).map((r) => ({
+      residentId: this.schedules.get(r.identity.id).residentId, index: r.index, activity: r.economicActivity, location: r.economicLocation,
+      indoors: !!r.indoors, active: !!r.active, placed: !!r.placed, distToDoor: door ? Math.round(dist(door, r) * 10) / 10 : null,
+    }));
+  }
   bankVisitorsInside() { return this.#inBank('errand'); }
   #inBank(activity) {
     return this.residents.filter((r) => r.indoors && r.economicActivity === activity && r.economicLocation === BANK_SPACE_ID).map((r) => {
