@@ -2,6 +2,8 @@
 // resident's real schedule (resident-schedule.js), job and personality, so what they say always matches
 // where the bank says they are. No free text and no AI: residents only ever say these lines.
 import { scheduledPlace } from './resident-schedule.js';
+import { homeLocationFor } from './home-ids.js';
+import { homeAddress } from './neighborhood-housing.js';
 
 export const TALK_PLACES = Object.freeze([
   { id: 'nerdie-city-bank', name: 'the bank' }, { id: 'nerdie-arms', name: 'Ammo' }, { id: 'corner-market', name: 'the Corner Market' },
@@ -68,10 +70,11 @@ export const TALK_TOPICS = Object.freeze([
 ]);
 
 // resident: { index, name, personality, job: { title, workplaceId, shiftStartMinute, shiftDurationMinutes } | null,
-// chess: { hello } | null }; minute: the economic minute of the day; day: a day key (YYYY-MM-DD) for stable choices.
+// chess: { hello } | null, housing: { propertyId } | null — NC-LIFE-02B-2: a Neighborhood One home gives a real address }; minute: the economic minute of the day; day: a day key (YYYY-MM-DD) for stable choices.
 export function residentConversation(resident, minute, day = '') {
   const voice = VOICES[resident.personality] || VOICES.peaceful, job = resident.job;
-  const at = scheduledPlace(job, minute, 'north-court', resident.index), seed = (topic) => `${resident.index}:${day}:${topic}`;
+  const homeId = resident.housing?.propertyId, address = homeAddress(homeId); // null at North Court: lines unchanged
+  const at = scheduledPlace(job, minute, homeLocationFor(homeId), resident.index), seed = (topic) => `${resident.index}:${day}:${topic}`;
   const fill = (line) => line.replaceAll('{name}', resident.name)
     .replaceAll('{place}', at.locationId === job?.workplaceId ? placeName(job.workplaceId) : placeName(at.locationId))
     .replaceAll('{until}', job ? clock(job.shiftStartMinute + job.shiftDurationMinutes) : '')
@@ -80,7 +83,10 @@ export function residentConversation(resident, minute, day = '') {
   return {
     activity: at.activity, locationId: at.locationId, greeting, topics: TALK_TOPICS,
     reply(topic, placeId = null) {
-      if (topic === 'how') return { text: fill(pick(voice[at.activity] || voice.home, seed(`how:${at.activity}`))) };
+      if (topic === 'how') {
+        const line = fill(pick(voice[at.activity] || voice.home, seed(`how:${at.activity}`)));
+        return { text: at.activity === 'home' && address ? `${line} I'm home at ${address}.` : line };
+      }
       if (topic === 'work') {
         const chess = resident.chess ? ' And you can find me at the chess tables in Central Park.' : '';
         if (!job) return { text: `No steady job right now. I pick up city temp work when there's a slot.${chess}` };

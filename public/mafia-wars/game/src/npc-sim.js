@@ -21,6 +21,8 @@ import { cityShotOccluded, publicCityShotOccluded, targetDistance } from './mult
 import { storeById } from './store-hours.js';
 import { bodyHit, residentBodyOptions } from './hit-regions.js';
 import { hourAt } from './city-clock.js';
+import { isHomeLocation } from './home-ids.js';
+import { homePoi } from './neighborhood-housing.js';
 import { scheduledPlace } from './resident-schedule.js';
 
 export const NPC_SIM_RULES = Object.freeze({
@@ -45,6 +47,7 @@ export const NPC_ANIM = Object.freeze({ idle: 0, walk: 1, notice: 2, sit: 3 }); 
 const hard = (obstacles) => obstacles.filter((r) => !r.soft);
 // A scheduled resident this close to their place has arrived (#placeAt spreads them up to ~7 m around it).
 const SCHEDULE_ARRIVED_M = 8;
+const HOME_DOOR_M = 2; // NC-LIFE-02B: a resident seen walking home goes in only on their doorstep
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 
 export class CityNpcSimulation {
@@ -53,8 +56,10 @@ export class CityNpcSimulation {
   // structureOcclusion: M6.8A, shots at residents use the same city structures as player shots.
   // scheduleMinute: (nowMs) => minute of the economic day. Given, schedules follow it (the bank's real
   // Pacific day) instead of the sky's fast cycle, so a resident is where the ledger says they are.
-  constructor({ seed = 'room', identities = null, schedules = null, cityClock = null, scheduleMinute = null, maxActive = NPC_POPULATION.startActive, population = NPC_POPULATION.max, plan = createCityPlan(), rules = NPC_SIM_RULES, reactions = false, combat = false, structureOcclusion = false } = {}) {
+  constructor({ seed = 'room', identities = null, schedules = null, cityClock = null, scheduleMinute = null, maxActive = NPC_POPULATION.startActive, population = NPC_POPULATION.max, plan = createCityPlan(), rules = NPC_SIM_RULES, reactions = false, combat = false, structureOcclusion = false, homesIndoors = false } = {}) {
     this.reactions = reactions === true; this.combat = this.reactions && combat === true; this.panicQueue = []; this.strikes = [];
+    // NC-LIFE-02B (NPC_HOMES): residents at home go inside their own front door, like store staff on shift.
+    this.homesIndoors = homesIndoors === true;
     // true: the static structures; a function: the room's live test (M6.8B open faces included).
     this.structureOcclusion = typeof structureOcclusion === 'function' ? structureOcclusion : structureOcclusion === true ? cityShotOccluded : null;
     this.rules = rules; this.plan = plan; this.random = seededRandom(`sim:${seed}`);
@@ -136,7 +141,36 @@ export class CityNpcSimulation {
     const minute = this.minuteAt.minute;
     const { activity, locationId } = scheduledPlace(schedule.employment, minute, schedule.homeLocationId || 'north-court', r.index, this.evenings.get(schedule.residentId) || null);
     r.economicActivity = activity; r.economicLocation = locationId;
-    return this.schedulePois.get(locationId) || null;
+    // NC-LIFE-02A-1: a Neighborhood One home (home:<buildingId>) resolves to its own street door, found
+    // only when a schedule names one, so rooms whose residents all live at North Court pay nothing.
+    return this.schedulePois.get(locationId) || (isHomeLocation(locationId) ? this.#homePoi(locationId) : null);
+  }
+  // NC-LIFE-02B: leaving home, a resident appears on their own doorstep facing the street, never inside a wall.
+  #stepOutOf(r, door) {
+    this.#reset(r, { x: door.entry.x, z: door.entry.z });
+    const out = door.approach?.[0]; if (out) r.yaw = Math.atan2(out.x - door.entry.x, out.z - door.entry.z);
+  }
+  // NC-LIFE-02B: who is inside a home right now (authoritative; no modelled interior needed).
+  homeOccupants(locationId) {
+    return this.residents.filter((r) => r.indoors && r.homeDoor?.id === locationId).map((r) => {
+      const schedule = this.schedules.get(r.identity.id);
+      return { index: r.index, gameId: r.identity.id, residentId: schedule?.residentId || null, propertyId: schedule?.propertyId || null, identity: r.identity };
+    });
+  }
+  // NC-LIFE-02B-2: with no player out in the city nobody can see the street, so home time still runs: a
+  // resident due home is placed at their door and goes in; one whose day moves on comes out of it.
+  #homeUpkeep(now) {
+    for (const r of this.residents) {
+      const place = this.#scheduledPoi(r, now);
+      const home = !!place && r.economicActivity === 'home' && place.id === r.economicLocation;
+      if (home && !r.homeDoor) { if (r.held) continue; if (dist(place.entry, r) > SCHEDULE_ARRIVED_M || !r.placed) this.#placeAt(r, place); r.indoors = true; r.homeDoor = place; }
+      else if (!home && r.homeDoor) { const door = r.homeDoor; r.indoors = false; r.homeDoor = null; this.#stepOutOf(r, door); }
+    }
+  }
+  get indoorsAtHome() { return this.residents.reduce((n, r) => n + (r.homeDoor ? 1 : 0), 0); }
+  #homePoi(locationId) {
+    if (!this.schedulePois.has(locationId)) { const poi = homePoi(locationId); if (!poi) return null; this.schedulePois.set(locationId, poi); }
+    return this.schedulePois.get(locationId);
   }
   // A free spot around a scheduled place (staff and visitors gather by the door, neighbours around the
   // court), so residents who belong there are already there when a player arrives.
@@ -156,7 +190,8 @@ export class CityNpcSimulation {
     let goal = null, approach = [], visit = false;
     const scheduled = this.#scheduledPoi(r, now);
     // Already where the schedule says: stay (work the shift, shop, hang out) and check again shortly.
-    if (scheduled && dist(scheduled.entry, r) <= SCHEDULE_ARRIVED_M) { r.visit = true; r.waitUntil = now + this.rules.visitIdleMs * (1 + this.random()); return; }
+    const arrivedM = this.homesIndoors && r.economicActivity === 'home' ? HOME_DOOR_M : SCHEDULE_ARRIVED_M; // home: walk all the way to the door
+    if (scheduled && dist(scheduled.entry, r) <= arrivedM) { r.visit = true; r.waitUntil = now + this.rules.visitIdleMs * (1 + this.random()); return; }
     if (scheduled) { goal = scheduled.entry; approach = scheduled.approach || []; visit = true; }
     if (!goal && r.identity.routine === 'visit' && this.random() < 0.5) {
       const near = this.pois.filter((p) => dist(p.entry, r) < 150);
@@ -532,6 +567,7 @@ export class CityNpcSimulation {
       if (!source || dist(source, threat) >= NPC_BEHAVIOR_RULES.wariness) threat.armed = true;
     }
     if (!players.length) {
+      if (this.homesIndoors) this.#homeUpkeep(now);
       for (const r of this.residents) {
         Object.assign(r, { active: false, aware: null, fight: null, allyAttack: null });
         if ([NPC_BEHAVIOR.fight, NPC_BEHAVIOR.strike, NPC_BEHAVIOR.warn, NPC_BEHAVIOR.hurt].includes(r.behavior)) r.behavior = NPC_BEHAVIOR.alert; // nobody left to fight
@@ -548,7 +584,13 @@ export class CityNpcSimulation {
       const nearest = Math.min(...players.map((p) => dist(p, r)));
       r.nearest = nearest;
       // On shift at a store and arrived: behind the counter inside (the store draws them), not on the street.
-      r.indoors = !!place && r.economicActivity === 'work' && !!storeById(r.economicLocation) && dist(place.entry, r) <= SCHEDULE_ARRIVED_M;
+      const atStore = !!place && r.economicActivity === 'work' && !!storeById(r.economicLocation) && dist(place.entry, r) <= SCHEDULE_ARRIVED_M;
+      // NC-LIFE-02B: at home and arrived at their own front door: inside (home:<buildingId> or North Court). The
+      // room is the authority; nothing is drawn outdoors, sent, simulated or shootable until they leave.
+      const atHome = this.homesIndoors && !!place && r.economicActivity === 'home' && place.id === r.economicLocation && dist(place.entry, r) <= (r.active ? HOME_DOOR_M : SCHEDULE_ARRIVED_M);
+      const leftHome = r.homeDoor && !atHome ? r.homeDoor : null;
+      r.indoors = atStore || atHome; r.homeDoor = atHome ? place : null;
+      if (leftHome) this.#stepOutOf(r, leftHome); // they come out of the same door they went in
       if (r.held || nearest <= rules.relocateRadius || relocations >= rules.relocationsPerTick) continue;
       // Out of everyone's sight. A scheduled resident belongs at their place (and stays once there); when
       // that place is in a player's view they appear out of sight and walk in. Others come near players.
@@ -579,6 +621,7 @@ export class CityNpcSimulation {
         if (r.behavior === NPC_BEHAVIOR.defeated) Object.assign(r, { health: NPC_COMBAT_RULES.maxHealth, defeatedAt: 0, protectionUntil: now + NPC_COMBAT_RULES.respawnProtectionMs });
         Object.assign(r, { speed: 0, anim: NPC_ANIM.idle, aware: null, pending: null, behavior: NPC_BEHAVIOR.calm, fleeing: false, threat: null, fight: null, allyAttack: null });
         if (r.route && r.fleeing === false && r.reaction === 'flee') r.route = null;
+        if (r.homeDoor) { r.route = null; r.lastDormantAt = now; continue; } // NC-LIFE-02B: at home, nothing to step
         this.#dormantStep(r, now); continue;
       }
       r.lastDormantAt = now;

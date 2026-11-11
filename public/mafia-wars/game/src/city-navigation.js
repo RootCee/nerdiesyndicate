@@ -106,6 +106,55 @@ export const segmentClear = (a, b, obstacles, { pad = PAD, ignore = () => false 
 export const inSoftZone = (p, obstacles) => obstacles.some((r) => r.soft && inside(p, r));
 export const insideObstacle = (p, obstacles, pad = 0) => obstacles.some((r) => !r.soft && inside(p, r, pad));
 
+// MAP-01A: uniform grids so a segment or point is only tested against what is near it. Each lookup returns a
+// superset of the items that can possibly match (every item is filed under every cell its box, grown by
+// INDEX_PAD, touches), so every answer is exactly what a test against the whole list gives — only faster.
+// Lookups with a larger pad fall back to the whole list.
+const CELL = 16, INDEX_PAD = 1;
+const cellOf = (v) => Math.floor(v / CELL);
+function gridIndex(items, box) {
+  const cells = new Map();
+  items.forEach((item, i) => {
+    const b = box(item);
+    for (let cx = cellOf(b.minX - INDEX_PAD); cx <= cellOf(b.maxX + INDEX_PAD); cx++) for (let cz = cellOf(b.minZ - INDEX_PAD); cz <= cellOf(b.maxZ + INDEX_PAD); cz++) {
+      const key = `${cx},${cz}`; (cells.get(key) || cells.set(key, []).get(key)).push(i);
+    }
+  });
+  return cells;
+}
+// Item indices whose cells overlap the box, ascending (the original list order), without duplicates.
+function gridQuery(cells, minX, minZ, maxX, maxZ) {
+  const out = new Set();
+  for (let cx = cellOf(minX); cx <= cellOf(maxX); cx++) for (let cz = cellOf(minZ); cz <= cellOf(maxZ); cz++) for (const i of cells.get(`${cx},${cz}`) || []) out.add(i);
+  return [...out].sort((a, b) => a - b);
+}
+export function obstacleIndex(obstacles) {
+  return { obstacles, cells: gridIndex(obstacles, (r) => r) };
+}
+// segmentClear against an obstacleIndex: identical result, a fraction of the tests.
+export function segmentClearIndexed(index, a, b, { pad = PAD, ignore = () => false } = {}) {
+  if (!index || pad > INDEX_PAD) return segmentClear(a, b, index?.obstacles || [], { pad, ignore });
+  const list = index.obstacles;
+  for (const i of gridQuery(index.cells, Math.min(a.x, b.x) - pad, Math.min(a.z, b.z) - pad, Math.max(a.x, b.x) + pad, Math.max(a.z, b.z) + pad)) {
+    const r = list[i]; if (!ignore(r) && segmentHitsRect(a, b, r, pad)) return false;
+  }
+  return true;
+}
+const insideObstacleIndexed = (index, p) => gridQuery(index.cells, p.x, p.z, p.x, p.z).some((i) => !index.obstacles[i].soft && inside(p, index.obstacles[i]));
+const inSoftZoneIndexed = (index, p) => gridQuery(index.cells, p.x, p.z, p.x, p.z).some((i) => index.obstacles[i].soft && inside(p, index.obstacles[i]));
+// The graph's own indexes (built once per graph; rebuilt if its obstacle or edge list is swapped).
+// Kept off the graph's enumerable fields so the graph's shape (and any copy or comparison of it) is unchanged.
+const hide = (graph, key, value) => { Object.defineProperty(graph, key, { value, writable: true, configurable: true, enumerable: false }); return value; };
+const graphObstacles = (graph) => (graph.obstacleIndex?.obstacles === graph.obstacles ? graph.obstacleIndex : hide(graph, 'obstacleIndex', obstacleIndex(graph.obstacles)));
+function graphEdgeCells(graph) {
+  if (graph.edgeCells?.edges === graph.edges) return graph.edgeCells.cells;
+  const cells = gridIndex(graph.edges, ([ia, ib]) => { const a = graph.nodes[ia], b = graph.nodes[ib]; return { minX: Math.min(a.x, b.x), minZ: Math.min(a.z, b.z), maxX: Math.max(a.x, b.x), maxZ: Math.max(a.z, b.z) }; });
+  hide(graph, 'edgeCells', { edges: graph.edges, cells });
+  return cells;
+}
+// Edges whose box lies within `distance` of p, in edge order.
+const edgesNear = (graph, p, distance) => gridQuery(graphEdgeCells(graph), p.x - distance, p.z - distance, p.x + distance, p.z + distance);
+
 // Walk lines: two sidewalk centre lines per road plus three lines on the road
 // itself (centre and both lane middles: there is no traffic, and some parked
 // cars or legacy buildings sit on a sidewalk or half the road), alleys as one centre line, plus the original neighbourhood's
@@ -139,7 +188,7 @@ export function buildNavGraph(plan = createCityPlan(), obstacles = buildNavObsta
     if (!keyToId.has(key)) { keyToId.set(key, nodes.length); nodes.push({ x, z }); adjacency.push([]); }
     return keyToId.get(key);
   };
-  const lines = walkLines(plan);
+  const lines = walkLines(plan), index = obstacleIndex(obstacles);
   for (const line of lines) {
     // Stops: line ends, every crossing line, and an 8 m grid shared by the
     // three lines of a road so a blocked stretch only removes that piece.
@@ -153,7 +202,7 @@ export function buildNavGraph(plan = createCityPlan(), obstacles = buildNavObsta
     for (let i = 0; i + 1 < sorted.length; i++) {
       const a = line.axis === 'x' ? { x: line.c, z: sorted[i] } : { x: sorted[i], z: line.c };
       const b = line.axis === 'x' ? { x: line.c, z: sorted[i + 1] } : { x: sorted[i + 1], z: line.c };
-      if (!segmentClear(a, b, obstacles)) continue; // blocked: no edge, so no route through it
+      if (!segmentClearIndexed(index, a, b)) continue; // blocked: no edge, so no route through it
       const ia = node(a.x, a.z), ib = node(b.x, b.z), length = Math.hypot(b.x - a.x, b.z - a.z) * line.cost;
       adjacency[ia].push({ to: ib, length }); adjacency[ib].push({ to: ia, length }); edges.push([ia, ib, line.cost]);
     }
@@ -169,13 +218,15 @@ export function buildNavGraph(plan = createCityPlan(), obstacles = buildNavObsta
       for (let a = Math.ceil(left.a0 / STEP) * STEP; a < left.a1; a += STEP) {
         const pa = left.axis === 'x' ? { x: left.c, z: a } : { x: a, z: left.c }, pb = left.axis === 'x' ? { x: right.c, z: a } : { x: a, z: right.c };
         const ia = keyToId.get(`${pa.x.toFixed(2)},${pa.z.toFixed(2)}`), ib = keyToId.get(`${pb.x.toFixed(2)},${pb.z.toFixed(2)}`);
-        if (ia === undefined || ib === undefined || !segmentClear(pa, pb, obstacles)) continue;
+        if (ia === undefined || ib === undefined || !segmentClearIndexed(index, pa, pb)) continue;
         const length = Math.hypot(pb.x - pa.x, pb.z - pa.z) * ROAD_COST;
         adjacency[ia].push({ to: ib, length }); adjacency[ib].push({ to: ia, length }); edges.push([ia, ib, ROAD_COST]);
       }
     }
   }
-  return { nodes, adjacency, edges, obstacles, bounds: plan.bounds, blockCenters: [0, plan.duplicatedOriginalNeighborhood.centerX] };
+  const graph = { nodes, adjacency, edges, obstacles, bounds: plan.bounds, blockCenters: [0, plan.duplicatedOriginalNeighborhood.centerX] };
+  hide(graph, 'obstacleIndex', index);
+  return graph;
 }
 
 // Leaving (or reaching) a point inside a neighbourhood lot, using only gaps
@@ -214,10 +265,12 @@ const project = (p, a, b) => {
 // block; a point inside a private lot (a front-yard door) may cross its own lot
 // band but nothing else.
 function connect(graph, p, { maxDistance = MAX_CONNECTOR, limit = 4 } = {}) {
-  const ownSoft = graph.obstacles.filter((r) => r.soft && inside(p, r));
+  const index = graphObstacles(graph);
+  const ownSoft = gridQuery(index.cells, p.x, p.z, p.x, p.z).map((i) => graph.obstacles[i]).filter((r) => r.soft && inside(p, r));
   const ignore = (r) => ownSoft.includes(r);
   const out = [];
-  for (const [ia, ib, cost] of graph.edges) {
+  for (const e of edgesNear(graph, p, maxDistance)) {
+    const [ia, ib, cost] = graph.edges[e];
     const q = project(p, graph.nodes[ia], graph.nodes[ib]), distance = Math.hypot(q.x - p.x, q.z - p.z);
     if (distance > maxDistance) continue;
     // Approaches meet a walk line square-on; only short diagonals are allowed,
@@ -225,7 +278,7 @@ function connect(graph, p, { maxDistance = MAX_CONNECTOR, limit = 4 } = {}) {
     if (distance > SHORT_DIAGONAL && (q.t <= 1e-6 || q.t >= 1 - 1e-6)) continue;
     // A step of under a metre back onto the line (a resident that sidestepped beside a curb pole)
     // only needs to miss the obstacle itself, not its full clearance.
-    if (distance > 0.05 && !segmentClear(p, q, graph.obstacles, { ignore, pad: distance < 1 ? 0.05 : PAD })) continue;
+    if (distance > 0.05 && !segmentClearIndexed(index, p, q, { ignore, pad: distance < 1 ? 0.05 : PAD })) continue;
     out.push({ ia, ib, cost, point: { x: q.x, z: q.z }, distance });
   }
   out.sort((a, b) => a.distance - b.distance);
@@ -236,7 +289,8 @@ function connect(graph, p, { maxDistance = MAX_CONNECTOR, limit = 4 } = {}) {
 // not near any walkable street (the map then asks for a street or a place).
 export function snapToStreet(graph, p, maxDistance = SNAP_DISTANCE) {
   let best = null;
-  for (const [ia, ib] of graph.edges) {
+  for (const e of edgesNear(graph, p, maxDistance)) {
+    const [ia, ib] = graph.edges[e];
     const q = project(p, graph.nodes[ia], graph.nodes[ib]), distance = Math.hypot(q.x - p.x, q.z - p.z);
     if (distance <= maxDistance && (!best || distance < best.distance)) best = { x: q.x, z: q.z, distance };
   }
@@ -252,7 +306,8 @@ export function findRoute(graph, from, to, { approach = [] } = {}) {
   const direct = findDirectRoute(graph, from, to);
   if (!approach.length) return direct;
   const legs = [to, ...approach];
-  if (!legs.every((p, i) => i === 0 || segmentClear(legs[i - 1], p, graph.obstacles))) return direct;
+  const index = graphObstacles(graph);
+  if (!legs.every((p, i) => i === 0 || segmentClearIndexed(index, legs[i - 1], p))) return direct;
   const inner = findDirectRoute(graph, from, approach[approach.length - 1]);
   if (!inner.ok) return direct;
   const points = simplify([...inner.points, ...[...approach].reverse().slice(1), to]);
@@ -262,15 +317,17 @@ export function findRoute(graph, from, to, { approach = [] } = {}) {
 const polylineLength = (points) => points.reduce((sum, p, i) => i ? sum + Math.hypot(p.x - points[i - 1].x, p.z - points[i - 1].z) : 0, 0);
 
 function findDirectRoute(graph, from, to) {
-  if (insideObstacle(from, graph.obstacles)) return { ok: false, reason: 'start-blocked' };
-  if (insideObstacle(to, graph.obstacles)) return { ok: false, reason: 'destination-blocked' };
-  // Points inside private lots leave through a guaranteed gap first.
-  const hard = graph.obstacles.filter((r) => !r.soft), centers = graph.blockCenters;
-  const legsClear = (legs) => legs.every((p, i) => i === 0 || segmentClear(legs[i - 1], p, hard, { pad: 0.25 }));
-  const exitFrom = inSoftZone(from, graph.obstacles) ? (lotExits(from, centers) || []).find(legsClear) : null;
-  const exitTo = inSoftZone(to, graph.obstacles) ? (lotExits(to, centers) || []).find(legsClear) : null;
-  if (inSoftZone(from, graph.obstacles) && !exitFrom) return { ok: false, reason: 'off-street' };
-  if (inSoftZone(to, graph.obstacles) && !exitTo) return { ok: false, reason: 'no-street-near-destination' };
+  const index = graphObstacles(graph);
+  if (insideObstacleIndexed(index, from)) return { ok: false, reason: 'start-blocked' };
+  if (insideObstacleIndexed(index, to)) return { ok: false, reason: 'destination-blocked' };
+  // Points inside private lots leave through a guaranteed gap first (hard obstacles only).
+  const centers = graph.blockCenters, soft = (r) => r.soft;
+  const legsClear = (legs) => legs.every((p, i) => i === 0 || segmentClearIndexed(index, legs[i - 1], p, { pad: 0.25, ignore: soft }));
+  const fromSoft = inSoftZoneIndexed(index, from), toSoft = inSoftZoneIndexed(index, to);
+  const exitFrom = fromSoft ? (lotExits(from, centers) || []).find(legsClear) : null;
+  const exitTo = toSoft ? (lotExits(to, centers) || []).find(legsClear) : null;
+  if (fromSoft && !exitFrom) return { ok: false, reason: 'off-street' };
+  if (toSoft && !exitTo) return { ok: false, reason: 'no-street-near-destination' };
   const routeFrom = exitFrom ? exitFrom[exitFrom.length - 1] : from, routeTo = exitTo ? exitTo[exitTo.length - 1] : to;
   const inner = findStreetRoute(graph, routeFrom, routeTo);
   if (!inner.ok) return inner;
@@ -300,21 +357,53 @@ function findStreetRoute(graph, from, to) {
   }
   const neighbours = (id) => [...(graph.adjacency[id] || []), ...(extra.get(id) || [])];
   const h = (id) => Math.hypot(nodes[id].x - to.x, nodes[id].z - to.z);
-  const cost = new Map([[START, 0]]), prev = new Map(), open = new Set([START]);
-  while (open.size) {
-    let current = null, best = Infinity;
-    for (const id of open) { const f = cost.get(id) + h(id); if (f < best) { best = f; current = id; } }
+  // MAP-01A: a binary heap instead of scanning the whole open set each step. It picks exactly the node the scan
+  // picked: lowest f, ties to the node that joined the open set first (a node improved while open keeps its
+  // place; one re-opened after leaving joins at the back). Superseded heap entries are skipped.
+  const cost = new Map([[START, 0]]), prev = new Map(), open = new Map([[START, 0]]), heap = new MinHeap();
+  let order = 0; heap.push(h(START), 0, START);
+  while (heap.size) {
+    const { f, seq, id: current } = heap.pop();
+    if (open.get(current) !== seq || f !== cost.get(current) + h(current)) continue;
     if (current === GOAL) break;
     open.delete(current);
     for (const { to: next, length } of neighbours(current)) {
       const score = cost.get(current) + length;
-      if (score < (cost.get(next) ?? Infinity)) { cost.set(next, score); prev.set(next, current); open.add(next); }
+      if (score < (cost.get(next) ?? Infinity)) {
+        cost.set(next, score); prev.set(next, current);
+        if (!open.has(next)) open.set(next, ++order);
+        heap.push(score + h(next), open.get(next), next);
+      }
     }
   }
   if (!cost.has(GOAL)) return { ok: false, reason: 'no-connected-route' };
   const points = [];
   for (let id = GOAL; id !== undefined; id = prev.get(id)) points.unshift({ x: nodes[id].x, z: nodes[id].z });
   return { ok: true, points: simplify(points), distance: cost.get(GOAL) };
+}
+
+// Min-heap of { f, seq, id } ordered by f, then seq.
+class MinHeap {
+  constructor() { this.items = []; }
+  get size() { return this.items.length; }
+  static less(a, b) { return a.f < b.f || (a.f === b.f && a.seq < b.seq); }
+  push(f, seq, id) {
+    const items = this.items; items.push({ f, seq, id });
+    for (let i = items.length - 1; i > 0;) { const parent = (i - 1) >> 1; if (!MinHeap.less(items[i], items[parent])) break; [items[i], items[parent]] = [items[parent], items[i]]; i = parent; }
+  }
+  pop() {
+    const items = this.items, top = items[0], last = items.pop();
+    if (items.length) {
+      items[0] = last;
+      for (let i = 0; ;) {
+        const l = 2 * i + 1, r = l + 1; let m = i;
+        if (l < items.length && MinHeap.less(items[l], items[m])) m = l;
+        if (r < items.length && MinHeap.less(items[r], items[m])) m = r;
+        if (m === i) break; [items[i], items[m]] = [items[m], items[i]]; i = m;
+      }
+    }
+    return top;
+  }
 }
 
 // Drops duplicate and collinear points so the drawn route stays light.
@@ -346,4 +435,35 @@ export function routeProgress(points, p) {
   for (let i = bestIndex + 1; i + 1 < points.length; i++) remaining += Math.hypot(points[i + 1].x - points[i].x, points[i + 1].z - points[i].z);
   const next = points.length > 1 ? points[bestIndex + 1] : points[0];
   return { remaining, next, offRoute: bestDistance, destination: points[points.length - 1] };
+}
+
+// MAP-01A: the walk graph crosses from a background worker to the page as typed arrays (transferred, not
+// copied). decodeNavGraph(encodeNavGraph(g)) has the same nodes, adjacency, edges and obstacles, in order.
+export function encodeNavGraph(graph) {
+  const n = graph.nodes.length, nodes = new Float64Array(n * 2), adjOffsets = new Int32Array(n + 1);
+  graph.nodes.forEach((p, i) => { nodes[2 * i] = p.x; nodes[2 * i + 1] = p.z; });
+  let total = 0; for (let i = 0; i < n; i++) { adjOffsets[i] = total; total += graph.adjacency[i].length; } adjOffsets[n] = total;
+  const adjTo = new Int32Array(total), adjLength = new Float64Array(total);
+  for (let i = 0, k = 0; i < n; i++) for (const { to, length } of graph.adjacency[i]) { adjTo[k] = to; adjLength[k++] = length; }
+  const edges = new Int32Array(graph.edges.length * 2), edgeCost = new Float64Array(graph.edges.length);
+  graph.edges.forEach(([a, b, cost], i) => { edges[2 * i] = a; edges[2 * i + 1] = b; edgeCost[i] = cost; });
+  return { nodes, adjOffsets, adjTo, adjLength, edges, edgeCost, obstacles: graph.obstacles, bounds: graph.bounds, blockCenters: graph.blockCenters };
+}
+export const navGraphTransfer = (data) => [data.nodes, data.adjOffsets, data.adjTo, data.adjLength, data.edges, data.edgeCost].map((a) => a.buffer);
+export function decodeNavGraph(data) {
+  const n = data.adjOffsets.length - 1, nodes = new Array(n), adjacency = new Array(n), edges = new Array(data.edgeCost.length);
+  for (let i = 0; i < n; i++) {
+    nodes[i] = { x: data.nodes[2 * i], z: data.nodes[2 * i + 1] };
+    const list = adjacency[i] = [];
+    for (let k = data.adjOffsets[i]; k < data.adjOffsets[i + 1]; k++) list.push({ to: data.adjTo[k], length: data.adjLength[k] });
+  }
+  for (let i = 0; i < edges.length; i++) edges[i] = [data.edges[2 * i], data.edges[2 * i + 1], data.edgeCost[i]];
+  return { nodes, adjacency, edges, obstacles: data.obstacles, bounds: data.bounds, blockCenters: data.blockCenters };
+}
+// A fingerprint of a plan's geometry (everything but its render profile): a graph built elsewhere is used
+// only for the plan it was built from.
+export function navPlanSignature(plan) {
+  const text = JSON.stringify({ ...plan, profile: undefined });
+  let h = 0x811c9dc5; for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return `${text.length}:${h.toString(16)}`;
 }

@@ -72,6 +72,14 @@ export function createMapView({ bounds, width = 1, height = 1, maxScale = 7, mar
   return view.resize(width, height);
 }
 
+// MAP-01A: the heading-up minimap. A world offset (dx, dz) from the player, in map pixels, lands at this
+// minimap offset from the centre: forward is always up and the player's right is always on the right (the
+// same rotation hud.js applies to the whole minimap with canvas rotate(yaw)).
+export function minimapOffset(dx, dz, yaw) {
+  const c = Math.cos(yaw), s = Math.sin(yaw);
+  return { x: dx * c - dz * s, y: dx * s + dz * c };
+}
+
 // Waypoint arrow angle relative to where the player faces: 0 = straight
 // ahead, positive = turn right (player right vector is (cos yaw, -sin yaw)).
 export function relativeBearing(position, yaw, target) {

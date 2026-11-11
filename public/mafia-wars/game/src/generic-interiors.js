@@ -218,6 +218,14 @@ export class GenericInteriorSystem {
   }
   get inApartment() { return !!this.unit; }
   // Inside a store: where its clerk stands behind the counter (store-staff.js), else null.
+  // NC-LIFE-02B-2: the home the player is standing in, for drawing who is home (home-residents.js): a house's own
+  // layout, or an apartment unit. Lobbies, towers, shops and every other building: null.
+  get homeView() {
+    if (!this.active || this.towerHome || this.towerFloor) return null;
+    if (this.unit) return { spaceId: this.unit.space.id, kind: 'unit', unit: this.unit.U, layer: this.unit.space.layer ?? 0, avoid: [this.unit.U.lift, this.unit.space.inside] };
+    if (this.active.e.template !== 'house') return null;
+    return { spaceId: this.active.e.spaceId, kind: 'house', layout: this.layout, layer: this.space.layer ?? 1, avoid: [this.space.inside, this.space.exit] };
+  }
   get staffStand() { return this.active && !this.unit && storeForSpace(this.active.e.spaceId) ? counterStand(this.layout) : null; }
 
   #buildLobby(it) {

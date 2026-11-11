@@ -1,6 +1,7 @@
 // The game's read-only view of the City Service (city-service/ in this repo): one City Director for the
 // Nerdie Blaq bank, promoted to production by the founder on 27 October 2026. Preview sites (*.vercel.app)
 // read the same service. Requests are GET only, cached, and polled at most once a minute.
+import { RC1_PREVIEW_CITY_SERVICE, isRc1PreviewHost } from './multiplayer-endpoint.js';
 export const CITY_SERVICE_ENDPOINT = 'https://nerdie-city-service.buddieroots.workers.dev';
 export const REVIEW_CITY_SERVICE_ENDPOINT = 'https://nerdie-city-service.buddieroots.workers.dev';
 // A preview host (Vercel preview, localhost, a private LAN address) may name its own isolated City Service with
@@ -10,6 +11,7 @@ export function resolveCityServiceEndpoint(locationLike = globalThis.location) {
   const host = String(locationLike?.hostname || '').toLowerCase();
   const named = previewHost(host) ? new URLSearchParams(locationLike?.search || '').get('cityService') : null;
   if (named && /^https?:\/\/[a-z0-9.-]+(:\d{2,5})?\/?$/i.test(named)) return named.replace(/\/+$/, '');
+  if (isRc1PreviewHost(host)) return RC1_PREVIEW_CITY_SERVICE; // RC1 preview: a stand-in, never the production bank
   if (host.endsWith('.vercel.app')) return REVIEW_CITY_SERVICE_ENDPOINT;
   return CITY_SERVICE_ENDPOINT;
 }

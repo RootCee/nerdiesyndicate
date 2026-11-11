@@ -58,12 +58,15 @@ import { npcIdFor } from './npc-schema.js';
 import { CityServiceClient } from './city-service-client.js';
 import { EconomyDemoService, economyDemoAllowed } from './economy-demo-service.js';
 import { relativeBearing } from './city-map-view.js';
-import { buildNavGraph, findRoute, routeProgress } from './city-navigation.js';
+import { findRoute } from './city-navigation.js';
+import { createNavGraphLoader } from './nav-graph-loader.js';
+import { createWaypointTracker } from './waypoint-tracker.js';
 import { cityPois } from './city-pois.js';
 import { UNDERGROUND_HOUSES } from './underground-match.js';
 import { UNDERGROUND_SPAWNS } from './multiplayer-combat.js';
 import * as npcLibrary from './npc-library.js';
 import { StoreStaff } from './store-staff.js';
+import { HomeResidents } from './home-residents.js';
 import { isStoreOpen } from './store-hours.js';
 import { economicMinuteOfDay, setEconomicClock } from './resident-schedule.js';
 import { NpcRenderer, NPC_RENDER_RULES } from './npc-renderer.js';
@@ -72,9 +75,9 @@ import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
 import { createMobilePerformanceOverlay } from './mobile-performance-overlay.js';
 import { createAdaptiveResolution } from './adaptive-resolution.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-life-01b-prod1';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-0.9.0-rc1';
 
-const GAME_BUILD_ID = 'nc-life-01b-prod1';
+const GAME_BUILD_ID = 'nc-0.9.0-rc1';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -246,7 +249,10 @@ const CAMERA_STORAGE_KEY = 'nerdie-city-mafia-wars.camera.v1';
 let preferThirdPerson = (() => { try { return localStorage.getItem(CAMERA_STORAGE_KEY) !== 'first'; } catch { return true; } })();
 // M6.6 city map and waypoints. Client-only: nothing here is sent to the
 // multiplayer service, and markers come from the same list as the minimap.
-let cityMap = null, cityNav = null, cityPoiList = [], waypoint = null, waypointRoute = null, waypointNote = '', waypointCheckAt = 0;
+// MAP-01A: the walk graph comes from a background worker (built on the spot if needed sooner); waypoint
+// following lives in waypoint-tracker.js.
+let cityMap = null, navLoader = null, cityPoiList = [];
+const waypoints = createWaypointTracker({ getGraph: () => navGraph() });
 let cityInteriorName = '', cityInteriorId = '', mapDots = [], mapSnitch = false;
 let latestEconomy = null, rootsConversationResident = null;
 const economyPanelOpen = () => ['rootsTreasury', 'rootsDemand', 'rootsConversation'].some((id) => !$(id).hidden);
@@ -381,10 +387,12 @@ function talkableResident(index, identity) {
   if (!schedule || PERMANENT_RESIDENT_IDENTITIES[index]?.id !== identity?.id || !RESIDENT_NAMES[index]) return null;
   const chess = chessResident(npcIdFor(index));
   return { index, residentId: schedule.residentId, name: RESIDENT_NAMES[index], personality: personalityOf(identity), job: schedule.employment,
-    housing: { propertyId: schedule.propertyId }, chess: chess ? { hello: chess.hello, levelLabel: chessLevel(chess.level)?.label } : null };
+    housing: { propertyId: residentHomes.get(index) || schedule.propertyId }, chess: chess ? { hello: chess.hello, levelLabel: chessLevel(chess.level)?.label } : null };
 }
 const CALM_FOR_TALK = new Set([NPC_BEHAVIOR.calm, NPC_BEHAVIOR.greet, NPC_BEHAVIOR.alert]);
-let talkIndex = -1, talkRefreshAt = 0;
+let talkIndex = -1, talkRefreshAt = 0, talkHome = false;
+// NC-LIFE-02B-2: each resident's Neighborhood One home (the room's resident-homes; empty = everyone at North Court).
+const residentHomes = new Map();
 const residentTalk = {
   update(interact) {
     const none = { prompt: '', mobileLabel: '' };
@@ -402,7 +410,7 @@ const residentTalk = {
       const d = Math.hypot(e.render.x - player.pos.x, e.render.z - player.pos.z); if (d < bestD) { bestD = d; best = [index, e]; }
     }
     const resident = best && talkableResident(best[0], best[1].identity); if (!resident) return none;
-    if (interact) { talkIndex = resident.index; talkStaff = false; residentPanel.show(resident); multiplayer?.talkToResident?.(resident.index); talkRefreshAt = performance.now() + TALK_REFRESH_MS; return none; }
+    if (interact) { talkIndex = resident.index; talkStaff = false; talkHome = false; residentPanel.show(resident); multiplayer?.talkToResident?.(resident.index); talkRefreshAt = performance.now() + TALK_REFRESH_MS; return none; }
     return { prompt: `${Q.mobile ? '' : '[E] '}TALK TO ${resident.name.toUpperCase()}`, mobileLabel: 'TALK' };
   },
 };
@@ -415,7 +423,20 @@ const staffTalk = {
     if (residentPanel.open) { if (talkStaff && storeStaff.nearby(player, TALK_RANGE_M * 3) !== talkIndex) residentPanel.close(); return none; }
     const index = storeStaff.nearby(player, TALK_RANGE_M + 1); if (index < 0 || player.dead) return none; // across the counter
     const resident = talkableResident(index, PERMANENT_RESIDENT_IDENTITIES[index]); if (!resident) return none;
-    if (interact) { talkIndex = index; talkStaff = true; residentPanel.show(resident); return none; }
+    if (interact) { talkIndex = index; talkStaff = true; talkHome = false; residentPanel.show(resident); return none; }
+    return { prompt: `${Q.mobile ? '' : '[E] '}TALK TO ${resident.name.toUpperCase()}`, mobileLabel: 'TALK' };
+  },
+};
+// NC-LIFE-02B-2: the residents who are home, inside the home the player is in (home-residents.js); same talk card.
+const homeResidents = new HomeResidents(scene, { library: npcLibrary, mobile: !!Q.mobile });
+const homeTalk = {
+  // null: nobody home within reach (store staff answer instead); otherwise the prompt.
+  update(interact) {
+    const none = { prompt: '', mobileLabel: '' };
+    if (residentPanel.open) { if (!talkHome) return null; if (homeResidents.nearby(player, TALK_RANGE_M * 3)?.index !== talkIndex) residentPanel.close(); return none; }
+    const near = homeResidents.nearby(player, TALK_RANGE_M + 0.5); if (!near || player.dead) return null;
+    const resident = talkableResident(near.index, near.identity); if (!resident) return null;
+    if (interact) { talkIndex = near.index; talkHome = true; talkStaff = false; residentPanel.show(resident); return none; }
     return { prompt: `${Q.mobile ? '' : '[E] '}TALK TO ${resident.name.toUpperCase()}`, mobileLabel: 'TALK' };
   },
 };
@@ -437,6 +458,8 @@ const launcher = new Launcher(scene, camera, player, fx);
 const arsenal = { cur: 'ak', switchT: 0 };
 let soloEquipment = { weaponId: 'ak', holstered: false };
 const effectiveEquipment = () => multiplayerActive ? localEquipment : soloEquipment;
+// NC-LIFE-01C: the weapon tray / readout id for an equipment state (what is actually in hand).
+const trayIdFor = (equipment) => !equipment?.weaponId ? 'unarmed' : equipment.holstered ? 'holster' : equipment.weaponId;
 // M6.9: single-player shots recoil the third-person avatar (multiplayer shots do so from the server's shot event).
 for (const shooter of [...Object.values(guns), launcher]) shooter.onFire = (dir) => { if (!multiplayerActive) localAvatar?.triggerFire(dir); };
 const practiceResupply = new PracticeResupply(scene, guns, launcher);
@@ -689,7 +712,7 @@ async function applyLocalEquipment(equipment, revision = localEquipmentRevision 
   if (localAvatar?.gun) localAvatar.gun.visible = localAvatar.obj.visible && !canonical.holstered && !player.dead;
   if (canonical.weaponId) arsenal.cur = canonical.weaponId;
   for (const key in guns) guns[key].holstered = canonical.holstered || key !== canonical.weaponId;
-  for (const button of document.querySelectorAll('#weaponTray [data-weapon]')) button.classList.toggle('selected', button.dataset.weapon === canonical.weaponId && !canonical.holstered);
+  for (const button of document.querySelectorAll('#weaponTray [data-weapon]')) button.classList.toggle('selected', button.dataset.weapon === trayIdFor(canonical));
   hud.callout(canonical.weaponId ? (canonical.holstered ? 'WEAPON HOLSTERED' : `${canonical.weaponId === 'rpg' ? 'RPG-7' : guns[canonical.weaponId]?.name || canonical.weaponId.toUpperCase()} EQUIPPED`) : 'UNARMED', 'SERVER-AUTHORITATIVE CITY PVP');
   return true;
 }
@@ -888,12 +911,12 @@ function toggleCamera() {
 // M6.6: the arena map (Underground or practice) shows layout and teammates
 // only; the city map shows places, routes, and waypoints.
 const ARENA_MAP = Object.freeze({ bounds: MULTIPLAYER_SPACES.underground.bounds, houses: UNDERGROUND_HOUSES, spawns: UNDERGROUND_SPAWNS, exit: MULTIPLAYER_SPACES.underground.exit });
-// Built on first use (~70 ms on a Mac) rather than during loading.
-const navGraph = () => (cityNav ||= buildNavGraph(city.plan));
+// MAP-01A: prewarmed in a worker after the city loads; built on the spot if a route is needed first.
+const navGraph = () => navLoader.get();
 const mapMode = () => (inLocalUnderground() || practiceCombat || isCombatMode(MATCH.mode) ? 'arena' : 'city');
 function mapState() {
   const mode = mapMode();
-  return { mode, player: { x: player.pos.x, z: player.pos.z, yaw: player.yaw }, dots: mapDots, snitch: mapSnitch, route: mode === 'city' ? waypointRoute : null, waypoint: mode === 'city' ? waypoint : null, indoors: !!cityInteriorName };
+  return { mode, player: { x: player.pos.x, z: player.pos.z, yaw: player.yaw }, dots: mapDots, snitch: mapSnitch, route: mode === 'city' ? waypoints.route : null, waypoint: mode === 'city' ? waypoints.target : null, indoors: !!cityInteriorName };
 }
 function setCityMap(open) {
   if (!cityMap || open === cityMap.isOpen) return;
@@ -908,33 +931,23 @@ function setCityMap(open) {
   }
 }
 function setWaypoint(target, route) {
-  waypoint = target; waypointRoute = route; waypointNote = ''; waypointCheckAt = 0;
+  waypoints.set(target, route);
   hud.callout('WAYPOINT SET', target.name.toUpperCase());
 }
-function clearWaypoint(arrived = false) {
-  if (arrived && waypoint) hud.callout('ARRIVED', waypoint.name.toUpperCase());
-  waypoint = null; waypointRoute = null; waypointNote = ''; hud.waypoint(null); cityMap?.refresh();
+function clearWaypoint() {
+  waypoints.clear(); hud.waypoint(null); cityMap?.refresh();
 }
 // Follows the route: arrival, re-routing after straying, and the HUD chip.
 // Hidden in arena modes; paused (not cleared) indoors.
 function updateWaypoint(now) {
   waypointBeacon.visible = false;
-  if (!waypoint) return hud.waypoint(null);
-  const here = inLocalUnderground() ? 'underground' : cityInteriorId;
-  if (waypoint.spaceId && here === waypoint.spaceId) return clearWaypoint(true);
-  if (mapMode() !== 'city') return hud.waypoint(null);
-  if (cityInteriorName) return hud.waypoint({ name: waypoint.name, note: 'INSIDE · ROUTE PAUSED' });
-  const progress = routeProgress(waypointRoute.points, player.pos);
-  if (progress.remaining < 3.5) return clearWaypoint(true);
-  if (now >= waypointCheckAt) {
-    waypointCheckAt = now + 500;
-    if (progress.offRoute > 8) {
-      const next = findRoute(navGraph(), player.pos, waypoint.entry, waypoint);
-      if (next.ok) { waypointRoute = next; waypointNote = ''; } else waypointNote = next.reason === 'off-street' || next.reason === 'start-blocked' ? 'HEAD TO A STREET' : 'NO ROUTE';
-    } else waypointNote = '';
-  }
-  waypointBeacon.position.set(waypoint.entry.x, 13, waypoint.entry.z); waypointBeacon.visible = true;
-  hud.waypoint({ name: waypoint.name, distance: progress.remaining, bearing: relativeBearing(player.pos, player.yaw, progress.next), note: waypointNote });
+  const state = waypoints.update(now, { position: player.pos, here: inLocalUnderground() ? 'underground' : cityInteriorId, mode: mapMode(), indoors: !!cityInteriorName });
+  if (state.status === 'arrived') { hud.callout('ARRIVED', state.target.name.toUpperCase()); hud.waypoint(null); cityMap?.refresh(); return; }
+  if (state.status === 'none' || state.status === 'hidden') return hud.waypoint(null);
+  if (state.status === 'paused') return hud.waypoint({ name: state.target.name, note: 'INSIDE · ROUTE PAUSED' });
+  const { target, progress } = state;
+  waypointBeacon.position.set(target.entry.x, 13, target.entry.z); waypointBeacon.visible = true;
+  hud.waypoint({ name: target.name, distance: progress.remaining, bearing: relativeBearing(player.pos, player.yaw, progress.next), note: state.note });
 }
 function setCombatLobby(open) {
   combatLobbyOpen = !!open;
@@ -1260,6 +1273,8 @@ function configureMultiplayerClient() {
     else if (message.type === 'peer-left') { remotePlayers.get(message.playerId)?.dispose(); remotePlayers.delete(message.playerId); if (Number.isInteger(message.playerCount)) multiplayerPlayerCount = message.playerCount; if (!message.bot) setMultiplayerStatus('Connected · a player is reconnecting'); }
     else if (message.type === 'underground-roster') { if (inLocalUnderground()) for (const bot of message.players || []) { const remote = ensureRemote(bot); if (remote && bot.state) remote.push(bot.state); } }
     else if (message.type === 'chess' || message.type === 'chess-tables') chessClient.onMessage(message);
+    else if (message.type === 'home-occupants') homeResidents.setOccupants(message);
+    else if (message.type === 'resident-homes') { residentHomes.clear(); for (const h of message.homes || []) if (Number.isSafeInteger(h?.index) && typeof h.propertyId === 'string') residentHomes.set(h.index, h.propertyId); }
     else if (message.type === 'npc-roster') { npcRenderer.countBytes(JSON.stringify(message).length, performance.now()); npcRenderer.applyRoster(message.npcs); }
     else if (message.type === 'npc-hit') { npcRenderer.onEvent(message); if (message.shooterId === multiplayer.credentials?.playerId) { const head = message.region === 'head'; hud.hit(!!message.defeated, head); sfx.hit({ head }); } }
     // M6.9 sync: everyone sees the punch now; the victim's flinch and sound land on the punch's contact frame
@@ -1525,6 +1540,8 @@ async function boot() {
   buildNav(); initHud();
   if (city) {
     cityPoiList = cityPois(city.plan);
+    navLoader = createNavGraphLoader({ plan: city.plan, workerUrl: new URL('./nav-graph-worker.js', import.meta.url) });
+    if (qs.get('navWorker') !== '0') navLoader.prewarm(); // ?navWorker=0: build on first route instead (QA / fallback)
     cityMap = createCityMap({
       root: $('cityMap'), rects: mapRects, bounds: { ...MAP }, plan: city.plan, pois: cityPoiList, getGraph: navGraph, arena: ARENA_MAP, lowMemory: !!Q.lowMemory,
       planRoute: (target) => findRoute(navGraph(), player.pos, target.entry, target),
@@ -1692,6 +1709,7 @@ function loop(now) {
       const interiorSite = rootsState.active ? city.rootsLounge.site : gunShopState.active ? city.gunShop.site : libraryState.active ? city.library.site : bankInteriorState.active ? city.bankInterior.site : apartmentState.active ? city.apartment.site : originalHouseState.active ? city.originalHouse.site : duplicatedHouseState.active ? city.duplicatedHouse.site : houseState.active ? city.house.site : buildingState.active ? city.interiors.site : null;
       cityInteriorName = interiorSite?.name || ''; cityInteriorId = interiorSite?.id || '';
       if (time >= storeHoursCheckAt) { storeHoursCheckAt = time + 5; city.setStoresOpen?.(isStoreOpen(economicMinuteOfDay())); } // lights off after 10 PM Pacific
+      homeResidents.update(dt, buildingState.active ? city.interiors.homeView : null, player);
       storeStaff.update(dt, gunShopState.active ? 'nerdie-arms' : buildingState.active ? city.interiors.site?.id : null, gunShopState.active ? city.gunShop.staffStand : buildingState.active ? city.interiors.staffStand : null, player);
       const venueState = interiorActive || rootsState.transitioned || buildingState.transitioned || libraryState.transitioned || bankInteriorState.transitioned || apartmentState.transitioned || originalHouseState.transitioned || duplicatedHouseState.transitioned || houseState.transitioned
         ? { prompt: '', requestedLobby: false }
@@ -1710,7 +1728,7 @@ function loop(now) {
         : chessClient.update(player, !!input.interact, multiplayerActive && multiplayer?.state === 'connected');
       const otherPrompt = rootsState.prompt || gunShopState.prompt || libraryState.prompt || bankInteriorState.prompt || apartmentState.prompt || originalHouseState.prompt || duplicatedHouseState.prompt || houseState.prompt || buildingState.prompt || venueState.prompt || bankState.prompt || chessState.prompt;
       // Talking to a resident is offered only when nothing else is (doors, counters and tables come first).
-      const talkState = otherPrompt ? { prompt: '', mobileLabel: '' } : interiorActive ? staffTalk.update(!!input.interact) : residentTalk.update(!!input.interact);
+      const talkState = otherPrompt ? { prompt: '', mobileLabel: '' } : interiorActive ? (homeTalk.update(!!input.interact) ?? staffTalk.update(!!input.interact)) : residentTalk.update(!!input.interact);
       const prompt = otherPrompt || talkState.prompt;
       const activeHouseState = [originalHouseState, duplicatedHouseState, houseState].find((state) => state.prompt) || houseState;
       const mobileLabel = rootsState.mobileLabel ? rootsState.mobileLabel : gunShopState.mobileLabel ? gunShopState.mobileLabel : libraryState.mobileLabel ? libraryState.mobileLabel : bankInteriorState.mobileLabel ? bankInteriorState.mobileLabel : venueState.prompt ? 'ENTER COMBAT' : bankState.prompt ? bankState.mobileLabel : chessState.prompt ? chessState.mobileLabel : activeHouseState.prompt && !activeHouseState.blocked ? (activeHouseState.active ? 'EXIT HOUSE' : 'ENTER HOUSE') : buildingState.prompt ? buildingState.mobileLabel : talkState.prompt ? talkState.mobileLabel : '';
@@ -1843,7 +1861,15 @@ function loop(now) {
   // HUD
   if (MATCH.started) {
     hud.protection(Math.max(0, player.protectedUntil - time));
-    if (arsenal.cur === 'rpg') hud.ammo(launcher.loaded, launcher.reserve, player.kills, 'RPG-7', 'rpg'); else { const g = curGun(); hud.ammo(g.mag, g.reserve, player.kills, g.name, arsenal.cur); }
+    // NC-LIFE-01C: the weapon readout and tray follow what is actually in hand; unarmed or holstered they said the
+    // last gun (and re-selected it in the tray every frame), so UNARMED looked like it had not taken. The armed
+    // readout also follows the equipment record, not arsenal.cur, which in multiplayer only catches up after the
+    // weapon's model has loaded; reading the record means the HUD never shows the previous gun meanwhile.
+    const hudId = trayIdFor(effectiveEquipment());
+    if (hudId === 'unarmed') hud.ammo('—', '', player.kills, 'UNARMED', 'unarmed');
+    else if (hudId === 'holster') hud.ammo('—', '', player.kills, 'HOLSTERED', 'holster');
+    else if (hudId === 'rpg') hud.ammo(launcher.loaded, launcher.reserve, player.kills, 'RPG-7', 'rpg');
+    else { const id = guns[hudId] ? hudId : arsenal.cur, g = guns[id]; hud.ammo(g.mag, g.reserve, player.kills, g.name, id); }
     const snitch = time < snitchUntil; for (const n in ab) hud.ability(n, ab[n].have / ab[n].need, ab[n].have >= ab[n].need);
     labelItems.length = 0; dots.length = 0;
     for (const b of bots) {
@@ -1861,7 +1887,7 @@ function loop(now) {
       if (ally) labelItems.push({ pos: new THREE.Vector3(remote.position.x, remote.position.y + 2.05, remote.position.z), name: remote.name, team: 'blue', dist: d });
     }
     mapDots = dots; mapSnitch = snitch;
-    const cityOverlay = mapMode() === 'city' ? { pois: cityPoiList, route: cityInteriorName ? null : waypointRoute, waypoint } : null;
+    const cityOverlay = mapMode() === 'city' ? { pois: cityPoiList, route: cityInteriorName ? null : waypoints.route, waypoint: waypoints.target } : null;
     hud.labels(camera, labelItems); hud.minimap(player, dots, snitch, cityOverlay);
     updateWaypoint(now); if (cityMap?.isOpen) cityMap.frame(mapState(), now);
   }
@@ -1877,4 +1903,4 @@ boot().catch((e) => {
   window.__showGameEntryFeedback?.(`The city could not finish loading: ${e.message}`, { error: true, retryLabel: 'Reload and retry' });
 });
 // expose for QA
-window.__hw = { npcRenderer, npcLibrary, scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, configureDestructionRendering, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, mobilePerformanceOverlay, adaptiveResolution, remotePlayers, applyLocalAppearance, applyLocalEquipment, requestMultiplayerEquipment, ensureWeaponVisual, characterAssetStats, get localAppearance() { return localAppearance; }, get localEquipment() { return localEquipment; }, get localEquipmentRevision() { return localEquipmentRevision; }, get localCombat() { return localCombat; }, get localContext() { return localContext; }, get undergroundMatch() { return undergroundMatch; }, get multiplayer() { return multiplayer; }, get multiplayerActive() { return multiplayerActive; }, get multiplayerDiagnostics() { return { client: multiplayer?.diagnostics?.() || null, localEquipment, localEquipmentRevision, localCombat, localContext, remotes: [...remotePlayers.values()].map((remote) => ({ id: remote.id, appearance: remote.appearance, ...remote.diagnostics() })) }; }, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };
+window.__hw = { get navLoader() { return navLoader; }, get cityMap() { return cityMap; }, waypoints, npcRenderer, npcLibrary, homeResidents, residentHomes, scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, configureDestructionRendering, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, mobilePerformanceOverlay, adaptiveResolution, remotePlayers, applyLocalAppearance, applyLocalEquipment, requestMultiplayerEquipment, ensureWeaponVisual, characterAssetStats, get localAppearance() { return localAppearance; }, get localEquipment() { return localEquipment; }, get localEquipmentRevision() { return localEquipmentRevision; }, get localCombat() { return localCombat; }, get localContext() { return localContext; }, get undergroundMatch() { return undergroundMatch; }, get multiplayer() { return multiplayer; }, get multiplayerActive() { return multiplayerActive; }, get multiplayerDiagnostics() { return { client: multiplayer?.diagnostics?.() || null, localEquipment, localEquipmentRevision, localCombat, localContext, remotes: [...remotePlayers.values()].map((remote) => ({ id: remote.id, appearance: remote.appearance, ...remote.diagnostics() })) }; }, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };

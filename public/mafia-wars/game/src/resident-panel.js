@@ -4,6 +4,7 @@
 import { residentConversation } from './resident-talk.js';
 import { economicMinuteOfDay } from './resident-schedule.js';
 import { residentAddress } from './city-addresses.js';
+import { homeAddress } from './neighborhood-housing.js';
 
 const STYLE = `
 #residentPanel{position:fixed;inset:0;z-index:60;display:none;align-items:flex-end;justify-content:center;background:rgba(5,3,10,.45);font-family:'Barlow Condensed',system-ui,sans-serif;color:#f3eefc;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))}
@@ -89,7 +90,7 @@ export class ResidentPanel {
     const facts = [
       job ? `<b>${esc(job.title)}</b> at ${esc(PLACES[job.workplaceId] || job.workplaceId)} · ${clock(job.shiftStartMinute)}–${clock(job.shiftStartMinute + job.shiftDurationMinutes)}` : '<b>No steady job</b> · city temp work',
       `Now: <b>${where}</b>`,
-      `Lives at ${p ? esc(residentAddress(r.housing?.propertyId) || PLACES['north-court']) : esc(PLACES['north-court'])}`,
+      `Lives at ${esc((p && residentAddress(r.housing?.propertyId)) || homeAddress(r.housing?.propertyId) || PLACES['north-court'])}`, // NC-LIFE-02B-2: Neighborhood One address for everyone
       `${esc(PERSONALITY[r.personality] || 'Friendly')}${r.chess ? ` · chess: ${esc(r.chess.levelLabel || 'player')}` : ''}`,
     ];
     const today = r.residentId ? this.life?.plan?.(r.residentId) : null;

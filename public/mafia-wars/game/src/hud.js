@@ -1,6 +1,6 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { mapRects, MAP } from './world.js';
-import { drawMapRects, formatDistance, mapDotVisible } from './city-map-view.js';
+import { drawMapRects, formatDistance, mapDotVisible, minimapOffset } from './city-map-view.js';
 const $ = (s) => document.querySelector(s);
 const el = {};
 export function initHud() {
@@ -86,7 +86,7 @@ export const hud = {
     // Waypoint: a pin inside the minimap, or an arrow on its rim pointing to it.
     if (overlay?.waypoint) {
       const dx = (overlay.waypoint.entry.x - player.pos.x) * S * scale, dz = (overlay.waypoint.entry.z - player.pos.z) * S * scale;
-      const c = Math.cos(player.yaw), s = Math.sin(player.yaw), sx = dx * c - dz * s, sy = dx * s + dz * c, d = Math.hypot(sx, sy) || 1;
+      const { x: sx, y: sy } = minimapOffset(dx, dz, player.yaw), d = Math.hypot(sx, sy) || 1;
       g.save(); g.translate(R, R);
       if (d < R - 16) { g.fillStyle = '#f2d28b'; g.strokeStyle = '#000'; g.lineWidth = 2; g.beginPath(); g.arc(sx, sy, 7, 0, 6.3); g.fill(); g.stroke(); }
       else { g.translate((sx / d) * (R - 14), (sy / d) * (R - 14)); g.rotate(Math.atan2(sy, sx) + Math.PI / 2); g.fillStyle = '#f2d28b'; g.strokeStyle = '#000'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, -11); g.lineTo(9, 7); g.lineTo(-9, 7); g.closePath(); g.fill(); g.stroke(); }
