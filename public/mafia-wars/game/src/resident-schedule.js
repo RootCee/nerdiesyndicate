@@ -26,7 +26,15 @@ export const shopOffsetFor = (index) => (Number.isInteger(index) && index >= 0 ?
 // a short market trip after it (index staggers it), the evening in the park; without a job, afternoons in the park.
 // evening (NC-LIFE-01A): { locationId, from, to } when the bank says this resident chose a night out
 // (registry.life_plans); it follows work and comes before the market trip and the park.
-export function scheduledPlace(work, minute, homeLocationId = 'north-court', index = null, evening = null) {
+// errand (bank visits, approved 11 November 2026): { locationId, from, to } from residentBankVisit(); it replaces
+// only free time (home, the park, socialising), never work, the commute, a market trip or a planned night out.
+export function scheduledPlace(work, minute, homeLocationId = 'north-court', index = null, evening = null, errand = null) {
+  const place = basePlace(work, minute, homeLocationId, index, evening);
+  if (errand && minute >= errand.from && minute < errand.to && FREE_ACTIVITIES.has(place.activity)) return { activity: 'errand', locationId: errand.locationId };
+  return place;
+}
+const FREE_ACTIVITIES = new Set(['home', 'leisure', 'social']);
+function basePlace(work, minute, homeLocationId, index, evening) {
   const out = evening && minute >= evening.from && minute < evening.to ? { activity: 'leisure', locationId: evening.locationId } : null;
   if (work) {
     const start = work.shiftStartMinute, end = start + work.shiftDurationMinutes;
@@ -50,3 +58,23 @@ export function rootsEvening(work) {
   if (end > 1_260) return null; // still working when the visit would start
   return { locationId: 'roots-lounge', from, to: Math.min(ROOTS_CLOSE_MINUTE, from + 90) };
 }
+
+// ---- bank visits (approved 11 November 2026) ----
+// On some days a resident who is free makes one short visit to the Nerdie City Bank while the tellers are in
+// (8 AM-noon Pacific). Which days and when come from a hash of the resident and the day, so every room, the
+// talk card and the Founder Executive Suite agree without storing anything. Tuned (40 minutes, 70% of free
+// mornings) to about 1.5 customers in the bank on average during teller hours, at most 8. A visit is only a place in the day:
+// no ledger entry, no balance change, no tokens.
+export const BANK_VISIT_RULES = Object.freeze({ locationId: 'nerdie-city-bank', open: 480, close: 720, minutes: 40, step: 5, perThousand: 700 });
+// The day key the talk card already uses (resident-panel.js); it only needs to change once a day.
+export const pacificDayKey = (ms = Date.now()) => new Date(ms - 7 * 3_600_000).toISOString().slice(0, 10);
+const fnv = (text) => { let h = 0x811c9dc5; for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h >>> 0; };
+export function residentBankVisit(residentId, dayKey, work, homeLocationId = 'north-court', index = null, evening = null, rules = BANK_VISIT_RULES) {
+  if (typeof residentId !== 'string' || typeof dayKey !== 'string') return null;
+  const h = fnv(`${residentId}|${dayKey}|bank-visit`);
+  if (h % 1000 >= rules.perThousand) return null;
+  const slots = Math.floor((rules.close - rules.open - rules.minutes) / rules.step) + 1, from = rules.open + (fnv(`${h}`) % slots) * rules.step, to = from + rules.minutes;
+  for (let m = from; m < to; m += rules.step) if (!FREE_ACTIVITIES.has(basePlace(work, m, homeLocationId, index, evening).activity)) return null; // busy then
+  return { locationId: rules.locationId, from, to };
+}
+export const residentIdFor = (index) => `res_${String(index + 1).padStart(4, '0')}`;

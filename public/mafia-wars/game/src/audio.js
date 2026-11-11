@@ -1,4 +1,5 @@
 import { weaponAudioProfile } from './weapon-audio.js';
+import { assetUrl } from './asset-versions.js';
 
 // Audio: ElevenLabs-generated samples (assets/sfx/*.mp3) on three buses (sfx / ambience / music),
 // positional playback for anything that happens in the world (distance falloff + stereo pan),
@@ -13,7 +14,7 @@ try { muted = localStorage.getItem('hw_muted') === '1'; } catch (e) { /* storage
 
 // fetch the files early so they're ready the moment the player taps
 export const audioReady = Promise.all(NAMES.map((n) =>
-  fetch(`assets/sfx/${n}.mp3`).then((r) => (r.ok ? r.arrayBuffer() : null)).then((b) => { if (b) raw[n] = b; }).catch(() => {})));
+  fetch(assetUrl(`assets/sfx/${n}.mp3`)).then((r) => (r.ok ? r.arrayBuffer() : null)).then((b) => { if (b) raw[n] = b; }).catch(() => {})));
 
 export function unlockAudio() {
   if (ctx) { if (ctx.state === 'suspended') ctx.resume().catch(() => {}); return; }

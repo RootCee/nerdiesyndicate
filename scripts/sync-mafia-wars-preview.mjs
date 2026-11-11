@@ -1,5 +1,6 @@
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 
 const sourceRoot = process.argv[2] ? path.resolve(process.argv[2]) : null;
@@ -11,7 +12,7 @@ if (!sourceRoot) {
   throw new Error('Usage: node scripts/sync-mafia-wars-preview.mjs /absolute/path/to/game/source');
 }
 
-const expectedCommit = '3de6bf6f0ce871e5daeeb7980e9dfc47efbf904d';
+const expectedCommit = '4e4903b5a500eeec2d699e93cb6c34a31b0b25f7';
 const runtimeFiles = ['index.html', 'version.txt'];
 const characterFiles = ['blue_zip.glb', 'navy.glb', 'red_hoodie.glb', 'red_jersey.glb'];
 const npcFiles = ['npc_women.glb', 'npc_men.glb', 'npc_clips_women.glb', 'npc_clips_men.glb', 'LICENSES.md'];
@@ -196,6 +197,33 @@ for (const name of textureNames) {
   for (const file of textureFiles) await copyFile(`assets/ph/textures/${name}/${file}`);
 }
 for (const file of skyFiles) await copyFile(`assets/ph/hdri/${file}`);
+
+// RC1 hotfix 1: asset-manifest.json maps every file under assets/ to a short content hash. The game requests
+// assets as `?v=<hash>` (src/asset-versions.js) and vercel.json marks those versioned URLs immutable, so returning
+// players load them from their browser cache without asking the server again; a changed file gets a new hash.
+async function listFiles(directory) {
+  const out = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const full = path.join(directory, entry.name);
+    if (entry.name.startsWith('._') || entry.name === '.DS_Store') continue;
+    if (entry.isDirectory()) out.push(...await listFiles(full)); else out.push(full);
+  }
+  return out;
+}
+async function writeAssetManifest() {
+  const manifest = {};
+  for (const file of (await listFiles(path.join(outputRoot, 'assets'))).sort()) {
+    manifest[path.relative(outputRoot, file).split(path.sep).join('/')] = createHash('sha256').update(await readFile(file)).digest('hex').slice(0, 12);
+  }
+  await writeFile(path.join(outputRoot, 'asset-manifest.json'), JSON.stringify(manifest));
+  const indexPath = path.join(outputRoot, 'index.html'), index = await readFile(indexPath, 'utf8');
+  const preload = '<link rel="preload" href="asset-manifest.json" as="fetch" crossorigin="anonymous">';
+  const patched = index.replace(/<script type="module" src="src\/main\.js/, (m) => `${preload}\n${m}`);
+  if (patched === index) throw new Error('Expected the Mafia Wars main.js module script in index.html');
+  await writeFile(indexPath, patched);
+  return Object.keys(manifest).length;
+}
+console.log(`Asset manifest: ${await writeAssetManifest()} files`);
 
 await mkdir(path.join(outputRoot, '_release'), { recursive: true });
 await cp(

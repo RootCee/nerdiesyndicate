@@ -2,7 +2,7 @@
 // suite notice. The model (BankReader) is plain data the tests drive; the panel draws it when there is a
 // document. It shows only what the requester may see: today every visitor is a temporary player, so tellers
 // give bank information and city-level figures, never anyone's personal account.
-import { economicMinuteOfDay, scheduledPlace } from './resident-schedule.js';
+import { economicMinuteOfDay, scheduledPlace, residentBankVisit, residentIdFor, pacificDayKey } from './resident-schedule.js';
 import { residentAddress } from './city-addresses.js';
 const STYLE = `
 #bankPanel{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;background:rgba(5,3,10,.66);font-family:'Barlow Condensed',system-ui,sans-serif;color:#f3eefc;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))}
@@ -83,8 +83,8 @@ const words = (s) => esc(String(s ?? '').replaceAll('_', ' ').replaceAll('-', ' 
 // Where a resident is right now, by the same schedule the city's residents follow (real Pacific time).
 const PLACES = Object.freeze({ 'nerdie-city-bank': 'Nerdie City Bank', 'city-hall': 'City Hall', 'academy-library': 'the Library', 'nerdie-arms': 'Ammo', 'central-park': 'Central Park', 'corner-market': 'Corner Market', 'three-piece': '3 Piece', 'roots-lounge': 'Roots Lounge', 'city-wholesaler': 'City Wholesaler', 'laundromat': 'Laundromat', 'sneaker-shop': 'Sneaker Shop', 'north-court': 'North Court' });
 const place = (id) => (PLACES[id] ? esc(PLACES[id]) : words(id));
-const ACTIVITY_WORDS = Object.freeze({ home: 'At home in', commute: 'On the way to work at', work: 'Working at', shop: 'Shopping at', social: 'Hanging out at', leisure: 'Relaxing at' });
-const nowText = (r, minute) => { const at = scheduledPlace(r.job, minute, 'north-court', r.residentNo - 1); return `${esc(ACTIVITY_WORDS[at.activity] || at.activity)} ${place(at.locationId)}`; };
+const ACTIVITY_WORDS = Object.freeze({ home: 'At home in', commute: 'On the way to work at', work: 'Working at', shop: 'Shopping at', social: 'Hanging out at', leisure: 'Relaxing at', errand: 'Running an errand at' });
+const nowText = (r, minute) => { const visit = residentBankVisit(residentIdFor(r.residentNo - 1), pacificDayKey(), r.job, 'north-court', r.residentNo - 1); const at = scheduledPlace(r.job, minute, 'north-court', r.residentNo - 1, null, visit); return `${esc(ACTIVITY_WORDS[at.activity] || at.activity)} ${place(at.locationId)}`; };
 const wealth = (r) => Number(r.checking || 0) + Number(r.savings || 0);
 export const RESIDENT_SORTS = Object.freeze({
   no: { label: 'No.', compare: (a, b) => a.residentNo - b.residentNo },

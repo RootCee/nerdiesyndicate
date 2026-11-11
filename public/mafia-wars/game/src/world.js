@@ -246,6 +246,14 @@ async function prop(slug) {
   if (!propCache.has(slug)) propCache.set(slug, loadGLB(`assets/models/${slug}.glb`).then((g) => prep(g.scene)));
   return propCache.get(slug);
 }
+// RC1 hotfix: every prop buildWorld will use, by profile. buildWorld starts all their downloads at once and then
+// builds in the same order as before (each `await prop()` just finds its model ready or in flight), instead of
+// fetching ~30 models one after another. Same models, same order, same seeded placement.
+export const WORLD_PROPS = Object.freeze(['modular_chainlink_fence', 'modular_electricity_poles', 'security_light', 'street_lamp_01',
+  'fire_hydrant', 'metal_trash_can', 'old_tyre', 'plastic_monobloc_chair_01', 'trashbag', 'cardboard_box_01', 'propane_tank', 'utility_box_01', 'old_bed_frame', 'concrete_road_barrier', 'covered_car', 'wooden_crate_01', 'plastic_crate_01', 'metal_jerrycan', 'water_manhole_cover', 'power_box_01', 'ammo_box', 'dead_tree_trunk']);
+export const VEGETATION_PROPS = Object.freeze(['island_tree_01', 'tree_small_02', 'jacaranda_tree', 'grass_medium_01', 'grass_medium_02', 'nettle_plant', 'weed_plant_02', 'dandelion_01', 'wild_rooibos_bush', 'shrub_01', 'shrub_03']);
+export const worldPropsFor = (Q) => (Q.lowMemory ? WORLD_PROPS : [...WORLD_PROPS, ...VEGETATION_PROPS]);
+function prefetchProps(Q) { for (const slug of worldPropsFor(Q)) prop(slug).catch(() => {}); } // failures surface at the real await, as before
 function placeClone(scene, root, x, y, z, rotY, scale = 1, collide = null) {
   const c = root.clone(); c.position.set(x, y, z); c.rotation.y = rotY; c.scale.setScalar(scale); scene.add(c);
   if (collide) { const bb = new THREE.Box3().setFromObject(c); solid(bb.min.x, bb.min.z, bb.max.x, bb.max.z, bb.min.y, bb.max.y, collide === true ? {} : collide); }
@@ -282,6 +290,7 @@ export function setWorldNightLevel(level) { if (glassLitMaterial) glassLitMateri
 // ---------- main build ----------
 export async function buildWorld(scene, Q, progress = () => {}) {
   configureWorldBounds(Q.cityExpansion);
+  prefetchProps(Q);
   seed = 1337;
   colliders.length = 0; mapRects.length = 0; lamps.length = 0; windowsLit.length = 0; houseDescs.length = 0;
   const materials = {

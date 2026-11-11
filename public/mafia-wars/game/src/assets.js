@@ -2,8 +2,11 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { GLTFLoader } from '/mafia-wars/game/vendor/three/jsm/loaders/GLTFLoader.js';
 import { HDRLoader } from '/mafia-wars/game/vendor/three/jsm/loaders/HDRLoader.js';
+import { assetUrl } from './asset-versions.js';
 
 export const manager = new THREE.LoadingManager();
+// RC1 hotfix: every loader (ours and three.js's default) asks for the versioned URL (asset-versions.js).
+manager.setURLModifier(assetUrl); THREE.DefaultLoadingManager.setURLModifier(assetUrl);
 const gltfLoader = new GLTFLoader(manager);
 const texLoader = new THREE.TextureLoader(manager);
 const rgbeLoader = new HDRLoader(manager);

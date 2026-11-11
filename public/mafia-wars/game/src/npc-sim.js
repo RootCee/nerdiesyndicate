@@ -19,11 +19,12 @@ import { NPC_COMBAT_RULES, assessThreat, strikeProfile, weaponClass } from './np
 import { isInsideSafeZone } from './multiplayer-spaces.js';
 import { cityShotOccluded, publicCityShotOccluded, targetDistance } from './multiplayer-combat.js';
 import { storeById } from './store-hours.js';
+import { BANK_SPACE_ID } from './bank-layout.js';
 import { bodyHit, residentBodyOptions } from './hit-regions.js';
 import { hourAt } from './city-clock.js';
 import { isHomeLocation } from './home-ids.js';
 import { homePoi } from './neighborhood-housing.js';
-import { scheduledPlace } from './resident-schedule.js';
+import { scheduledPlace, residentBankVisit, pacificDayKey } from './resident-schedule.js';
 
 export const NPC_SIM_RULES = Object.freeze({
   tickMs: 200,
@@ -47,6 +48,11 @@ export const NPC_ANIM = Object.freeze({ idle: 0, walk: 1, notice: 2, sit: 3 }); 
 const hard = (obstacles) => obstacles.filter((r) => !r.soft);
 // A scheduled resident this close to their place has arrived (#placeAt spreads them up to ~7 m around it).
 const SCHEDULE_ARRIVED_M = 8;
+// Workplaces whose staff work inside, out of the street simulation: the stores (store-hours.js) and, from the
+// RC1 hotfix, the bank (its tellers stood at the street door through their whole shift before).
+export const indoorWorkplace = (locationId) => !!storeById(locationId) || locationId === BANK_SPACE_ID;
+// Who goes inside on arrival: staff at an indoor workplace, and (bank visits) customers visiting the bank.
+const insideFor = (r) => (r.economicActivity === 'work' && indoorWorkplace(r.economicLocation)) || (r.economicActivity === 'errand' && r.economicLocation === BANK_SPACE_ID);
 const HOME_DOOR_M = 2; // NC-LIFE-02B: a resident seen walking home goes in only on their doorstep
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 
@@ -128,8 +134,10 @@ export class CityNpcSimulation {
   // Who the schedules put at a place at this minute (every permanent resident, simulated nearby or not).
   scheduledAt(locationId, minute) {
     const here = [];
+    const now = Date.now(), indexOf = new Map(this.residents.map((r) => [r.identity.id, r.index]));
     for (const [gameId, s] of this.schedules) {
-      const place = scheduledPlace(s.employment, minute, s.homeLocationId || 'north-court', null, this.evenings.get(s.residentId) || null);
+      const index = indexOf.get(gameId) ?? null, evening = this.evenings.get(s.residentId) || null;
+      const place = scheduledPlace(s.employment, minute, s.homeLocationId || 'north-court', index, evening, this.#visitFor(s, index, evening, now));
       if (place.locationId === locationId) here.push({ gameId, residentId: s.residentId, activity: place.activity, employment: s.employment });
     }
     return here;
@@ -139,11 +147,19 @@ export class CityNpcSimulation {
     if (!schedule || (!this.scheduleMinute && !this.cityClock)) return null;
     if (this.minuteAt?.now !== now) this.minuteAt = { now, minute: this.scheduleMinute ? this.scheduleMinute(now) : Math.floor(hourAt(now, this.cityClock) * 60) }; // once per tick
     const minute = this.minuteAt.minute;
-    const { activity, locationId } = scheduledPlace(schedule.employment, minute, schedule.homeLocationId || 'north-court', r.index, this.evenings.get(schedule.residentId) || null);
+    const evening = this.evenings.get(schedule.residentId) || null;
+    const { activity, locationId } = scheduledPlace(schedule.employment, minute, schedule.homeLocationId || 'north-court', r.index, evening, this.#visitFor(schedule, r.index, evening, now));
     r.economicActivity = activity; r.economicLocation = locationId;
     // NC-LIFE-02A-1: a Neighborhood One home (home:<buildingId>) resolves to its own street door, found
     // only when a schedule names one, so rooms whose residents all live at North Court pay nothing.
     return this.schedulePois.get(locationId) || (isHomeLocation(locationId) ? this.#homePoi(locationId) : null);
+  }
+  // Bank visits (approved 11 November 2026): today's visit for a resident, worked out once per resident per day.
+  #visitFor(schedule, index, evening, now) {
+    const day = pacificDayKey(now), cached = this.visits?.get(schedule.residentId);
+    if (cached?.day === day && cached.evening === evening) return cached.visit;
+    const visit = residentBankVisit(schedule.residentId, day, schedule.employment, schedule.homeLocationId || 'north-court', index, evening);
+    (this.visits ||= new Map()).set(schedule.residentId, { day, evening, visit }); return visit;
   }
   // NC-LIFE-02B: leaving home, a resident appears on their own doorstep facing the street, never inside a wall.
   #stepOutOf(r, door) {
@@ -166,6 +182,26 @@ export class CityNpcSimulation {
       if (home && !r.homeDoor) { if (r.held) continue; if (dist(place.entry, r) > SCHEDULE_ARRIVED_M || !r.placed) this.#placeAt(r, place); r.indoors = true; r.homeDoor = place; }
       else if (!home && r.homeDoor) { const door = r.homeDoor; r.indoors = false; r.homeDoor = null; this.#stepOutOf(r, door); }
     }
+  }
+  // RC1 hotfix: the bank's shift runs the same way with nobody out in the city (a player alone inside the bank):
+  // a teller due at work is placed at the bank's door and goes in; when the shift ends they no longer count as
+  // inside it (bankStaffInside), and the next street tick puts them back outdoors at the door.
+  #bankUpkeep(now) {
+    for (const r of this.residents) {
+      const place = this.#scheduledPoi(r, now);
+      if (!place || !['work', 'errand'].includes(r.economicActivity) || r.economicLocation !== BANK_SPACE_ID || r.held) continue;
+      if (dist(place.entry, r) > SCHEDULE_ARRIVED_M || !r.placed) this.#placeAt(r, place);
+      r.indoors = true;
+    }
+  }
+  // RC1 hotfix: the bank's tellers working inside right now (on shift and arrived), lowest resident first;
+  // bankVisitorsInside(): the customers visiting it (bank visits).
+  bankStaffInside() { return this.#inBank('work'); }
+  bankVisitorsInside() { return this.#inBank('errand'); }
+  #inBank(activity) {
+    return this.residents.filter((r) => r.indoors && r.economicActivity === activity && r.economicLocation === BANK_SPACE_ID).map((r) => {
+      const s = this.schedules.get(r.identity.id); return { index: r.index, gameId: r.identity.id, residentId: s?.residentId || null, identity: r.identity };
+    }).sort((a, b) => a.index - b.index);
   }
   get indoorsAtHome() { return this.residents.reduce((n, r) => n + (r.homeDoor ? 1 : 0), 0); }
   #homePoi(locationId) {
@@ -568,6 +604,7 @@ export class CityNpcSimulation {
     }
     if (!players.length) {
       if (this.homesIndoors) this.#homeUpkeep(now);
+      this.#bankUpkeep(now);
       for (const r of this.residents) {
         Object.assign(r, { active: false, aware: null, fight: null, allyAttack: null });
         if ([NPC_BEHAVIOR.fight, NPC_BEHAVIOR.strike, NPC_BEHAVIOR.warn, NPC_BEHAVIOR.hurt].includes(r.behavior)) r.behavior = NPC_BEHAVIOR.alert; // nobody left to fight
@@ -583,8 +620,9 @@ export class CityNpcSimulation {
       if (!r.placed) { if (place) this.#placeAt(r, place); else this.#reset(r, this.#streetPoint()); r.lastDormantAt = now; }
       const nearest = Math.min(...players.map((p) => dist(p, r)));
       r.nearest = nearest;
-      // On shift at a store and arrived: behind the counter inside (the store draws them), not on the street.
-      const atStore = !!place && r.economicActivity === 'work' && !!storeById(r.economicLocation) && dist(place.entry, r) <= SCHEDULE_ARRIVED_M;
+      // On shift at a store or the bank and arrived: behind the counter inside (the store draws them; the bank's
+      // tellers go to players inside it as `bank-staff`), not on the street.
+      const atStore = !!place && insideFor(r) && dist(place.entry, r) <= SCHEDULE_ARRIVED_M;
       // NC-LIFE-02B: at home and arrived at their own front door: inside (home:<buildingId> or North Court). The
       // room is the authority; nothing is drawn outdoors, sent, simulated or shootable until they leave.
       const atHome = this.homesIndoors && !!place && r.economicActivity === 'home' && place.id === r.economicLocation && dist(place.entry, r) <= (r.active ? HOME_DOOR_M : SCHEDULE_ARRIVED_M);

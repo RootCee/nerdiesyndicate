@@ -66,6 +66,7 @@ import { UNDERGROUND_HOUSES } from './underground-match.js';
 import { UNDERGROUND_SPAWNS } from './multiplayer-combat.js';
 import * as npcLibrary from './npc-library.js';
 import { StoreStaff } from './store-staff.js';
+import { BankStaff } from './bank-staff.js';
 import { HomeResidents } from './home-residents.js';
 import { isStoreOpen } from './store-hours.js';
 import { economicMinuteOfDay, setEconomicClock } from './resident-schedule.js';
@@ -75,9 +76,9 @@ import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
 import { createMobilePerformanceOverlay } from './mobile-performance-overlay.js';
 import { createAdaptiveResolution } from './adaptive-resolution.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-0.9.0-rc1';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-0.9.0-rc1-hotfix1';
 
-const GAME_BUILD_ID = 'nc-0.9.0-rc1';
+const GAME_BUILD_ID = 'nc-0.9.0-rc1-hotfix1';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -416,13 +417,16 @@ const residentTalk = {
 };
 // The resident on shift behind a store's counter (store-staff.js): talk to them like anyone on the street.
 const storeStaff = new StoreStaff(scene, { library: npcLibrary });
+let bankStaff = null; // the bank's tellers on shift (bank-staff.js), once the city is built
 let talkStaff = false, storeHoursCheckAt = 0;
 const staffTalk = {
   update(interact) {
     const none = { prompt: '', mobileLabel: '' };
-    if (residentPanel.open) { if (talkStaff && storeStaff.nearby(player, TALK_RANGE_M * 3) !== talkIndex) residentPanel.close(); return none; }
-    const index = storeStaff.nearby(player, TALK_RANGE_M + 1); if (index < 0 || player.dead) return none; // across the counter
-    const resident = talkableResident(index, PERMANENT_RESIDENT_IDENTITIES[index]); if (!resident) return none;
+    // a store clerk across the counter, or (bank visits) a resident visiting the bank
+    const near = (reach) => { const i = storeStaff.nearby(player, reach); return i >= 0 ? { index: i, identity: PERMANENT_RESIDENT_IDENTITIES[i] } : bankStaff?.nearbyVisitor(player, reach) || null; };
+    if (residentPanel.open) { if (talkStaff && near(TALK_RANGE_M * 3)?.index !== talkIndex) residentPanel.close(); return none; }
+    const who = near(TALK_RANGE_M + 1); if (!who || player.dead) return none;
+    const index = who.index, resident = talkableResident(index, who.identity); if (!resident) return none;
     if (interact) { talkIndex = index; talkStaff = true; talkHome = false; residentPanel.show(resident); return none; }
     return { prompt: `${Q.mobile ? '' : '[E] '}TALK TO ${resident.name.toUpperCase()}`, mobileLabel: 'TALK' };
   },
@@ -1245,7 +1249,7 @@ function configureMultiplayerClient() {
         });
       }
     }
-    if (['connection-lost', 'session-expired', 'room-full', 'disconnected'].includes(detail.state)) { clearRemotePlayers(); npcRenderer.clear(); }
+    if (['connection-lost', 'session-expired', 'room-full', 'disconnected'].includes(detail.state)) { clearRemotePlayers(); npcRenderer.clear(); bankStaff?.clear(); }
   });
   multiplayer.addEventListener('message', ({ detail: message }) => {
     if (message.type === 'welcome') {
@@ -1274,6 +1278,7 @@ function configureMultiplayerClient() {
     else if (message.type === 'underground-roster') { if (inLocalUnderground()) for (const bot of message.players || []) { const remote = ensureRemote(bot); if (remote && bot.state) remote.push(bot.state); } }
     else if (message.type === 'chess' || message.type === 'chess-tables') chessClient.onMessage(message);
     else if (message.type === 'home-occupants') homeResidents.setOccupants(message);
+    else if (message.type === 'bank-staff') bankStaff?.setResidents(message.spaceId ? message.residents : [], message.spaceId ? message.visitors : []);
     else if (message.type === 'resident-homes') { residentHomes.clear(); for (const h of message.homes || []) if (Number.isSafeInteger(h?.index) && typeof h.propertyId === 'string') residentHomes.set(h.index, h.propertyId); }
     else if (message.type === 'npc-roster') { npcRenderer.countBytes(JSON.stringify(message).length, performance.now()); npcRenderer.applyRoster(message.npcs); }
     else if (message.type === 'npc-hit') { npcRenderer.onEvent(message); if (message.shooterId === multiplayer.credentials?.playerId) { const head = message.region === 'head'; hud.hit(!!message.defeated, head); sfx.hit({ head }); } }
@@ -1415,7 +1420,14 @@ async function startPracticeMatch() {
 // ---------- loading ----------
 const pbar = $('pbar'), pmsg = $('pmsg');
 let loadedFrac = 0; manager.onProgress = (u, l, t) => { pbar.style.width = Math.round(Math.max(loadedFrac, l / t) * 100) + '%'; };
+// RC1 hotfix: boot phase marks (ms since navigation) for the load benchmark (qa/load-benchmark.mjs) and diagnostics.
+const bootMark = (name) => { (window.__bootMarks ||= []).push([name, Math.round(performance.now())]); };
 async function boot() {
+  bootMark('boot-start');
+  // RC1 hotfix: the weapons download while the sky and the world are built (awaited at the same step as before;
+  // the RPG no longer waits for the guns).
+  const weaponsLoading = Q.lowMemory ? Promise.all([weapon.load(), guns.mac10.load()]) : Promise.all([...Object.values(guns).map((g) => g.load()), launcher.load()]);
+  weaponsLoading.catch(() => {}); // a failure is reported where it is awaited, as before
   initInput(canvas, () => unlockAudio());
   pmsg.textContent = 'Lighting the sky…';
   // A shared procedural sky keeps mobile and desktop visually coherent. Desktop
@@ -1455,8 +1467,10 @@ async function boot() {
     const preview = parseDevTime(qs.get('tod')); if (preview !== null) dayNight.setDevHour(preview);
     if (qs.get('devtime') === '1') mountDevTimePanel();
   }
+  bootMark('sky');
   pmsg.textContent = 'Building the block…';
   await buildWorld(scene, Q, (f) => { loadedFrac = f; pbar.style.width = Math.round(f * 100) + '%'; });
+  bootMark('world');
   if (Q.cityExpansion) { city = buildCityExpansion(scene, { ...Q, cityService, npcLibrary }); console.log('city expansion:', JSON.stringify(city.stats())); }
   // street lamp lights (real point lights) + emissive bulbs
   const bulbGeo = new THREE.SphereGeometry(0.11, 10, 8), bulbMat = new THREE.MeshBasicMaterial({ color: 0xffd9a0, toneMapped: false }); lampBulbMat = bulbMat;
@@ -1502,15 +1516,17 @@ async function boot() {
   city?.duplicatedHouse?.bindDestruction(houseStructures.get(city.duplicatedHouse.site.id));
   destructionStreamingStats = updateDestructionStreaming(player.pos, Q.lowMemory ? DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.mobile : DUPLICATED_ORIGINAL_NEIGHBORHOOD.renderRadius.desktop);
   updateNeighborhoodLights(destructionStreamingStats.activeStreamingId);
+  bootMark('city-and-houses');
   pmsg.textContent = 'Welding the bricks…';
   // Multiplayer damage is applied in lite mode (the room decides it; GPU bodies would diverge).
   const physMode = await initDestruction(scene, { enabled: qs.get('phys') !== '0' && !multiplayerDev });
   console.log('destruction mode:', physMode, 'blocks:', destruction.blocks);
   // brick dust thrown off a broken wall (photographic puffs, tinted brick-brown, lit low for the night scene)
   destruction.onBlast = (p, n) => { for (let i = 0; i < Math.min(12, 4 + (n >> 3)); i++) fx.billow('puff', p.clone().add(new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 1.5, (Math.random() - 0.5) * 3)), new THREE.Vector3((Math.random() - 0.5) * 4, 0.4 + Math.random() * 1.6, (Math.random() - 0.5) * 4), 2.2 + Math.random() * 1.6, 0.9, 4 + Math.random() * 2, { op: 0.75, tint: [0.085, 0.05, 0.035], drag: 1.8, rise: 0.15 }); };
+  bootMark('destruction');
   pmsg.textContent = 'Loading the AK…';
-  if (Q.lowMemory) await Promise.all([weapon.load(), guns.mac10.load()]);
-  else { await Promise.all(Object.values(guns).map((g) => g.load())); await launcher.load(); }
+  await weaponsLoading;
+  bootMark('weapons');
   pmsg.textContent = 'Calling the homies…';
   await loadCharacters(weapon.template3p, developerCombat ? undefined : [localAppearance.preset]);
   for (const id of ORDER) {
@@ -1537,7 +1553,9 @@ async function boot() {
     const pd = player.pos.distanceTo(p); if (pd < 14) { player.kick += 0.1 * (1 - pd / 14); hurtK = Math.max(hurtK, 0.35 * (1 - pd / 14)); }
     sfx.rubbleAt(p);
   };
-  buildNav(); initHud();
+  bootMark('characters');
+  buildNav(); bootMark('bot-grid'); initHud();
+  if (city?.bankInterior) bankStaff = new BankStaff(scene, { library: npcLibrary, layout: city.bankInterior.layout, mobile: !!Q.lowMemory });
   if (city) {
     cityPoiList = cityPois(city.plan);
     navLoader = createNavGraphLoader({ plan: city.plan, workerUrl: new URL('./nav-graph-worker.js', import.meta.url) });
@@ -1554,6 +1572,7 @@ async function boot() {
     console.log('collision debug: enabled', { colliders: colliders.length, vehicles: colliders.filter((c) => c.vehicle).length });
   }
   if (qs.get('nohud') === '1') { document.getElementById('hud').style.display = 'none'; document.getElementById('touch').style.display = 'none'; }
+  bootMark('map-and-hud');
   pmsg.textContent = 'Warming shaders…';
   snapShadow(player.pos);
   const restoreCityVisibility = !Q.lowMemory ? city?.beginPrewarm() : null;
@@ -1566,7 +1585,10 @@ async function boot() {
   const warm = [fx.tracers[0].m, fx.flashes[0].s, fx.parts[0].s, fx.decals[0], ...launcher.pool.map((p) => p.obj)];
   for (const o of warm) o.visible = true; fx.parts[0].s.material = fx.boomMat; fx.parts[1].s.material = fx.bloodMat; fx.parts[1].s.visible = true; fx.parts[2].s.material = fx.sparkMat; fx.parts[2].s.visible = true;
   fx.cam = camera; fx.warm(true);
-  renderer.compile(scene, camera); if (composer) composer.render(); else renderer.render(scene, camera);
+  // RC1 hotfix: compile every program first without blocking (KHR_parallel_shader_compile where the browser has
+  // it; three.js falls back to the old blocking compile otherwise), then draw the warm-up frame with them ready.
+  await renderer.compileAsync(scene, camera); bootMark('shaders-compiled');
+  if (composer) composer.render(); else renderer.render(scene, camera);
   for (const [object, frustumCulled] of warmCulling) object.frustumCulled = frustumCulled;
   restoreDestructionVisibility();
   restoreCityVisibility?.(); city?.update(player);
@@ -1574,6 +1596,7 @@ async function boot() {
   updateNeighborhoodLights(destructionStreamingStats.activeStreamingId);
   fx.warm(false);
   for (const o of warm) o.visible = false; fx.parts[1].s.visible = false; fx.parts[2].s.visible = false; fx.parts[0].s.material = fx.parts[1].s.material = fx.parts[2].s.material = fx.dustMat;
+  bootMark('ready');
   pbar.style.width = '100%'; pmsg.textContent = Q.mobile ? 'City ready · left thumb moves · right thumb aims' : 'City ready';
   console.log('performance profile:', Q.lowMemory ? 'mobile-low-memory' : 'full');
   $('go').classList.add('on');
@@ -1710,6 +1733,7 @@ function loop(now) {
       cityInteriorName = interiorSite?.name || ''; cityInteriorId = interiorSite?.id || '';
       if (time >= storeHoursCheckAt) { storeHoursCheckAt = time + 5; city.setStoresOpen?.(isStoreOpen(economicMinuteOfDay())); } // lights off after 10 PM Pacific
       homeResidents.update(dt, buildingState.active ? city.interiors.homeView : null, player);
+      bankStaff?.update(dt, !!bankInteriorState.active, player);
       storeStaff.update(dt, gunShopState.active ? 'nerdie-arms' : buildingState.active ? city.interiors.site?.id : null, gunShopState.active ? city.gunShop.staffStand : buildingState.active ? city.interiors.staffStand : null, player);
       const venueState = interiorActive || rootsState.transitioned || buildingState.transitioned || libraryState.transitioned || bankInteriorState.transitioned || apartmentState.transitioned || originalHouseState.transitioned || duplicatedHouseState.transitioned || houseState.transitioned
         ? { prompt: '', requestedLobby: false }
@@ -1903,4 +1927,4 @@ boot().catch((e) => {
   window.__showGameEntryFeedback?.(`The city could not finish loading: ${e.message}`, { error: true, retryLabel: 'Reload and retry' });
 });
 // expose for QA
-window.__hw = { get navLoader() { return navLoader; }, get cityMap() { return cityMap; }, waypoints, npcRenderer, npcLibrary, homeResidents, residentHomes, scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, configureDestructionRendering, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, mobilePerformanceOverlay, adaptiveResolution, remotePlayers, applyLocalAppearance, applyLocalEquipment, requestMultiplayerEquipment, ensureWeaponVisual, characterAssetStats, get localAppearance() { return localAppearance; }, get localEquipment() { return localEquipment; }, get localEquipmentRevision() { return localEquipmentRevision; }, get localCombat() { return localCombat; }, get localContext() { return localContext; }, get undergroundMatch() { return undergroundMatch; }, get multiplayer() { return multiplayer; }, get multiplayerActive() { return multiplayerActive; }, get multiplayerDiagnostics() { return { client: multiplayer?.diagnostics?.() || null, localEquipment, localEquipmentRevision, localCombat, localContext, remotes: [...remotePlayers.values()].map((remote) => ({ id: remote.id, appearance: remote.appearance, ...remote.diagnostics() })) }; }, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };
+window.__hw = { get navLoader() { return navLoader; }, get bankStaff() { return bankStaff; }, get cityMap() { return cityMap; }, waypoints, npcRenderer, npcLibrary, homeResidents, residentHomes, scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, configureDestructionRendering, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, mobilePerformanceOverlay, adaptiveResolution, remotePlayers, applyLocalAppearance, applyLocalEquipment, requestMultiplayerEquipment, ensureWeaponVisual, characterAssetStats, get localAppearance() { return localAppearance; }, get localEquipment() { return localEquipment; }, get localEquipmentRevision() { return localEquipmentRevision; }, get localCombat() { return localCombat; }, get localContext() { return localContext; }, get undergroundMatch() { return undergroundMatch; }, get multiplayer() { return multiplayer; }, get multiplayerActive() { return multiplayerActive; }, get multiplayerDiagnostics() { return { client: multiplayer?.diagnostics?.() || null, localEquipment, localEquipmentRevision, localCombat, localContext, remotes: [...remotePlayers.values()].map((remote) => ({ id: remote.id, appearance: remote.appearance, ...remote.diagnostics() })) }; }, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };

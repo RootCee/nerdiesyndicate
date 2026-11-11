@@ -2,7 +2,7 @@
 // a light conversation (resident-talk.js). Balances and the full home address appear only for a signed-in
 // founder. Like the bank panel, html() is plain data the tests read; the panel draws it when there is a document.
 import { residentConversation } from './resident-talk.js';
-import { economicMinuteOfDay } from './resident-schedule.js';
+import { economicMinuteOfDay, pacificDayKey } from './resident-schedule.js';
 import { residentAddress } from './city-addresses.js';
 import { homeAddress } from './neighborhood-housing.js';
 
@@ -35,7 +35,7 @@ const clock = (minute) => { const m = ((minute % 1440) + 1440) % 1440, h = Math.
 const PLACES = Object.freeze({ 'nerdie-city-bank': 'Nerdie City Bank', 'city-hall': 'City Hall', 'academy-library': 'the Library', 'nerdie-arms': 'Ammo', 'central-park': 'Central Park', 'corner-market': 'Corner Market', 'three-piece': '3 Piece', 'roots-lounge': 'Roots Lounge', 'city-wholesaler': 'City Wholesaler', 'laundromat': 'Laundromat', 'sneaker-shop': 'Sneaker Shop', 'north-court': 'North Court Apartments' });
 const NOW = Object.freeze({ home: 'At home', commute: 'On the way to work at', work: 'Working at', shop: 'Shopping at', social: 'Hanging out at', leisure: 'Relaxing at' });
 const PERSONALITY = Object.freeze({ peaceful: 'Friendly', cautious: 'Shy', defensive: 'Protective', aggressive: 'Blunt' });
-const pacificDay = (ms) => new Date(ms - 7 * 3_600_000).toISOString().slice(0, 10); // a day key; only needs to change once a day
+const pacificDay = pacificDayKey; // a day key; only needs to change once a day (shared with bank visits)
 
 export class ResidentPanel {
   // founder: { signedIn(): boolean, resident(residentId): Promise<{ history }> } or null (balances only when signed in).

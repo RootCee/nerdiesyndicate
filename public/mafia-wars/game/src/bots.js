@@ -3,23 +3,13 @@ import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { Character, ROSTER } from './characters.js';
 import { colliders, MAP, lineClear, raycastWorld } from './world.js';
 import { sfx } from './audio.js';
+import { buildBotNavGrid } from './bot-nav-grid.js';
 
 // ---------- nav grid ----------
 const CELL = 1.0;
 export const nav = { w: 0, h: 0, blocked: null, cost: null };
-export function buildNav() {
-  nav.w = Math.ceil((MAP.maxX - MAP.minX) / CELL); nav.h = Math.ceil((MAP.maxZ - MAP.minZ) / CELL);
-  nav.blocked = new Uint8Array(nav.w * nav.h); nav.cost = new Float32Array(nav.w * nav.h).fill(1);
-  for (let j = 0; j < nav.h; j++) for (let i = 0; i < nav.w; i++) {
-    const x = MAP.minX + (i + 0.5) * CELL, z = MAP.minZ + (j + 0.5) * CELL; let b = 0, near = 0;
-    for (const c of colliders) {
-      if (c.maxY < 0.4) continue;
-      if (x > c.minX - 0.45 && x < c.maxX + 0.45 && z > c.minZ - 0.45 && z < c.maxZ + 0.45) { b = 1; break; }
-      if (x > c.minX - 1.2 && x < c.maxX + 1.2 && z > c.minZ - 1.2 && z < c.maxZ + 1.2) near = 1;
-    }
-    nav.blocked[j * nav.w + i] = b; nav.cost[j * nav.w + i] = near ? 1.6 : 1;
-  }
-}
+// RC1 hotfix: built per collider (bot-nav-grid.js), identical to the original per-cell loop; ~10 ms instead of ~43 s on the expanded city.
+export function buildNav() { Object.assign(nav, buildBotNavGrid(MAP, colliders, CELL)); }
 export const cellOf = (x, z) => [THREE.MathUtils.clamp(Math.floor((x - MAP.minX) / CELL), 0, nav.w - 1), THREE.MathUtils.clamp(Math.floor((z - MAP.minZ) / CELL), 0, nav.h - 1)];
 const posOf = (i, j) => new THREE.Vector3(MAP.minX + (i + 0.5) * CELL, 0, MAP.minZ + (j + 0.5) * CELL);
 export function freeCellNear(x, z, r = 4) {

@@ -1,7 +1,7 @@
 // Light conversation with a permanent resident. Pure: every line is written here and filled from the
 // resident's real schedule (resident-schedule.js), job and personality, so what they say always matches
 // where the bank says they are. No free text and no AI: residents only ever say these lines.
-import { scheduledPlace } from './resident-schedule.js';
+import { scheduledPlace, residentBankVisit, residentIdFor } from './resident-schedule.js';
 import { homeLocationFor } from './home-ids.js';
 import { homeAddress } from './neighborhood-housing.js';
 
@@ -29,6 +29,7 @@ const VOICES = Object.freeze({
     shop: ['Just got off. Picking up something at the Corner Market.', 'Shift\'s done, so I\'m grabbing groceries.'],
     social: ['Just catching up with folks in the park.', 'Evenings in the park are the best part of the day.'],
     leisure: ['Enjoying the park while the sun\'s out.', 'Taking a slow afternoon in the park.'],
+    errand: ['Just popping into the bank. Quick stop.', 'Bank run this morning, then the rest of my day.'],
     home: ['Just taking it easy today.', 'Not much going on. Heading home soon.'],
     bye: ['Take care now!', 'See you around, neighbor.'],
   },
@@ -39,6 +40,7 @@ const VOICES = Object.freeze({
     shop: ['Just getting a few things. Then home.', 'Quick stop at the market, that\'s all.'],
     social: ['The park\'s nice in the evening. Quiet.', 'Just sitting a while in the park.'],
     leisure: ['I like the park when it\'s calm.', 'Just getting some air.'],
+    errand: ['Just... doing some banking. Won\'t be long.', 'Bank errand. I like to get it done early.'],
     home: ['I\'m just heading home.', 'Staying in, mostly.'],
     bye: ['Okay. Bye.', 'Be safe out there.'],
   },
@@ -49,6 +51,7 @@ const VOICES = Object.freeze({
     shop: ['Off the clock. Picking up food.', 'Grabbing supplies before I head in.'],
     social: ['Keeping an eye on the park tonight.', 'Just checking in with the neighborhood.'],
     leisure: ['Just out in the park.', 'Watching the block from the park.'],
+    errand: ['Handling my business at the bank. That\'s all.', 'Bank stuff. Nothing you need to worry about.'],
     home: ['Laying low today.', 'Just watching the block.'],
     bye: ['Stay sharp.', 'Watch yourself out there.'],
   },
@@ -59,6 +62,7 @@ const VOICES = Object.freeze({
     shop: ['Grabbing food. Shift wore me out.', 'Market run. That\'s it.'],
     social: ['Just posted up in the park.', 'Chilling. Park\'s the spot tonight.'],
     leisure: ['Killing time in the park.', 'Just hanging out.'],
+    errand: ['At the bank. Make it quick.', 'Got bank business. What do you want?'],
     home: ['Nothing going on today.', 'Just around.'],
     bye: ['Later.', 'Aight.'],
   },
@@ -74,7 +78,8 @@ export const TALK_TOPICS = Object.freeze([
 export function residentConversation(resident, minute, day = '') {
   const voice = VOICES[resident.personality] || VOICES.peaceful, job = resident.job;
   const homeId = resident.housing?.propertyId, address = homeAddress(homeId); // null at North Court: lines unchanged
-  const at = scheduledPlace(job, minute, homeLocationFor(homeId), resident.index), seed = (topic) => `${resident.index}:${day}:${topic}`;
+  const visit = residentBankVisit(resident.residentId || residentIdFor(resident.index), day, job, homeLocationFor(homeId), resident.index); // bank visits
+  const at = scheduledPlace(job, minute, homeLocationFor(homeId), resident.index, null, visit), seed = (topic) => `${resident.index}:${day}:${topic}`;
   const fill = (line) => line.replaceAll('{name}', resident.name)
     .replaceAll('{place}', at.locationId === job?.workplaceId ? placeName(job.workplaceId) : placeName(at.locationId))
     .replaceAll('{until}', job ? clock(job.shiftStartMinute + job.shiftDurationMinutes) : '')
