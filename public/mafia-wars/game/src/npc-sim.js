@@ -129,6 +129,8 @@ export class CityNpcSimulation {
   }
   #reset(r, p) { Object.assign(r, { x: p.x, z: p.z, route: null, lastRoute: null, step: 0, speed: 0, anim: NPC_ANIM.idle, waitUntil: 0, stuckFor: 0, placed: true, behavior: NPC_BEHAVIOR.calm, threat: null, pending: null, fleeing: false, health: NPC_COMBAT_RULES.maxHealth, downUntil: 0, defeatedAt: 0, fight: null, lastAttack: null, allyAttack: null }); }
 
+  // RC1 hotfix 1c: a (re)connected player is sent every nearby resident again, roster first.
+  forgetViewer(playerId) { this.viewers.delete(playerId); }
   // NC-LIFE-01A: tonight's plans from the bank (residentId -> { locationId, from, to }); replaces the last set.
   setEvenings(evenings) { this.evenings = new Map(evenings); }
   // Who the schedules put at a place at this minute (every permanent resident, simulated nearby or not).

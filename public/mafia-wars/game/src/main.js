@@ -58,7 +58,7 @@ import { npcIdFor } from './npc-schema.js';
 import { CityServiceClient } from './city-service-client.js';
 import { EconomyDemoService, economyDemoAllowed } from './economy-demo-service.js';
 import { relativeBearing } from './city-map-view.js';
-import { findRoute } from './city-navigation.js';
+import { findPlayerRoute } from './city-navigation.js'; // RC1 hotfix 1c: the player's GPS also starts from yards
 import { createNavGraphLoader } from './nav-graph-loader.js';
 import { createWaypointTracker } from './waypoint-tracker.js';
 import { cityPois } from './city-pois.js';
@@ -76,9 +76,9 @@ import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
 import { createMobilePerformanceOverlay } from './mobile-performance-overlay.js';
 import { createAdaptiveResolution } from './adaptive-resolution.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-0.9.0-rc1-hotfix1b';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-0.9.0-rc1-hotfix1c';
 
-const GAME_BUILD_ID = 'nc-0.9.0-rc1-hotfix1b';
+const GAME_BUILD_ID = 'nc-0.9.0-rc1-hotfix1c';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -253,7 +253,7 @@ let preferThirdPerson = (() => { try { return localStorage.getItem(CAMERA_STORAG
 // MAP-01A: the walk graph comes from a background worker (built on the spot if needed sooner); waypoint
 // following lives in waypoint-tracker.js.
 let cityMap = null, navLoader = null, cityPoiList = [];
-const waypoints = createWaypointTracker({ getGraph: () => navGraph() });
+const waypoints = createWaypointTracker({ getGraph: () => navGraph(), route: (graph, from, to, target) => findPlayerRoute(graph, from, to, { ...target, colliders }) });
 let cityInteriorName = '', cityInteriorId = '', mapDots = [], mapSnitch = false;
 let latestEconomy = null, rootsConversationResident = null;
 const economyPanelOpen = () => ['rootsTreasury', 'rootsDemand', 'rootsConversation'].some((id) => !$(id).hidden);
@@ -361,7 +361,7 @@ const residentPanel = new ResidentPanel({
   life: { plan: (id) => cityService.lifePlans?.().plans?.find((p) => p.residentId === id) || null },
   onWaypoint: (placeId) => {
     const poi = cityPoiList?.find((p) => p.id === placeId); if (!poi) return;
-    const route = findRoute(navGraph(), player.pos, poi.entry, poi); if (route?.ok) setWaypoint(poi, route);
+    const route = findPlayerRoute(navGraph(), player.pos, poi.entry, { ...poi, colliders }); if (route?.ok) setWaypoint(poi, route);
   },
   onOpen: (open) => {
     if (open) { input.moveX = input.moveY = 0; input.fire = input.ads = input.sprint = false; document.exitPointerLock?.(); } else if (MATCH.started && !MATCH.over && !TOUCH) requestLock();
@@ -1224,12 +1224,42 @@ function ensureRemote(playerInfo) {
   if (playerInfo.combat) remote.setCombat(playerInfo.combat);
   return remote;
 }
+// RC1 hotfix 1c: a small connection badge while the game is reconnecting (nothing when all is well).
+let netStatusEl = null, netStatusTimer = 0;
+function showNetStatus(detail) {
+  if (!netStatusEl) {
+    netStatusEl = document.createElement('div'); netStatusEl.id = 'netStatus'; netStatusEl.setAttribute('role', 'status'); netStatusEl.setAttribute('aria-live', 'polite');
+    netStatusEl.style.cssText = 'position:fixed;top:max(8px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:40;display:none;padding:5px 12px;border-radius:999px;background:rgba(10,8,18,.78);border:1px solid #5b4a86;color:#f3eefc;font:600 13px/1.2 "Barlow Condensed",system-ui,sans-serif;letter-spacing:.08em;pointer-events:none';
+    document.body.appendChild(netStatusEl);
+  }
+  clearTimeout(netStatusTimer);
+  const say = (text, ms = 0) => { netStatusEl.textContent = text; netStatusEl.style.display = 'block'; netStatusEl.dataset.state = detail.state; if (ms) netStatusTimer = setTimeout(() => { netStatusEl.style.display = 'none'; }, ms); };
+  if (!multiplayerActive) { netStatusEl.style.display = 'none'; return; }
+  if (detail.state === 'reconnecting') say(detail.waiting === 'offline' || detail.online === false ? 'OFFLINE · WAITING FOR NETWORK' : detail.retryInMs > 1500 ? `RECONNECTING · RETRY IN ${Math.ceil(detail.retryInMs / 1000)} S` : 'RECONNECTING…');
+  else if (detail.state === 'connected') { if (detail.resumed) say('BACK ONLINE', 2500); else if (detail.rejoined) say('REJOINED THE CITY', 3500); else netStatusEl.style.display = 'none'; }
+  else if (detail.state === 'session-expired') say('SESSION ENDED · RELOAD TO REJOIN');
+  else if (detail.state === 'room-full') say('ROOM FULL · RELOAD TO TRY AGAIN');
+  else netStatusEl.style.display = 'none';
+}
 function configureMultiplayerClient() {
   if (!multiplayerDev) return;
   multiplayer = new MultiplayerClient({ serviceUrl: multiplayerServiceUrl, name: ident.name || 'Guest', appearance: localAppearance, npc: true });
   multiplayer.addEventListener('state', ({ detail }) => {
     const labels = { connecting: 'Connecting…', connected: 'Connected · public city online', reconnecting: 'Reconnecting…', 'room-full': 'Room full', 'connection-lost': 'Connection lost', 'session-expired': 'Session expired', disconnected: 'Disconnected' };
     setMultiplayerStatus(labels[detail.state] || detail.state);
+    showNetStatus(detail);
+    // RC1 hotfix 1c: back after an interruption. Resumed: the same session, so everything the room knows comes
+    // again (welcome: players; the residents' roster afresh; the bank's staff): rebuild from it. Rejoined: the
+    // room had let the session go, so this is a fresh one, entered as on first arrival at the spawn it assigns.
+    if (detail.state === 'connected' && multiplayerActive && (detail.resumed || detail.rejoined)) {
+      clearRemotePlayers(); npcRenderer.clear();
+      if (detail.rejoined) {
+        bankStaff?.clear('rejoined');
+        const target = MULTIPLAYER_SPAWNS[(detail.spawnIndex || 0) % MULTIPLAYER_SPAWNS.length];
+        startGame(GAME_MODES.FREE_ROAM, { multiplayer: true, spawn: freeCellNear(target.x, target.z, 4) });
+      }
+      return;
+    }
     if (detail.state === 'connected' && !multiplayerActive) {
       const target = MULTIPLAYER_SPAWNS[(detail.spawnIndex || 0) % MULTIPLAYER_SPAWNS.length];
       const spawn = freeCellNear(target.x, target.z, 4);
@@ -1565,7 +1595,7 @@ async function boot() {
     if (qs.get('navWorker') !== '0') navLoader.prewarm(); // ?navWorker=0: build on first route instead (QA / fallback)
     cityMap = createCityMap({
       root: $('cityMap'), rects: mapRects, bounds: { ...MAP }, plan: city.plan, pois: cityPoiList, getGraph: navGraph, arena: ARENA_MAP, lowMemory: !!Q.lowMemory,
-      planRoute: (target) => findRoute(navGraph(), player.pos, target.entry, target),
+      planRoute: (target) => findPlayerRoute(navGraph(), player.pos, target.entry, { ...target, colliders }),
       onSetWaypoint: setWaypoint, onClearWaypoint: () => clearWaypoint(), onClose: () => setCityMap(false),
     });
     $('mapwrap')?.addEventListener('click', () => setCityMap(true));
@@ -1930,4 +1960,4 @@ boot().catch((e) => {
   window.__showGameEntryFeedback?.(`The city could not finish loading: ${e.message}`, { error: true, retryLabel: 'Reload and retry' });
 });
 // expose for QA
-window.__hw = { get navLoader() { return navLoader; }, get bankStaff() { return bankStaff; }, get cityMap() { return cityMap; }, waypoints, npcRenderer, npcLibrary, homeResidents, residentHomes, scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, configureDestructionRendering, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, mobilePerformanceOverlay, adaptiveResolution, remotePlayers, applyLocalAppearance, applyLocalEquipment, requestMultiplayerEquipment, ensureWeaponVisual, characterAssetStats, get localAppearance() { return localAppearance; }, get localEquipment() { return localEquipment; }, get localEquipmentRevision() { return localEquipmentRevision; }, get localCombat() { return localCombat; }, get localContext() { return localContext; }, get undergroundMatch() { return undergroundMatch; }, get multiplayer() { return multiplayer; }, get multiplayerActive() { return multiplayerActive; }, get multiplayerDiagnostics() { return { client: multiplayer?.diagnostics?.() || null, localEquipment, localEquipmentRevision, localCombat, localContext, remotes: [...remotePlayers.values()].map((remote) => ({ id: remote.id, appearance: remote.appearance, ...remote.diagnostics() })) }; }, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };
+window.__hw = { get netStatus() { return netStatusEl ? { text: netStatusEl.textContent, visible: netStatusEl.style.display !== 'none', state: netStatusEl.dataset.state } : null; }, get navLoader() { return navLoader; }, get bankStaff() { return bankStaff; }, get cityMap() { return cityMap; }, waypoints, npcRenderer, npcLibrary, homeResidents, residentHomes, scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, configureDestructionRendering, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, mobilePerformanceOverlay, adaptiveResolution, remotePlayers, applyLocalAppearance, applyLocalEquipment, requestMultiplayerEquipment, ensureWeaponVisual, characterAssetStats, get localAppearance() { return localAppearance; }, get localEquipment() { return localEquipment; }, get localEquipmentRevision() { return localEquipmentRevision; }, get localCombat() { return localCombat; }, get localContext() { return localContext; }, get undergroundMatch() { return undergroundMatch; }, get multiplayer() { return multiplayer; }, get multiplayerActive() { return multiplayerActive; }, get multiplayerDiagnostics() { return { client: multiplayer?.diagnostics?.() || null, localEquipment, localEquipmentRevision, localCombat, localContext, remotes: [...remotePlayers.values()].map((remote) => ({ id: remote.id, appearance: remote.appearance, ...remote.diagnostics() })) }; }, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };

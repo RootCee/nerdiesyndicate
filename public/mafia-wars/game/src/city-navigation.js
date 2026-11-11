@@ -423,6 +423,85 @@ function simplify(points) {
 
 // Remaining distance along a route from position p, the next point to walk
 // toward, and how far p has strayed from the route (for re-routing).
+// ---- RC1 hotfix 1c: the player's GPS from a yard, a side passage or beside a fence ----
+// Four of the ten multiplayer spawn points (x = ±16) are in the side yards between houses. From there the lot
+// rules (lotExits) only offer fixed paths along the lot boundary or the walkway, and a player standing within the
+// obstacle clearance of a fence post, or where those fixed paths clip a fence, got NO ROUTE although they could
+// simply walk out. When the normal start fails, this searches the free ground around the player (0.5 m cells,
+// within 12 m) for the shortest walk that keeps clear of every solid obstacle (buildings, fences, walls, trees,
+// poles) to a point on public ground the street network accepts, then routes from there as usual. Residents keep
+// findRoute unchanged. Nothing is moved, rebuilt or weakened: the search reads the graph's own obstacle index and
+// stops at the first few candidates. If no safe start exists, the original refusal (with its guidance) stands.
+// pad: the player's own collision radius (collision-math.js PLAYER_COLLISION_RADIUS 0.62) plus a little, so the walk
+// out fits the player, not just a thin line; startPad: the first step away from where they stand may be closer.
+// colliders (optional): the world's real colliders, which include things the walk graph does not model (the
+// destructible free-standing walls); the walk out keeps clear of those too, and so does its first street leg.
+export const PLAYER_ACCESS_RULES = Object.freeze({ radius: 12, cell: 0.5, pad: 0.65, startPad: 0.05, candidates: 24 });
+const ACCESS_REASONS = new Set(['start-blocked', 'off-street', 'no-street-near-start']);
+// The world's ground-level colliders (things the player bumps into: taller than a step, starting below head
+// height), indexed once per collider list. Interiors far above the street are left out.
+const colliderIndexes = new WeakMap();
+function colliderIndex(colliders) {
+  if (!Array.isArray(colliders) || !colliders.length) return null;
+  const cached = colliderIndexes.get(colliders); if (cached && cached.length === colliders.length) return cached.index;
+  const solid = colliders.filter((c) => Number.isFinite(c.minX) && (c.maxY ?? 9) > 0.25 && (c.minY ?? 0) < 1.5).map((c) => ({ minX: c.minX, maxX: c.maxX, minZ: c.minZ, maxZ: c.maxZ }));
+  const index = obstacleIndex(solid); colliderIndexes.set(colliders, { length: colliders.length, index }); return index;
+}
+export function findPlayerRoute(graph, from, to, options = {}, rules = PLAYER_ACCESS_RULES) {
+  const first = findRoute(graph, from, to, options);
+  if (first.ok || !ACCESS_REASONS.has(first.reason)) return first;
+  const solid = colliderIndex(options.colliders);
+  for (const access of playerAccessPaths(graph, from, rules, solid)) {
+    const rest = findRoute(graph, access[access.length - 1], to, options);
+    if (!rest.ok) continue;
+    if (solid && rest.points.length > 1 && !segmentClearIndexed(solid, rest.points[0], rest.points[1], { pad: PAD })) continue; // its first street leg must not cross a real wall either
+    const points = simplify([...access.slice(0, -1), ...rest.points]);
+    return { ok: true, points, distance: polylineLength(points), access: access.length - 1 };
+  }
+  return first;
+}
+// Walks from `from` to public ground near a walk line, clear of hard obstacles: [from, …, exit] lists, nearest first.
+export function playerAccessPaths(graph, from, rules = PLAYER_ACCESS_RULES, solid = null) {
+  const index = graphObstacles(graph), soft = (r) => r.soft, { cell, radius, pad, startPad } = rules;
+  const near = (ix, p, d) => gridQuery(ix.cells, p.x - d, p.z - d, p.x + d, p.z + d).some((i) => { const r = ix.obstacles[i]; return !r.soft && p.x > r.minX - d && p.x < r.maxX + d && p.z > r.minZ - d && p.z < r.maxZ + d; });
+  const hardNear = (p, d) => near(index, p, d) || (!!solid && near(solid, p, d));
+  const clear = (a, b, d) => segmentClearIndexed(index, a, b, { pad: d, ignore: soft }) && (!solid || segmentClearIndexed(solid, a, b, { pad: d }));
+  if (hardNear(from, 0)) return []; // really inside something: no safe way out to offer
+  const n = Math.ceil(radius / cell), size = 2 * n + 1, at = (i, j) => ({ x: from.x + (i - n) * cell, z: from.z + (j - n) * cell });
+  const key = (i, j) => j * size + i, cost = new Float64Array(size * size).fill(Infinity), parent = new Int32Array(size * size).fill(-1);
+  const START = key(n, n); cost[START] = 0;
+  const heap = new MinHeap(); let seq = 0; heap.push(0, seq++, START);
+  const out = [], tried = new Set();
+  while (heap.size && out.length < rules.candidates) {
+    const { f, id } = heap.pop(); if (f > cost[id]) continue;
+    const i = id % size, j = (id - i) / size, p = id === START ? from : at(i, j);
+    if (id !== START && !inSoftZoneIndexed(index, p) && !tried.has(id)) {
+      tried.add(id);
+      const links = connect(graph, p); // public ground the street network reaches (by a link clear of real walls too)
+      if (links.length && (!solid || links.some((l) => segmentClearIndexed(solid, p, l.point, { pad: PAD })))) { // turn the cell trail into a short clear path
+        const trail = []; for (let k = id; k >= 0; k = parent[k]) trail.push(k === START ? { x: from.x, z: from.z } : at(k % size, (k - k % size) / size));
+        trail.reverse();
+        const path = [trail[0]];
+        for (let a = 0; a < trail.length - 1;) {
+          let b = trail.length - 1;
+          while (b > a + 1 && !clear(trail[a], trail[b], a === 0 ? startPad : pad)) b--;
+          path.push(trail[b]); a = b;
+        }
+        out.push(path); continue;
+      }
+    }
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+      if (!di && !dj) continue; const ni = i + di, nj = j + dj; if (ni < 0 || nj < 0 || ni >= size || nj >= size) continue;
+      const q = at(ni, nj); if (Math.hypot(q.x - from.x, q.z - from.z) > radius) continue;
+      const k = key(ni, nj), step = Math.hypot(di, dj) * cell, c = cost[id] + step; if (c >= cost[k]) continue;
+      const clearance = id === START ? startPad : pad;
+      if (hardNear(q, pad) || !clear(p, q, clearance)) continue; // every cell fits the player; only the first step may graze
+      cost[k] = c; parent[k] = id; heap.push(c, seq++, k);
+    }
+  }
+  return out;
+}
+
 export function routeProgress(points, p) {
   if (!points?.length) return null;
   let bestIndex = 0, bestDistance = Infinity, bestPoint = points[0];
