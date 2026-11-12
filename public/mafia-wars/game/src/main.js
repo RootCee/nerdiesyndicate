@@ -56,7 +56,8 @@ import { PERMANENT_RESIDENT_IDENTITIES, PERMANENT_RESIDENT_SCHEDULES } from './p
 import { chessLevel, chessResident } from './chess-residents.js';
 import { NPC_BEHAVIOR, personalityOf } from './npc-behavior.js';
 import { npcIdFor } from './npc-schema.js';
-import { CityServiceClient } from './city-service-client.js';
+import { CITY_SERVICE_ENDPOINT, CityServiceClient } from './city-service-client.js';
+import { CityPulsePanel } from './city-pulse-panel.js';
 import { EconomyDemoService, economyDemoAllowed } from './economy-demo-service.js';
 import { relativeBearing } from './city-map-view.js';
 import { findPlayerRoute } from './city-navigation.js'; // RC1 hotfix 1c: the player's GPS also starts from yards
@@ -77,9 +78,9 @@ import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
 import { createMobilePerformanceOverlay } from './mobile-performance-overlay.js';
 import { createAdaptiveResolution } from './adaptive-resolution.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-0.9.1-sim02-rc1';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-0.9.2-pulse01-rc1';
 
-const GAME_BUILD_ID = 'nc-0.9.1-sim02-rc1';
+const GAME_BUILD_ID = 'nc-0.9.2-pulse01-rc1';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -334,6 +335,17 @@ const libraryPanel = new LibraryPanel({ mobile: Q.mobile, onOpen: (open) => {
 } });
 // Phase 2.1 the Nerdie City Bank: read-only City Service figures (offline until a service is approved) and the bank panel
 const cityService = economyDemoAllowed(location) ? new EconomyDemoService() : new CityServiceClient();
+// NC-PULSE-01 Roots Lounge City Pulse: public, money-free figures from GET /v1/city-pulse, fetched when the board
+// is opened (at most once a minute). Production reads the production service only on the production site; a
+// preview reads its own service or shows "not connected" (resolveCityServiceEndpoint). One panel at a time.
+const cityPulsePanel = new CityPulsePanel({
+  client: cityService.cityPulse ? cityService : null, productionEndpoint: CITY_SERVICE_ENDPOINT,
+  canOpen: () => !(cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open || economyPanelOpen()),
+  onView: (view) => city?.rootsLounge?.setPulse(view),
+  onOpen: (open) => {
+    if (open) { input.moveX = input.moveY = 0; input.fire = input.ads = input.sprint = input.jump = false; document.exitPointerLock?.(); } else if (MATCH.started && !MATCH.over && !TOUCH) requestLock();
+  },
+});
 // Founder Executive Suite: the connected founder wallet signs a one-time challenge (through the website),
 // then the suite shows the oversight figures for a 30-minute session. Only the founder wallet is accepted.
 // Every read signs in again (one wallet prompt) if the 30-minute pass has ended.
@@ -983,7 +995,7 @@ function startGame(mode = selectedMode, options = {}) {
   score.red = score.blue = 0; MATCH.left = MATCH.time; MATCH.over = false; MATCH.started = true; for (const n in ab) ab[n].have = 0; snitchUntil = 0;
   for (const interior of [city?.rootsLounge, city?.gunShop, city?.library, city?.bankInterior, city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = false; interior.interior.visible = false; }
   city?.interiors?.reset(); floorPanel.close();
-  libraryPanel.close(); bankPanel.close(); residentPanel.close();
+  libraryPanel.close(); bankPanel.close(); residentPanel.close(); cityPulsePanel.close();
   setInteriorRenderLayer(false);
   while (bots.length) ctx.remove(bots[bots.length - 1]);
   player.team = combat ? 'blue' : null;
@@ -1130,6 +1142,7 @@ function applyLocalContext(context, revision = localContextRevision + 1, state =
   setLocalSafeZone(typeof safeZone === 'boolean' ? safeZone : MULTIPLAYER_SPACES[spaceId]?.safeZone === true);
   for (const interior of [city?.rootsLounge, city?.gunShop, city?.library, city?.bankInterior, city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = interior === target; interior.interior.visible = interior === target; if (interior === city?.rootsLounge) target === interior ? interior.audio.enter() : interior.audio.exit(); }
   if (target !== city?.library) libraryPanel.close();
+  if (target !== city?.rootsLounge) cityPulsePanel.close();
   if (target !== city?.bankInterior) bankPanel.close();
   residentPanel.close();
   // Stage 2 buildings: the server's word decides which one (if any) this client is in (a reconnect restores it)
@@ -1680,6 +1693,7 @@ addEventListener('keydown', (e) => {
   if (e.target && e.target.tagName === 'INPUT') return;
   if (e.code === 'Escape' && $('avatarPanel')?.classList.contains('on')) { $('avatarPanel').classList.remove('on'); $('avatarToggle').setAttribute('aria-expanded', 'false'); if (MATCH.started && !MATCH.over) requestLock(); return; }
   if (e.code === 'Escape' && chessClient.open) { chessClient.close(); return; }
+  if (e.code === 'Escape' && cityPulsePanel.open) { cityPulsePanel.close(); return; }
   if (e.code === 'Escape' && libraryPanel.open) { libraryPanel.close(); return; }
   if (e.code === 'Escape' && bankPanel.open) { bankPanel.close(); return; }
   if (e.code === 'Escape' && residentPanel.open) { residentPanel.close(); return; }
@@ -1713,7 +1727,7 @@ function loop(now) {
   if (MATCH.started) adaptiveResolution.frame(dt * 1000, now);
   fpsAcc += dt; fpsN++; if (fpsAcc > 0.5) { hud.fps(Math.round(fpsN / fpsAcc)); fpsAcc = 0; fpsN = 0; }
   const look = poll();
-  if (!MATCH.started || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open || economyPanelOpen() || (!input.locked && !TOUCH && !MATCH.over && MATCH.started)) { look.dx = look.dy = 0; }
+  if (!MATCH.started || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open || economyPanelOpen() || cityPulsePanel.open || (!input.locked && !TOUCH && !MATCH.over && MATCH.started)) { look.dx = look.dy = 0; }
   if (!MATCH.started) { // idle camera drift on the title
     player.yaw += dt * 0.03; player.update(dt, { moveX: 0, moveY: 0 }, { dx: 0, dy: 0 }, time); input.camera = false;
   } else {
@@ -1727,8 +1741,8 @@ function loop(now) {
     if (input.ab) { if (isCombatMode(MATCH.mode)) useAbility(input.ab); input.ab = 0; }
     if (input.camera) { input.camera = false; if (!combatLobbyOpen) toggleCamera(); }
     if (input.map) { input.map = false; setCityMap(!cityMap?.isOpen); }
-    if (cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open || economyPanelOpen()) { input.moveX = input.moveY = 0; input.fire = false; input.ads = false; input.jump = false; input.interact = false; input.reload = false; }
-    player.update(dt, MATCH.over || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open || economyPanelOpen() ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
+    if (cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open || economyPanelOpen() || cityPulsePanel.open) { input.moveX = input.moveY = 0; input.fire = false; input.ads = false; input.jump = false; input.interact = false; input.reload = false; }
+    player.update(dt, MATCH.over || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open || economyPanelOpen() || cityPulsePanel.open ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
     blendServerCorrection(dt);
     if (multiplayerActive && Number.isFinite(localCombat?.health)) {
       player.hp = localCombat.health; player.dead = localCombat.dead === true;
@@ -1748,6 +1762,7 @@ function loop(now) {
     } else if (city && MATCH.mode === GAME_MODES.FREE_ROAM) {
       city.rootsLounge?.setEconomy(latestEconomy); city.rootsLounge?.updateResidents(dt);
       const rootsState = city.rootsLounge ? city.rootsLounge.update(player, input, time) : { active: false, transitioned: false, prompt: '' };
+      if (cityPulsePanel.open && !rootsState.active) cityPulsePanel.close();
       // Ammo (the gun shop) first: while inside it (or stepping through its door) the other interiors stand still
       const gunShopState = rootsState.active || rootsState.transitioned || rootsState.prompt || !city.gunShop ? { active: !!city.gunShop?.active, transitioned: false, prompt: '' } : city.gunShop.update(player, input, time);
       // M7.2 the Academy Library, next: its stations open the reading panel
@@ -1803,6 +1818,7 @@ function loop(now) {
       if (bankInteriorState.open) { if (bankInteriorState.open.kind === 'wallet') walletBridge.openBank(); else bankPanel.openStation(bankInteriorState.open); }
       if (rootsState.action === 'resident-conversation') { openConversation(rootsState.station); multiplayer?.sendEconomy?.({ action: 'interact-resident', residentId: rootsState.station, station: 'resident', topic: 'roots' }); }
       else if (rootsState.action === 'demand') { multiplayer?.sendEconomy?.({ action: 'snapshot' }); openDemand(); }
+      else if (rootsState.action === 'pulse') cityPulsePanel.show();
       else if (rootsState.action === 'treasury') { multiplayer?.sendEconomy?.({ action: 'snapshot' }); openTreasury(); }
       else if (rootsState.action === 'volume') hud.callout('ROOTS MUSIC', `VOLUME ${Math.round(city.rootsLounge.audio.volume * 100)}% · OFFICIAL ROOTCEE TRACKS REQUIRED`);
       if (buildingState.floorMenu) floorPanel.show(buildingState.floorMenu);

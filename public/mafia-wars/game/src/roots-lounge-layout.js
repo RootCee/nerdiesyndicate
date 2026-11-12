@@ -28,8 +28,25 @@ export function rootsLoungeInterior(site = rootsLoungeSite()) {
       { id: 'demand-board', kind: 'demand', label: 'VIEW CITY DEMAND BOARD', x: minX + 0.8, y, z: site.z },
       { id: 'treasury-console', kind: 'treasury', label: 'VIEW SIMULATED CITY TREASURY', x: minX + 0.8, y, z: site.z + 2.4 },
       { id: 'sound-booth', kind: 'volume', label: 'ADJUST MUSIC VOLUME', x: maxX - 3.0, y, z: maxZ - 1.2 },
+      // NC-PULSE-01: the City Pulse display by the door, on the east wall before the bar. Only reachable from in
+      // front of it, inside the room (stationReachable).
+      { id: 'city-pulse-board', kind: 'pulse', label: 'CITY PULSE · WHAT RESIDENTS ARE DOING', x: maxX - 0.85, y, z: minZ + 1.3, facing: CITY_PULSE_FACING, wall: { x: maxX, z: minZ + 1.3 } },
     ]),
+    // The display itself: 2 m wide, its centre 1.75 m up, on a frame against the east wall (inner face maxX - 0.1).
+    pulseBoard: Object.freeze({ x: maxX - 0.175, y: y + 1.75, z: minZ + 1.3, width: 2.0, height: 2.0 * 240 / 512, facing: CITY_PULSE_FACING }),
   });
+}
+const CITY_PULSE_FACING = Object.freeze({ x: -1, z: 0 });
+
+// A station can be used only from inside the room's walls, within `range` (3D, so another floor never counts),
+// and, for a wall display, from in front of it (not from beside or behind the wall).
+export function stationReachable(station, pos, layout, range) {
+  if (!station || !pos) return false;
+  const distance = Math.hypot(pos.x - station.x, pos.y - station.y, pos.z - station.z);
+  if (!(distance <= range)) return false;
+  if (pos.x < layout.minX || pos.x > layout.maxX || pos.z < layout.minZ || pos.z > layout.maxZ || Math.abs(pos.y - layout.y) > 2.5) return false;
+  if (station.facing && station.wall) return (pos.x - station.wall.x) * station.facing.x + (pos.z - station.wall.z) * station.facing.z > 0.25;
+  return true;
 }
 
 export function rootsLoungeSpace(site = rootsLoungeSite()) {

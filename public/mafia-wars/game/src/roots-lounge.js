@@ -3,7 +3,8 @@ import { insideInteractionRange, interactionCooldownReady } from './city-layout.
 import { addInteriorIsolationShell, wallCollider } from './apartment-system.js';
 import { KitBatch, PALETTE } from './city-showcase-kit.js';
 import { RootsAudio } from './roots-audio.js';
-import { rootsLoungeInterior, rootsLoungeSpace } from './roots-lounge-layout.js';
+import { rootsLoungeInterior, rootsLoungeSpace, stationReachable } from './roots-lounge-layout.js';
+import { CityPulseBoardDisplay } from './city-pulse-board.js';
 import { RootsResidentRenderer } from './roots-residents.js';
 
 const TRANSITION_COOLDOWN = 0.65, STATION_RANGE = 1.7;
@@ -17,6 +18,8 @@ export class RootsLoungeSystem {
     const v = (p) => new THREE.Vector3(p.x, p.y, p.z); this.entry = v(this.space.entry); this.insideSpawn = v(this.space.inside); this.exit = v(this.space.exit); this.outsideSpawn = v(this.space.outside);
   }
   setEconomy(snapshot) { if (!snapshot || snapshot === this.economy) return; this.economy = snapshot; this.residents?.setResidents(snapshot.roots?.residents || []); }
+  // NC-PULSE-01: the wall display follows the City Pulse panel's figures (redrawn only when they change).
+  setPulse(view) { return this.pulseBoard?.update(view) ?? false; }
   updateResidents(dt) { this.residents?.setActive(this.active); this.residents?.update(dt); }
   #build() {
     const L = this.layout, y = L.y, g = this.interior, batch = new KitBatch(), mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: opts.roughness ?? 0.72, metalness: opts.metalness ?? 0, emissive: opts.emissive ?? 0, emissiveIntensity: opts.intensity ?? 0 });
@@ -41,6 +44,10 @@ export class RootsLoungeSystem {
     const V = L.vip; batch.box(M.seat, V.x, y + 0.32, V.z + 0.65, V.width, 0.64, 0.75); for (const x of [V.x - V.width / 2, V.x + V.width / 2]) { batch.box(M.gold, x, y + 0.5, V.z - 0.75, 0.08, 1.0, 0.08); } batch.box(M.gold, V.x, y + 0.75, V.z - 0.75, V.width, 0.05, 0.05);
     // Demand board and ceiling strips.
     batch.box(M.green, L.minX + 0.08, y + 2.1, this.site.z, 0.08, 2.3, 2.8); batch.box(M.gold, L.minX + 0.13, y + 2.1, this.site.z, 0.04, 2.5, 3.0);
+    // NC-PULSE-01 City Pulse display: a dark frame with a purple bezel and a lime light strip under the screen.
+    const P = L.pulseBoard, fx = L.maxX - 0.13; // the wall's inner face is at maxX - 0.1
+    batch.box(M.dark, fx, P.y, P.z, 0.06, P.height + 0.16, P.width + 0.16); batch.box(M.purple, fx, P.y + P.height / 2 + 0.1, P.z, 0.05, 0.04, P.width + 0.16); batch.box(M.green, fx, P.y - P.height / 2 - 0.12, P.z, 0.06, 0.05, P.width * 0.8);
+    this.pulseBoard = new CityPulseBoardDisplay(P, { mobile: this.mobile }); g.add(this.pulseBoard.mesh);
     for (const x of [cx - 4, cx, cx + 4]) { batch.box(M.dark, x, y + L.height - 0.32, cz, 0.08, 0.55, 0.08); batch.box(M.light, x, y + L.height - 0.62, cz, 0.18, 0.06, d - 2); }
     batch.build(g, 'roots-lounge-merged', { castShadow: false });
     const lights = this.mobile ? [[cx, cz, 55]] : [[D.x, D.z, 34], [B.x - 1.8, B.z, 26], [S.x, S.z, 30]]; for (const [x, z, intensity] of lights) { const light = new THREE.PointLight(x === D.x ? 0xa25cff : 0xffc980, intensity, this.mobile ? 18 : 12, 2); light.position.set(x, y + 3.4, z); g.add(light); }
@@ -62,13 +69,13 @@ export class RootsLoungeSystem {
       if (!interact || !interactionCooldownReady(now, this.transitionReadyAt)) return idle(free ? `ROOTS LOUNGE · FREE ENTRY · ${tap} ENTER` : `ROOTS LOUNGE · SIMULATED ADMISSION ${Number.isFinite(fee) ? `$${(fee / 100).toFixed(2)}` : ''} · ${tap} ENTER`, free ? 'ENTER ROOTS' : 'PAY & ENTER'); return this.#transition(player, now, true); }
     if (insideInteractionRange(player.pos, this.exit, ROOTS_EXIT_RANGE)) { this.targetId = null; if (!interact || !interactionCooldownReady(now, this.transitionReadyAt)) return idle(`EXIT ROOTS LOUNGE · ${tap} EXIT`, 'EXIT ROOTS'); return this.#transition(player, now, false); }
     const resident = this.residents?.nearest(player.pos, this.targetId);
-    const station = this.layout.interactions.map((s) => ({ ...s, distance: Math.hypot(player.pos.x - s.x, player.pos.y - s.y, player.pos.z - s.z) })).filter((s) => s.distance <= STATION_RANGE).sort((a, b) => a.distance - b.distance)[0];
+    const station = this.layout.interactions.map((s) => ({ ...s, distance: Math.hypot(player.pos.x - s.x, player.pos.y - s.y, player.pos.z - s.z) })).filter((s) => stationReachable(s, player.pos, this.layout, STATION_RANGE)).sort((a, b) => a.distance - b.distance)[0];
     const go = interact && interactionCooldownReady(now, this.actionReadyAt) && interactionCooldownReady(now, this.transitionReadyAt); if (go) this.actionReadyAt = now + 0.7;
     if (resident && (!station || resident.distance <= station.distance)) { this.targetId = resident.id; return idle(`${resident.name.toUpperCase()} · ${resident.occupation.replaceAll('-', ' ').toUpperCase()} · ${tap} TALK`, 'TALK', go ? 'resident-conversation' : null, resident.id); }
     this.targetId = null;
     if (!station) return idle();
     if (go && station.kind === 'volume') this.audio.setVolume(this.audio.volume >= 0.75 ? 0.25 : this.audio.volume + 0.25);
-    return idle(`${station.label}${station.kind === 'volume' ? ` · ${Math.round(this.audio.volume * 100)}%` : ''} · ${tap}`, station.kind === 'demand' ? 'SUGGEST' : station.kind === 'treasury' ? 'TREASURY' : 'INTERACT', go ? station.kind : null, station.id);
+    return idle(`${station.label}${station.kind === 'volume' ? ` · ${Math.round(this.audio.volume * 100)}%` : ''} · ${tap}`, station.kind === 'demand' ? 'SUGGEST' : station.kind === 'treasury' ? 'TREASURY' : station.kind === 'pulse' ? 'CITY PULSE' : 'INTERACT', go ? station.kind : null, station.id);
   }
   #transition(player, now, inside) {
     this.active = inside; this.interior.visible = inside; player.pos.copy(inside ? this.insideSpawn : this.outsideSpawn); player.vel.set(0, 0, 0); player.onGround = true; player.yaw = Math.PI; this.transitionReadyAt = now + TRANSITION_COOLDOWN;

@@ -3,6 +3,7 @@
 // (PRODUCTION_HOSTS) reads the production service; a preview names its own (?cityService=, or the RC1 stand-in)
 // or has none (NC-SIM-02: never a silent fallback to production). Requests are GET only, cached, polled at most once a minute.
 import { RC1_PREVIEW_CITY_SERVICE, isProductionHost, isRc1PreviewHost } from './multiplayer-endpoint.js';
+import { CITY_PULSE_RANGES, CITY_PULSE_REFRESH_MS, parseCityPulse } from './city-pulse.js';
 export const CITY_SERVICE_ENDPOINT = 'https://nerdie-city-service.buddieroots.workers.dev';
 // A preview host (Vercel preview, localhost, a private LAN address) may name its own isolated City Service with
 // ?cityService=<origin> (NC-LIFE-01A founder preview). The production site never honours it.
@@ -41,6 +42,23 @@ export class CityServiceClient {
   activity() { return this.#snapshot('/v1/economy/activity', ACTIVITY_TTL_MS, (body) => (body && Array.isArray(body.decisions) ? { status: 'ok', ...body } : { status: 'offline' })); }
   // Today's recorded decisions (one public line per deciding resident), for the resident talk card.
   lifePlans() { return this.#snapshot('/v1/life/plans', ACTIVITY_TTL_MS, (body) => (body && Array.isArray(body.plans) ? { status: 'ok', ...body } : { status: 'offline', plans: [] })); }
+  // NC-PULSE-01: the Roots Lounge City Pulse board (public, money-free; GET /v1/city-pulse?days=7|30). Resolves to
+  // the parsed, whitelisted pulse; rejects (without the server's words) when offline, slow or malformed. No
+  // credentials or founder pass are ever sent. Cached a minute, one request per range at a time.
+  cityPulse(days = 7) {
+    const range = CITY_PULSE_RANGES.includes(days) ? days : 7, path = `/v1/city-pulse?days=${range}`;
+    if (!this.endpoint || !this.fetch) return Promise.reject(new Error('City Pulse is not connected.'));
+    const hit = this.cache.get(path);
+    if (hit && this.now() - hit.at < CITY_PULSE_REFRESH_MS) return Promise.resolve(hit.value);
+    if (this.pending.has(path)) return this.pending.get(path);
+    const abort = typeof AbortController === 'function' ? new AbortController() : null, timer = abort ? setTimeout(() => abort.abort(), 10_000) : 0;
+    const request = this.fetch(`${this.endpoint}${path}`, { method: 'GET', headers: { accept: 'application/json' }, credentials: 'omit', ...(abort ? { signal: abort.signal } : {}) })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('City Pulse is unavailable.'))))
+      .then((body) => { const pulse = parseCityPulse(body); if (!pulse) throw new Error('City Pulse is unavailable.'); this.cache.set(path, { at: this.now(), value: pulse }); return pulse; })
+      .catch(() => { throw new Error('City Pulse is unavailable.'); })
+      .finally(() => { clearTimeout(timer); this.pending.delete(path); });
+    this.pending.set(path, request); return request;
+  }
   // Founder Executive Suite: challenge -> the founder wallet signs (through the website) -> 30-minute pass ->
   // oversight figures. The pass lives only in memory; reloading the game signs out.
   async founderSignIn({ address, sign }) {
