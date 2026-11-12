@@ -6,9 +6,12 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const wsUrl = (base, room, ticket, npc = false) => `${base.replace(/^http/, 'ws').replace(/\/$/, '')}/rooms/${encodeURIComponent(room)}/ws?ticket=${encodeURIComponent(ticket)}&v=${PROTOCOL_VERSION}${npc ? '&npc=1' : ''}`;
 const rounded = (value) => Math.round(value * 1000) / 1000;
 // RC1 hotfix 1c: reconnection. Bounded exponential backoff with jitter (0.5 s doubling to a 15 s ceiling, ±25 %),
-// for as long as the game runs; resume the same session within the room's grace period, rejoin after it.
+// for as long as the game runs. Always try to resume the same session first; rejoin (a fresh session) only once the
+// room has refused the old ticket twice while reachable. Hotfix 1d: a fixed resume window (grace minus 3 s) made
+// the game rejoin while the room still held the old, half-open socket (a phone that lost its network), leaving a
+// frozen copy of the player in the room until the stale-connection sweep; resuming takes that socket over instead.
 export const RECONNECT_RULES = Object.freeze({ baseMs: 500, maxMs: 15_000, jitter: 0.25, attemptTimeoutMs: 8_000, idleCheckMs: 1_000,
-  resumeWindowMs: MULTIPLAYER_LIMITS.reconnectGraceMs - 3_000, resumeFailuresBeforeRejoin: 2, aliveCheckMs: 4_000 });
+  resumeFailuresBeforeRejoin: 2, aliveCheckMs: 4_000 });
 export function reconnectDelay(attempt, random = Math.random, rules = RECONNECT_RULES) {
   const base = Math.min(rules.maxMs, rules.baseMs * 2 ** Math.max(0, Math.min(20, attempt)));
   return Math.round(base * (1 - rules.jitter + 2 * rules.jitter * random()));
@@ -99,8 +102,8 @@ export class MultiplayerClient extends EventTarget {
   }
   // ---- RC1 hotfix 1c: automatic reconnection ----
   // The live socket went away. 4004: another tab or device took this session over (or it expired); 4003: room
-  // full. Anything else: keep trying while the game runs: resume this session (same player, same place) while
-  // the room still holds it, or rejoin (a fresh session at a spawn point, as on first entry) once it has let it go.
+  // full. Anything else: keep trying while the game runs: resume this session (same player, same place) while the
+  // room still holds it, or rejoin (a fresh session at a spawn point, as on first entry) once it has refused it.
   #lost(code) {
     if (code === 4004) { this.setState('session-expired'); return; }
     if (code === 4003) { this.setState('room-full'); return; }
@@ -123,7 +126,7 @@ export class MultiplayerClient extends EventTarget {
       if (!live()) return;
       this.reconnectAttempts = attempt + 1;
       try {
-        const resume = performance.now() - this.disconnectedAt < rules.resumeWindowMs && this.resumeFailures < rules.resumeFailuresBeforeRejoin;
+        const resume = this.resumeFailures < rules.resumeFailuresBeforeRejoin; // the room still holds the session until it says otherwise
         if (resume) {
           try { await this.#open(this.credentials, { resumed: true }); return; }
           catch { if (await this.#serviceReachable()) this.resumeFailures++; throw new Error('resume failed'); } // reachable but refused: the room let the session go

@@ -76,9 +76,9 @@ import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
 import { createMobilePerformanceOverlay } from './mobile-performance-overlay.js';
 import { createAdaptiveResolution } from './adaptive-resolution.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-0.9.0-rc1-hotfix1c';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-0.9.0-rc1-hotfix1d';
 
-const GAME_BUILD_ID = 'nc-0.9.0-rc1-hotfix1c';
+const GAME_BUILD_ID = 'nc-0.9.0-rc1-hotfix1d';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
