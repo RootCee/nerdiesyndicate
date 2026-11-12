@@ -4,6 +4,7 @@
 // give bank information and city-level figures, never anyone's personal account.
 import { economicMinuteOfDay, scheduledPlace, residentBankVisit, residentIdFor, pacificDayKey } from './resident-schedule.js';
 import { residentAddress } from './city-addresses.js';
+import { buildEconomyModel, economyDashboardHtml, ECONOMY_DASHBOARD_STYLE } from './economy-dashboard.js';
 const STYLE = `
 #bankPanel{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;background:rgba(5,3,10,.66);font-family:'Barlow Condensed',system-ui,sans-serif;color:#f3eefc;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))}
 #bankPanel.on{display:flex}
@@ -94,7 +95,7 @@ export const RESIDENT_SORTS = Object.freeze({
   earned: { label: 'Earned', compare: (a, b) => (b.lifetime?.wages || 0) - (a.lifetime?.wages || 0) },
   shift: { label: 'Shift', compare: (a, b) => (a.job?.shiftStartMinute ?? 1e9) - (b.job?.shiftStartMinute ?? 1e9) },
 });
-const FOUNDER_START = Object.freeze({ status: 'idle', data: null, error: null, tab: 'overview', residents: null, sort: 'no', selected: null, history: null });
+const FOUNDER_START = Object.freeze({ status: 'idle', data: null, error: null, tab: 'overview', residents: null, sort: 'no', selected: null, history: null, economy: null });
 
 export class BankPanel {
   // founderAccess: { signIn(), refresh(): Promise<overview body>, residents(): Promise<{ residents }>,
@@ -108,8 +109,9 @@ export class BankPanel {
     if (!this.founderAccess || this.founder.status === 'working') return;
     const [kind, arg] = String(action).split(':'), f = this.founder, access = this.founderAccess;
     if (kind === 'tab') {
-      f.tab = arg === 'residents' && access.residents ? 'residents' : 'overview'; f.selected = null; f.history = null; f.error = null;
+      f.tab = arg === 'residents' && access.residents ? 'residents' : arg === 'economy' && access.economy ? 'economy' : 'overview'; f.selected = null; f.history = null; f.error = null;
       if (f.tab === 'residents' && !f.residents) return this.#founderLoad(async () => { f.residents = (await access.residents()).residents; });
+      if (f.tab === 'economy' && !f.economy) return this.#founderLoad(async () => { f.economy = await access.economy(); });
       return this.render();
     }
     if (kind === 'sort') { f.sort = RESIDENT_SORTS[arg] ? arg : 'no'; return this.render(); }
@@ -123,6 +125,7 @@ export class BankPanel {
         f.residents = (await access.residents()).residents;
         if (f.selected) f.history = (await access.resident(f.selected)).history;
       }
+      if (refreshing && f.tab === 'economy' && access.economy) f.economy = await access.economy();
     }, !refreshing);
   }
   // A failed sign-in returns to the sign-in screen; a failed read keeps what is on screen and says why.
@@ -190,12 +193,12 @@ export class BankPanel {
       const stats = [['Treasury', n(e.treasury)], ['sNERDIE issued', n(e.issued)], ['Ledger integrity', o.integrity?.ok ? 'Verified' : 'PROBLEM'], ['Ledger entries', n(e.entries)],
         ['Residents', n(e.population)], ['Employed', n(e.employed)], ['Temp work slots a day', n(temp)], ['Wages paid', n(e.wagesPaid)],
         ['Rent paid · arrears', `${n(rent.paid)} · ${n(rent.arrears)}`], ['Business sales', n(e.businessSales)], ['Aggregate savings', n(e.savings)], ['Economic day', day == null ? '—' : n(day)]];
-      const tab = f.tab === 'residents' ? 'residents' : 'overview';
-      const tabs = this.founderAccess.residents ? `<div class="bp-actions" role="tablist">${[['overview', 'Overview'], ['residents', 'Residents']].map(([id, label]) => `<button type="button" role="tab" aria-selected="${tab === id}" class="bp-b${tab === id ? ' on' : ''}" data-founder="tab:${id}">${label}</button>`).join('')}</div>` : '';
+      const tab = f.tab === 'residents' ? 'residents' : f.tab === 'economy' && this.founderAccess.economy ? 'economy' : 'overview';
+      const tabs = this.founderAccess.residents ? `<div class="bp-actions" role="tablist">${[['overview', 'Overview'], ['residents', 'Residents'], ...(this.founderAccess.economy ? [['economy', 'Economy']] : [])].map(([id, label]) => `<button type="button" role="tab" aria-selected="${tab === id}" class="bp-b${tab === id ? ' on' : ''}" data-founder="tab:${id}">${label}</button>`).join('')}</div>` : '';
       const overview = `${alerts.length ? `<div class="bp-warn"><p>Alerts: ${alerts.map((a) => esc(String(a).replaceAll('_', ' '))).join(', ')}</p></div>` : '<p class="bp-note">No alerts.</p>'}
         ${o.integrity && !o.integrity.ok ? `<div class="bp-warn"><p>Integrity problems: ${esc((o.integrity.problems || []).join('; '))}</p></div>` : ''}
         <div class="bp-grid">${stats.map(([k, v]) => `<div class="bp-stat"><b>${esc(k)}</b><span>${v}</span></div>`).join('')}</div>`;
-      const body = tab === 'overview' ? overview : f.selected && f.history ? this.#residentHtml(f.history) : this.#residentsHtml();
+      const body = tab === 'overview' ? overview : tab === 'economy' ? (f.economy ? economyDashboardHtml(buildEconomyModel({ ...f.economy, room: this.founderAccess.room?.() || null })) : f.error ? '<p class="bp-note">The economy reports did not load. Press Refresh to try again.</p>' : '<p class="bp-note">Loading the economy…</p>') : f.selected && f.history ? this.#residentHtml(f.history) : this.#residentsHtml();
       return `<p class="bp-note">Signed in as ${esc(f.data.founder)} · session ends ${esc(new Date(f.data.sessionExpiresAt).toLocaleTimeString())}</p>
         ${tabs}${f.error ? `<div class="bp-warn"><p>${esc(f.error)}</p></div>` : ''}${body}
         <div class="bp-actions"><button type="button" class="bp-b" data-founder="refresh">Refresh</button></div>`;
@@ -210,7 +213,7 @@ export class BankPanel {
   close() { if (!this.isOpen) return; this.reader.close(); this.isOpen = false; this.root?.classList.remove('on'); this.onOpen(false); }
   #ensureDom() {
     if (this.root || !this.doc) return;
-    const d = this.doc, style = d.createElement('style'); style.textContent = STYLE; d.head.appendChild(style);
+    const d = this.doc, style = d.createElement('style'); style.textContent = STYLE + ECONOMY_DASHBOARD_STYLE; d.head.appendChild(style);
     const root = d.createElement('div'); root.id = 'bankPanel'; root.setAttribute('role', 'dialog'); root.setAttribute('aria-modal', 'true'); root.setAttribute('aria-label', 'Nerdie City Bank');
     root.innerHTML = '<div class="bp-card"><div class="bp-head"><div><div class="bp-kicker"></div><h2></h2></div><button class="bp-x" type="button" aria-label="Close">×</button></div><div class="bp-main" aria-live="polite"></div></div>';
     d.body.appendChild(root); this.root = root;

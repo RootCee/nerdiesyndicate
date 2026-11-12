@@ -12,7 +12,7 @@ if (!sourceRoot) {
   throw new Error('Usage: node scripts/sync-mafia-wars-preview.mjs /absolute/path/to/game/source');
 }
 
-const expectedCommit = '4e3c419175d501c65020611c84a8a823bc2c294e';
+const expectedCommit = '0fcb88098e3498376f2e841cce25fc1b27976ef3';
 const runtimeFiles = ['index.html', 'version.txt'];
 const characterFiles = ['blue_zip.glb', 'navy.glb', 'red_hoodie.glb', 'red_jersey.glb'];
 const npcFiles = ['npc_women.glb', 'npc_men.glb', 'npc_clips_women.glb', 'npc_clips_men.glb', 'LICENSES.md'];

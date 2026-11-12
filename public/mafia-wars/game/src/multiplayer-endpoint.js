@@ -7,6 +7,9 @@ export const PREVIEW_MULTIPLAYER_SERVICES = Object.freeze({
   [HOOD_EXPANSION_PREVIEW_HOST]: 'https://nerdie-city-hood-expansion-preview.buddieroots.workers.dev',
 });
 export const LOCAL_MULTIPLAYER_SERVICE = 'http://127.0.0.1:8787';
+// The only hosts that may use production services (NC-SIM-02: a preview or unknown host never falls back to them).
+export const PRODUCTION_HOSTS = Object.freeze(['nerdieblaq.xyz', 'www.nerdieblaq.xyz']);
+export const isProductionHost = (hostname) => PRODUCTION_HOSTS.includes(String(hostname || '').toLowerCase());
 // NC release candidate 1: the protected Vercel preview of website branch mw-rc1 (its branch alias, or one of its
 // deployment URLs) talks only to its own preview Worker and a City Service stand-in, never to production.
 export const RC1_PREVIEW_MULTIPLAYER_SERVICE = 'https://nerdie-city-rc1-preview.buddieroots.workers.dev';
@@ -39,6 +42,9 @@ export function resolveMultiplayerService(locationLike = globalThis.location) {
       ? PREVIEW_MULTIPLAYER_SERVICES[HOOD_EXPANSION_PREVIEW_HOST]
       : null);
   if (previewService) return previewService;
+  if (isProductionHost(hostname)) return PRODUCTION_MULTIPLAYER_SERVICE;
+  // a LAN preview without ?mp= talks to the multiplayer server on the machine serving it, never to production
+  if (isPrivateLan) return `http://${hostname}:8787`;
   if (hostname.endsWith('.vercel.app')) throw new Error('This preview build has no isolated multiplayer Worker configured.');
-  return PRODUCTION_MULTIPLAYER_SERVICE;
+  throw new Error(`No multiplayer service is configured for ${hostname || 'this host'}.`);
 }

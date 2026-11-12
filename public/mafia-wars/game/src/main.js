@@ -48,6 +48,7 @@ import { createCityMap } from './city-map.js';
 import { ChessClient } from './chess-client.js';
 import { LibraryPanel } from './library-panel.js';
 import { BankPanel } from './bank-panel.js';
+import { loadEconomyReports } from './economy-dashboard.js';
 import { ResidentPanel } from './resident-panel.js';
 import { FloorPanel } from './floor-panel.js';
 import { RESIDENT_NAMES } from './resident-names.js';
@@ -76,9 +77,9 @@ import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
 import { createMobilePerformanceOverlay } from './mobile-performance-overlay.js';
 import { createAdaptiveResolution } from './adaptive-resolution.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-0.9.0-rc1-hotfix1d';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-0.9.1-sim02-rc1';
 
-const GAME_BUILD_ID = 'nc-0.9.0-rc1-hotfix1d';
+const GAME_BUILD_ID = 'nc-0.9.1-sim02-rc1';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -348,6 +349,12 @@ const founderAccess = cityService.founderSignIn ? {
   async refresh() { await founderSession(); return cityService.founderOverview(); },
   async residents() { await founderSession(); return cityService.founderResidents(); },
   async resident(residentId) { await founderSession(); return cityService.founderResident(residentId); },
+  // NC-SIM-02: the Economy tab: the founder reports plus the public activity feed (decisions, managers)
+  async economy(days = 14) {
+    await founderSession();
+    return loadEconomyReports(cityService, days);
+  },
+  room() { return latestEconomy || null; }, // this room's own economy model, shown beside the bank (never merged)
 } : null;
 const bankPanel = new BankPanel({ cityService, founderAccess, onOpen: (open) => {
   if (open) { input.moveX = input.moveY = 0; input.fire = input.ads = input.sprint = false; document.exitPointerLock?.(); } else if (MATCH.started && !MATCH.over && !TOUCH) requestLock();

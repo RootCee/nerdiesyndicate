@@ -1,19 +1,19 @@
 // The game's read-only view of the City Service (city-service/ in this repo): one City Director for the
-// Nerdie Blaq bank, promoted to production by the founder on 27 October 2026. Preview sites (*.vercel.app)
-// read the same service. Requests are GET only, cached, and polled at most once a minute.
-import { RC1_PREVIEW_CITY_SERVICE, isRc1PreviewHost } from './multiplayer-endpoint.js';
+// Nerdie Blaq bank, promoted to production by the founder on 27 October 2026. Only the production site
+// (PRODUCTION_HOSTS) reads the production service; a preview names its own (?cityService=, or the RC1 stand-in)
+// or has none (NC-SIM-02: never a silent fallback to production). Requests are GET only, cached, polled at most once a minute.
+import { RC1_PREVIEW_CITY_SERVICE, isProductionHost, isRc1PreviewHost } from './multiplayer-endpoint.js';
 export const CITY_SERVICE_ENDPOINT = 'https://nerdie-city-service.buddieroots.workers.dev';
-export const REVIEW_CITY_SERVICE_ENDPOINT = 'https://nerdie-city-service.buddieroots.workers.dev';
 // A preview host (Vercel preview, localhost, a private LAN address) may name its own isolated City Service with
 // ?cityService=<origin> (NC-LIFE-01A founder preview). The production site never honours it.
 const previewHost = (host) => host.endsWith('.vercel.app') || host === 'localhost' || /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)\d{1,3}\.\d{1,3}(\.\d{1,3})?$/.test(host);
 export function resolveCityServiceEndpoint(locationLike = globalThis.location) {
   const host = String(locationLike?.hostname || '').toLowerCase();
+  if (isProductionHost(host)) return CITY_SERVICE_ENDPOINT; // the production site never honours overrides
   const named = previewHost(host) ? new URLSearchParams(locationLike?.search || '').get('cityService') : null;
   if (named && /^https?:\/\/[a-z0-9.-]+(:\d{2,5})?\/?$/i.test(named)) return named.replace(/\/+$/, '');
   if (isRc1PreviewHost(host)) return RC1_PREVIEW_CITY_SERVICE; // RC1 preview: a stand-in, never the production bank
-  if (host.endsWith('.vercel.app')) return REVIEW_CITY_SERVICE_ENDPOINT;
-  return CITY_SERVICE_ENDPOINT;
+  return null; // any other host: not connected (the bank panel says so); never the production bank
 }
 const ECONOMY_TTL_MS = 60_000, MARKET_TTL_MS = 5 * 60_000;
 const ACTIVITY_TTL_MS = 30_000;
@@ -61,6 +61,11 @@ export class CityServiceClient {
   founderOverview() { return this.#founderGet('/v1/founder/overview', 'The founder overview'); }
   // Resident oversight: every resident with balances and totals, and one resident's history.
   founderResidents() { return this.#founderGet('/v1/founder/residents', 'The resident list'); }
+  // NC-SIM-02: the economy dashboard's founder reports (migration 0016): reconciliation, daily history, demand.
+  founderEconomy(report, days = 14) {
+    if (!['reconciliation', 'history', 'demand'].includes(report)) return Promise.reject(new Error('Unknown economy report'));
+    return this.#founderGet(`/v1/founder/economy/${report}${report === 'reconciliation' ? '' : `?days=${Math.min(90, Math.max(1, days | 0))}`}`, `The economy ${report}`);
+  }
   founderResident(residentId) {
     if (!/^res_[0-9]{4}$/.test(String(residentId))) return Promise.reject(new Error('Unknown resident.'));
     return this.#founderGet(`/v1/founder/residents/${residentId}`, 'This resident\'s history');
