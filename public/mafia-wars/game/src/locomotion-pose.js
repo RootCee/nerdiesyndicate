@@ -1,45 +1,31 @@
-// NC-INPUT-01 rc3: believable walking, jogging, sprinting and crouch-walking from the two locomotion clips the
-// rigs have (walk.001, run.001: in place, no crouch or sprint clips). Measured on the player rig, the clips cover
-// ground at about 0.85 m/s (walk) and 3.0 m/s (run) at timeScale 1. rc2 played walk at 1.2x for 4.4 m/s and run at
-// 1.05x for 6.6 m/s, so the legs moved for ~1 m/s while the body glided at 4.4: the stiff, sliding look.
-//   locomotionPlan(): which clip, at what playback rate (feet match the ground), stride and torso lean, per state.
-//   scaleLegSwing(): shorter (crouch) or longer (sprint) strides, scaling each leg bone's swing around the clip's
-//     own average pose (so the knee flex and timing of the clip are kept).
-//   applyLean(): forward lean split down the spine with the head kept level.
+// NC-INPUT-01 rc4: the crouch-walk, built from the rig's own walk clip (the rigs have walk.001 and run.001, in place;
+// no crouch, sprint or strafe clips). Standing movement is the founder-approved rc2 behaviour, unchanged.
+//   locomotionPlan(): clip and playback rate per state (standing: rc2; crouch-walk: walk clip, stick-proportional pace).
+//   clipMeanPose() + scaleLegSwing(): shorter crouch steps, scaling each leg bone's swing around the clip's own
+//     average pose (the clip's knee flex and timing are kept).
 // Pure apart from the bones it is given; vector and quaternion classes come from the bones (as seated-pose.js).
 
-export const CLIP_SPEED = Object.freeze({ walk: 0.85, run: 3.0 }); // m/s at timeScale 1 (planted-foot speed)
+export const CLIP_SPEED = Object.freeze({ walk: 0.85, run: 3.0 }); // m/s at timeScale 1 (planted-foot speed), measured
+export const CLIP_STEPS_PER_SECOND = Object.freeze({ walk: 1.68, run: 3.1 }); // at timeScale 1 (4 steps per clip)
+// RC4 (founder clarification): standing movement is exactly the approved rc2 behaviour: the walk clip at 1.2x whenever
+// moving, the run clip at 1.05x only while sprinting, no lean or stride change. Only crouch-walking is reworked.
+export const RC2_TIMESCALE = Object.freeze({ walk: 1.2, run: 1.05 });
 const rad = (deg) => (deg * Math.PI) / 180;
-export const CLIP_TORSO = Object.freeze({ walk: -4, idle: -2.5, run: 29.2 }); // degrees forward, measured (see below)
-const LEAN_GAIN = 0.7;
-export const GAIT = Object.freeze({
-  moving: 0.25, runUp: 2.2, runDown: 1.7, sprint: 5.4,             // m/s thresholds (walk <-> jog with hysteresis)
-  stride: { walk: 1, jog: 1, sprint: 1.18, crouch: 0.62 },          // leg swing scale
-  // Torso lean, as a correction from each clip's own posture to a target posture (hips-to-neck, degrees forward).
-  // Measured on the player rig: walk.001 leans 4 deg BACK (rc2's "too upright"), idle.001 2.5 deg back, run.001 a
-  // low rifle run 29 deg FORWARD (too hunched for a jog). Targets: walk 6, jog 12, sprint 22, crouched 20 / 24. The
-  // hips-to-neck line takes ~70% of a spine lean (the lowest spine joint sits above the hips), hence LEAN_GAIN.
-  lean: {
-    idle: 0,
-    walk: rad((6 - CLIP_TORSO.walk) / LEAN_GAIN), jog: rad((12 - CLIP_TORSO.run) / LEAN_GAIN), sprint: rad((22 - CLIP_TORSO.run) / LEAN_GAIN),
-    crouchIdle: rad((20 - CLIP_TORSO.idle) / LEAN_GAIN), crouchMove: rad((24 - CLIP_TORSO.run) / LEAN_GAIN),
-  },
-  crouchShin: 0.5, // crouch-walk: shin swing as a share of the stride scale (less knee tuck)
-  crouchMoveBend: 0.45, // share of the full crouch knee bend while crouch-walking (the run clip's legs already flex):
-                        // hips ~0.5 m, near the 1.17 m crouched collision height
-  timeScale: [0.55, 2.3],
-});
+// Crouch-walk on the upright walk clip (no flight phase, so it never reads as running): at full stick (the original
+// 2.42 m/s) about 2.9 steps a second with 15% shorter steps, slower in proportion to the stick. Locking the feet
+// exactly at 2.42 m/s would need ~5.8 steps a second (scurrying), so some slide remains (less than rc2's).
+export const CROUCH_WALK = Object.freeze({ fullSpeed: 2.42, timeScale: 1.75, minTimeScale: 0.6, stride: 0.85, lean: rad(12), bend: 0.85 }); // bend: share of the crouched-still knee bend while walking
+export const GAIT = Object.freeze({ moving: 0.25 });
 
-// speed: planar m/s; crouch 0..1; current: the clip key playing ('walk'|'run'|...); sprinting: the game's sprint flag.
-export function locomotionPlan(speed, { crouch = 0, current = '', sprinting = false, armed = false } = {}) {
+// speed: planar m/s; crouch 0..1; sprinting: the game's sprint flag (remote: their run state).
+export function locomotionPlan(speed, { crouch = 0, sprinting = false, armed = false } = {}) {
   const v = Number.isFinite(speed) ? Math.max(0, speed) : 0, crouched = crouch > 0.5;
-  if (v < GAIT.moving) return { gait: crouched ? 'crouchIdle' : 'idle', clip: armed ? 'Idle_Gun' : 'Idle_Unarmed', timeScale: null, stride: 1, lean: crouched ? GAIT.lean.crouchIdle : GAIT.lean.idle };
-  const clamp = (x) => Math.min(GAIT.timeScale[1], Math.max(GAIT.timeScale[0], x));
-  if (crouched) { const stride = GAIT.stride.crouch; return { gait: 'crouchMove', clip: 'Run', timeScale: clamp(v / (CLIP_SPEED.run * stride)), stride, lean: GAIT.lean.crouchMove }; }
-  const run = v > (current === 'run' ? GAIT.runDown : GAIT.runUp);
-  if (!run) return { gait: 'walk', clip: 'Walk', timeScale: clamp(v / CLIP_SPEED.walk), stride: GAIT.stride.walk, lean: GAIT.lean.walk };
-  const sprint = sprinting || v > GAIT.sprint, stride = sprint ? GAIT.stride.sprint : GAIT.stride.jog;
-  return { gait: sprint ? 'sprint' : 'jog', clip: 'Run', timeScale: clamp(v / (CLIP_SPEED.run * stride)), stride, lean: sprint ? GAIT.lean.sprint : GAIT.lean.jog };
+  if (v < GAIT.moving) return { gait: crouched ? 'crouchIdle' : 'idle', clip: armed ? 'Idle_Gun' : 'Idle_Unarmed', timeScale: null, stride: 1, lean: 0 };
+  if (crouched) {
+    const ts = Math.min(CROUCH_WALK.timeScale * 1.1, Math.max(CROUCH_WALK.minTimeScale, (v / CROUCH_WALK.fullSpeed) * CROUCH_WALK.timeScale));
+    return { gait: 'crouchMove', clip: 'Walk', timeScale: ts, stride: CROUCH_WALK.stride, lean: CROUCH_WALK.lean };
+  }
+  return sprinting ? { gait: 'sprint', clip: 'Run', timeScale: RC2_TIMESCALE.run, stride: 1, lean: 0 } : { gait: 'walk', clip: 'Walk', timeScale: RC2_TIMESCALE.walk, stride: 1, lean: 0 };
 }
 
 let Q = null, _d, _m;

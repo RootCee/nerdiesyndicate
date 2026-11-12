@@ -16,7 +16,7 @@ import { loadGLB, prep } from './assets.js';
 import { AVATAR_PRESETS, isAvatarPreset } from './avatar-schema.js';
 import { applySeatedPose, findSeatBones } from './seated-pose.js';
 import { applyCrouchPose, findCrouchBones } from './crouch-pose.js';
-import { GAIT, clipMeanPose, locomotionPlan, scaleLegSwing } from './locomotion-pose.js';
+import { CROUCH_WALK, clipMeanPose, locomotionPlan, scaleLegSwing } from './locomotion-pose.js';
 
 export const ROSTER = {
   blue: ['blue_zip', 'navy'],
@@ -220,7 +220,6 @@ export const WEAPON_HOLD = Object.freeze({ ak: 'rifle', mp5: 'rifle', m700: 'rif
 // Locomotion crossfade (idle/walk/run). 0.12 s read as a lurch: the clips' spines differ enough
 // that a shouldered weapon visibly jumped; 0.25 s blends them smoothly.
 export const LOCOMOTION_FADE = 0.25;
-const DROP_BOB = 0.05; // m: most the crouch-walking body bobs away from its step-averaged height
 export const holdFor = (weaponId) => HOLDS[WEAPON_HOLD[weaponId] || 'rifle'];
 export const AIM_RULES = Object.freeze({
   fireRaiseS: 1.2,   // a shot keeps the weapon up this long
@@ -337,10 +336,10 @@ export class Character {
     if (key === 'run') a.timeScale = 1.05; if (key === 'walk') a.timeScale = 1.2;
     this.cur = key; this.curA = a;
   }
-  // NC-INPUT-01 rc3: pick and pace the locomotion clip from the actual ground speed (feet match the ground), and set
-  // the stride and lean the body layer in update() applies. speed: planar m/s; crouch 0..1; sprinting: game flag.
+  // NC-INPUT-01 rc4: the locomotion clip and pace. Standing it is exactly rc2 (walk 1.2x, run 1.05x when sprinting);
+  // crouch-walking sets the walk clip's pace from the stick and the shorter stride the body layer applies.
   locomote(speed, { armed = false, crouch = 0, sprinting = false } = {}) {
-    const plan = locomotionPlan(speed, { crouch, current: this.cur, sprinting, armed });
+    const plan = locomotionPlan(speed, { crouch, sprinting, armed });
     this.play(plan.clip, LOCOMOTION_FADE);
     if (plan.timeScale && this.curA && LOCOMOTION.has(this.cur)) this.curA.timeScale = plan.timeScale;
     if (plan.stride !== 1 && this.cur && LOCOMOTION.has(this.cur)) {
@@ -457,52 +456,49 @@ export class Character {
   // The mixer rewrites a bone only when its clip value changes, so the held tracks of idle_unarmed would keep
   // whatever was layered on last frame (idle life, aim, IK, settle) and pile it up. Put back last frame's clip pose
   // first: the mixer then either overwrites it or leaves the right one.
-  // NC-INPUT-01 rc3 body layer, after the mixer: stride (shorter crouched, longer sprinting), the crouch bend with the
-  // body set down onto the planted foot (feet stay grounded, the hips bob and shift weight), and the torso lean.
+  // NC-INPUT-01 rc4 body layer, after the mixer. Standing it does nothing (rc2 movement, unchanged). Crouched: rc2's
+  // crouch body (knees bent, spine leant in) with the body set onto the planted foot; crouch-walking adds shorter steps,
+  // a little more forward lean (eased off while aiming) and a few centimetres of weight shift toward the planted foot.
   #body(dt, dead) {
-    const plan = this.loco, k = 1 - Math.exp(-8 * Math.max(0, dt)), legs = (this.crouch > 0.001 || (plan && plan.stride !== 1)) && this.crouchBones === undefined ? (this.crouchBones = findCrouchBones(this.inner)) : this.crouchBones;
-    this.strideNow = (this.strideNow ?? 1) + ((dead ? 1 : plan?.stride ?? 1) - (this.strideNow ?? 1)) * k;
+    const plan = this.loco, ease = (tau) => 1 - Math.exp(-Math.max(0, dt) / tau), walking = !dead && plan?.gait === 'crouchMove' && this.crouch > 0.5;
+    const legs = (this.crouch > 0.001 || walking) && this.crouchBones === undefined ? (this.crouchBones = findCrouchBones(this.inner)) : this.crouchBones;
+    this.strideNow = (this.strideNow ?? 1) + ((walking ? plan.stride : 1) - (this.strideNow ?? 1)) * ease(0.12);
+    if (Math.abs(this.strideNow - 1) < 1e-3) this.strideNow = 1;
     const bones = this.#legBones(), means = lib.legMeans?.[this.cur];
-    if (bones && means && LOCOMOTION.has(this.cur)) {
-      const shin = this.strideNow * (this.crouch > 0.5 && plan?.gait === 'crouchMove' ? GAIT.crouchShin : 1);
-      scaleLegSwing(bones, means.map(([, q]) => q), [this.strideNow, shin, shin, this.strideNow, shin, shin]); // thigh, shin, foot per side
-    }
-    const footRest = this.footRest ?? 0.115;
-    const moving = plan?.gait === 'crouchMove', ease = (tau) => 1 - Math.exp(-Math.max(0, dt) / tau);
-    this.bendNow = (this.bendNow ?? 1) + ((moving ? GAIT.crouchMoveBend : 1) - (this.bendNow ?? 1)) * ease(0.15); // crouch-walk <-> crouched still, blended
-    const drop = applyCrouchPose(this.obj, legs, this.crouch * this.bendNow, { lean: 0, footRest });
-    // The body is set onto the planted foot, smoothed. Crouch-walking rides the run clip, whose short flight phase
-    // (both feet up) would dip the body each step: there the body follows the step-averaged height and bobs at most
-    // DROP_BOB either way, so the hips stay level and the feet only just leave the ground at a stride's flight.
-    this.dropMean = moving ? (this.dropMean ?? drop) + (drop - (this.dropMean ?? drop)) * ease(0.4) : drop;
-    const ground = moving ? this.dropMean + THREE.MathUtils.clamp(drop - this.dropMean, -DROP_BOB, DROP_BOB) : drop;
-    let settled = (this.dropNow ?? ground) + (ground - (this.dropNow ?? ground)) * ease(0.05);
-    if (Math.abs(settled - ground) < 1e-4) settled = ground; // settled: exactly standing again, not 0.00003 m crouched
+    if (this.strideNow !== 1 && bones && means && LOCOMOTION.has(this.cur)) scaleLegSwing(bones, means.map(([, q]) => q), this.strideNow);
+    this.bendNow = (this.bendNow ?? 1) + ((walking ? CROUCH_WALK.bend : 1) - (this.bendNow ?? 1)) * ease(0.15); // crouched still <-> walking, blended
+    const drop = applyCrouchPose(this.obj, legs, this.crouch * this.bendNow, { footRest: this.footRest ?? 0.115 });
+    let settled = (this.dropNow ?? drop) + (drop - (this.dropNow ?? drop)) * ease(0.03);
+    if (Math.abs(settled - drop) < 1e-4) settled = drop;
     if (drop !== settled) { this.obj.position.y += drop - settled; this.obj.updateMatrixWorld(true); }
     this.dropNow = settled; this.crouchDrop = settled;
     if (this.crouch > 0.001 && legs) {
-      // weight shift: a few centimetres toward the planted (lower) foot while crouch-walking
       const l = this.obj.worldToLocal(legs.lFoot.getWorldPosition(_a)).y, r = this.obj.worldToLocal(legs.rFoot.getWorldPosition(_b)).y;
-      const target = plan?.gait === 'crouchMove' ? THREE.MathUtils.clamp((r - l) * 0.8, -0.03, 0.03) : 0;
-      this.sway = (this.sway || 0) + (target - (this.sway || 0)) * k;
+      this.sway = (this.sway || 0) + ((walking ? THREE.MathUtils.clamp((r - l) * 0.8, -0.03, 0.03) : 0) - (this.sway || 0)) * ease(0.12);
       if (Math.abs(this.sway) > 1e-4) { this.obj.position.addScaledVector(_c.set(1, 0, 0).applyQuaternion(this.obj.quaternion), this.sway * this.crouch); this.obj.updateMatrixWorld(true); }
     } else if (!dead && legs && plan?.gait === 'idle' && this.cur?.startsWith('idle')) {
       // learn where this rig's feet rest when standing still (the crouch sets the body down onto it)
       const lowest = Math.min(this.obj.worldToLocal(legs.lFoot.getWorldPosition(_a)).y, this.obj.worldToLocal(legs.rFoot.getWorldPosition(_b)).y);
       this.footRest = this.footRest === undefined ? lowest : this.footRest + (lowest - this.footRest) * 0.05;
     }
-    // torso lean: down the spine, the head kept level; eased off while the weapon is raised to aim
-    const target = dead ? 0 : (plan?.lean ?? 0) * (1 - 0.55 * (this.ready || 0)) + (plan ? 0 : GAIT.lean.crouchIdle * this.crouch);
-    this.leanNow = (this.leanNow || 0) + (target - (this.leanNow || 0)) * k;
-    if (Math.abs(this.leanNow) > 1e-3 && this.b.spine0) { // negative straightens (the jog on the hunched run clip)
+    const target = walking ? plan.lean * this.crouch * (1 - 0.55 * (this.ready || 0)) : 0;
+    this.leanNow = (this.leanNow || 0) + (target - (this.leanNow || 0)) * ease(0.12);
+    if (Math.abs(this.leanNow) < 1e-4) this.leanNow = 0;
+    if (this.leanNow && this.b.spine0) {
       const side = _c.set(1, 0, 0).applyQuaternion(this.obj.quaternion).normalize();
       for (const [key, share] of [['spine0', 0.45], ['spine1', 0.35], ['spine', 0.2], ['neck', -0.6]]) if (this.b[key]) rotateBoneWorld(this.b[key], _q3.setFromAxisAngle(side, this.leanNow * share));
     }
   }
   #mix(dt) {
     if (this.mixerPoseSaved) this.unarmedPoseBones.forEach((pose, i) => pose.bone.quaternion.copy(this.mixerPose[i]));
+    // The mixer skips writing a bone whose animated value has not changed since its last write (a held keyframe,
+    // e.g. the first 0.042 s of walk.001), so the crouch bend left on the legs would be bent again on top. As for the
+    // upper body above, the legs are put back to the mixer's last pose before mixing.
+    const legs = this.#legBones();
+    if (legs && this.legMixerPose) legs.forEach((bone, i) => bone.quaternion.copy(this.legMixerPose[i]));
     this.mixer.update(dt);
     this.unarmedPoseBones.forEach((pose, i) => this.mixerPose[i].copy(pose.bone.quaternion)); this.mixerPoseSaved = true;
+    if (legs) { this.legMixerPose ||= legs.map(() => new THREE.Quaternion()); legs.forEach((bone, i) => this.legMixerPose[i].copy(bone.quaternion)); }
   }
   // Run `measure` with the skeleton in the armed idle clip's pose, then put it back. Weapon contacts are measured on
   // the first armed frame; drawing out of the unarmed idle, that frame is still mostly the relaxed stance (up to

@@ -101,8 +101,8 @@ export class RemotePlayer {
     this.crouchT = (this.crouchT || 0) + ((this.snapshots.at(-1)?.crouch === 1 ? 1 : 0) - (this.crouchT || 0)) * Math.min(1, dt * 10);
     this.character.obj.position.copy(this.position); this.character.obj.position.y -= this.character.crouchDrop || 0; this.character.obj.rotation.y = state.yaw + Math.PI;
     const armed = this.equipment.weaponId && !this.equipment.holstered;
-    // NC-INPUT-01 rc3: the same speed-matched gait as the local player, from their relayed speed (sprint = their run state)
-    this.character.locomote(state.state === 'idle' ? 0 : state.speed || (state.state === 'run' ? 6.6 : 4.4), { armed, crouch: this.crouchT, sprinting: state.state === 'run' });
+    // NC-INPUT-01 rc4: as rc2 standing (walk / run by their relayed state); crouched, the crouch-walk paced by their speed
+    this.character.locomote(state.state === 'idle' ? 0 : Math.max(0.3, state.speed || 0), { armed, crouch: this.crouchT, sprinting: state.state === 'run' });
     this.character.aimPitch = state.pitch || 0; // M6.9: their aim, interpolated like the rest of the state
     this.animationAccum += dt;
     const animationHz = distance < 28 ? 30 : distance < 75 ? 15 : 8, interval = 1 / animationHz;
