@@ -16,6 +16,8 @@ export const CONTROLLER_LIMITS = Object.freeze({ deadZone: [0.05, 0.35, 0.05], s
 const BUTTONS = ['a', 'b', 'x', 'y', 'lb', 'rb', 'lt', 'rt', 'back', 'start', 'l3', 'r3', 'up', 'down', 'left', 'right'];
 const TRIGGER_ON = 0.35, TRIGGER_OFF = 0.2, VIEW_HOLD_S = 0.7, LOOK_RATE = 3.2, PITCH_SCALE = 0.7, MOUSE_SENS = 0.0022;
 const UI_REPEAT_FIRST = 0.38, UI_REPEAT = 0.13, UI_STICK = 0.6;
+export const SPRINT_RELEASE_S = 0.35; // rc3: how long the stick must rest before a clicked sprint ends
+export const SPRINT_ARMED_S = 1.0; // rc3: a click before moving waits this long for the stick
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const num = (v, d) => (Number.isFinite(v) ? v : d);
@@ -135,8 +137,15 @@ export class GamepadController {
       this.trigger.rt = this.trigger.rt ? B.rt > TRIGGER_OFF : B.rt > TRIGGER_ON; this.trigger.lt = this.trigger.lt ? B.lt > TRIGGER_OFF : B.lt > TRIGGER_ON;
       if (this.trigger.rt) { i.fire = true; this.owned.fire = true; } else if (this.owned.fire) { i.fire = false; this.owned.fire = false; }
       if (this.trigger.lt) { i.ads = true; this.owned.ads = true; } else if (this.owned.ads) { i.ads = false; this.owned.ads = false; }
-      // Sprint: click L3, held until the stick is released.
-      if (edge('l3')) this.sprintLatch = true; if (L.m === 0) this.sprintLatch = false;
+      // Sprint: click L3 (a latch, as on most console games). rc2 ended it in the same frame whenever the stick was
+      // centred, so the usual "click, then push" never sprinted. Now the click counts for a moment before the stick
+      // moves, and sprint ends once the stick has rested SPRINT_RELEASE_S, or on crouch (R3).
+      // A click with the stick at rest stays armed for up to SPRINT_ARMED_S until the stick first moves.
+      if (edge('l3')) { this.sprintLatch = true; this.sprintIdle = 0; this.sprintMoved = L.m > 0; this.sprintArmed = SPRINT_ARMED_S; }
+      if (L.m > 0) { this.sprintMoved = true; this.sprintIdle = 0; }
+      else if (!this.sprintMoved) { this.sprintArmed = (this.sprintArmed || 0) - dt; if (this.sprintArmed <= 0) this.sprintLatch = false; }
+      else { this.sprintIdle = (this.sprintIdle || 0) + dt; if (this.sprintIdle >= SPRINT_RELEASE_S) this.sprintLatch = false; }
+      if (edge('r3')) this.sprintLatch = false;
       if (this.sprintLatch) { i.sprint = true; this.owned.sprint = true; } else if (this.owned.sprint) { i.sprint = false; this.owned.sprint = false; }
       if (edge('a')) i.jump = true;
       if (edge('x')) i.interact = true;

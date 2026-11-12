@@ -80,9 +80,9 @@ import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
 import { createMobilePerformanceOverlay } from './mobile-performance-overlay.js';
 import { createAdaptiveResolution } from './adaptive-resolution.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-0.9.3-input01-rc2';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-0.9.3-input01-rc3';
 
-const GAME_BUILD_ID = 'nc-0.9.3-input01-rc2';
+const GAME_BUILD_ID = 'nc-0.9.3-input01-rc3';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -1887,7 +1887,7 @@ function loop(now) {
     city?.house?.updateCameraVisibility(camera, player, dt);
     if (localAvatar) {
       const show = thirdCamera.enabled && !player.dead && !thirdCamera.obstructed;
-      if (show) localAvatar.play(player.sprinting ? 'Run' : player.planar > 0.25 ? 'Walk' : drawnWeapon ? 'Idle_Gun' : 'Idle_Unarmed', LOCOMOTION_FADE);
+      if (show) localAvatar.locomote(player.planar, { armed: drawnWeapon, crouch: player.crouchT, sprinting: player.sprinting }); // NC-INPUT-01 rc3: speed-matched gait
       // The physics root now remains outside solids; add a small visual-only
       // contact clearance so the run clip's leaning torso/stride does not draw
       // through the surface. This does not alter doorway or physics dimensions.

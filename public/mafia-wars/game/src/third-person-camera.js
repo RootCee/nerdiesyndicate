@@ -70,7 +70,9 @@ export class ThirdPersonCamera {
     const cp = Math.cos(pitch);
     VIEW.set(-Math.sin(this.yaw) * cp, Math.sin(pitch), -Math.cos(this.yaw) * cp).normalize();
     RIGHT.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
-    TARGET.set(player.pos.x, player.pos.y + view.height - player.crouchT * 0.35, player.pos.z);
+    // NC-INPUT-01 rc3: the crouch dip eases in a touch slower than the body, so the camera never jolts
+    this.crouchOffset = (this.crouchOffset ?? 0) + (player.crouchT * 0.35 - (this.crouchOffset ?? 0)) * Math.min(1, (dt || 1 / 60) * 8);
+    TARGET.set(player.pos.x, player.pos.y + view.height - this.crouchOffset, player.pos.z);
     DESIRED.copy(TARGET).addScaledVector(VIEW, -view.distance).addScaledVector(RIGHT, view.shoulder);
     SEGMENT.subVectors(DESIRED, TARGET);
     raycastWorld(TARGET, SEGMENT, 1, true, HIT);

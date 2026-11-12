@@ -31,7 +31,10 @@ function rotateWorld(bone, axis, angle) {
 // How far the body drops when both knees bend by `knee` radians (thigh and shin swing ±knee from vertical).
 export function crouchDrop(lengths, knee) { return (lengths.thigh + lengths.shin) * (1 - Math.cos(knee)); }
 
-export function applyCrouchPose(obj, bones, amount) {
+// options.lean: spine lean (the character's body layer does its own, so it passes 0). options.footRest: when given,
+// the body is set down onto the lower foot (that foot ends at footRest above the ground), so feet stay planted
+// whatever the clip does; blended in from the analytic drop as the crouch deepens.
+export function applyCrouchPose(obj, bones, amount, { lean = CROUCH_POSE.lean, footRest = null } = {}) {
   if (!bones || !(amount > 0.001)) return 0;
   ensureMath(bones.lUp);
   obj.updateMatrixWorld(true);
@@ -45,8 +48,12 @@ export function applyCrouchPose(obj, bones, amount) {
   for (const [up, low, foot] of [[bones.lUp, bones.lLow, bones.lFoot], [bones.rUp, bones.rLow, bones.rFoot]]) {
     rotateWorld(up, _axis, -k); rotateWorld(low, _axis, 2 * k); rotateWorld(foot, _axis, -k);
   }
-  rotateWorld(bones.spine, _axis, CROUCH_POSE.lean * Math.min(1, amount));
-  const drop = crouchDrop(bones.lengths, k);
+  rotateWorld(bones.spine, _axis, lean * Math.min(1, amount));
+  let drop = crouchDrop(bones.lengths, k);
+  if (Number.isFinite(footRest)) {
+    const lowest = Math.min(obj.worldToLocal(bones.lFoot.getWorldPosition(_a)).y, obj.worldToLocal(bones.rFoot.getWorldPosition(_b)).y);
+    drop += ((lowest - footRest) - drop) * Math.min(1, amount * 3);
+  }
   obj.position.y -= drop; obj.updateMatrixWorld(true);
   return drop;
 }
