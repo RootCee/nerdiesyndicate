@@ -72,7 +72,7 @@ export function createGamepadUi({ doc = globalThis.document, hud = null, getCont
     panel.querySelector('[data-step="deadZone:-1"]').disabled = settings.deadZone <= dz0; panel.querySelector('[data-step="deadZone:1"]').disabled = settings.deadZone >= dz1;
     panel.querySelector('[data-step="sensitivity:-1"]').disabled = settings.sensitivity <= s0; panel.querySelector('[data-step="sensitivity:1"]').disabled = settings.sensitivity >= s1;
     panel.dataset.steps = `${dzs},${ss}`;
-    panel.querySelector('.gp-map').innerHTML = [['Left stick', 'Move · click to sprint'], ['Right stick', 'Look · click to crouch'], [label('a'), 'Jump · confirm'], [label('b'), 'Back / close'], [label('x'), 'Interact (doors, residents, bank, City Pulse)'], [label('y'), 'Next weapon'], [`${label('lb')} / ${label('rb')}`, 'Previous weapon / reload'], [`${label('lt')} / ${label('rt')}`, 'Aim / fire'], [label('back'), 'Tap: camera view · hold: these settings'], [label('start'), 'City map'], ['D-pad', 'Menus: move focus · combat: abilities']].map(([k, v]) => `<b>${k}</b><span>${v}</span>`).join('');
+    panel.querySelector('.gp-map').innerHTML = [['Left stick', 'Move · click to sprint'], ['Right stick', 'Look · click (R3): crouch / stand'], [label('a'), 'Jump · confirm'], [label('b'), 'Back / close'], [label('x'), 'Interact (doors, residents, bank, City Pulse)'], [label('y'), 'Next weapon'], [`${label('lb')} / ${label('rb')}`, 'Previous weapon / reload'], [`${label('lt')} / ${label('rt')}`, 'Aim / fire'], [label('back'), 'Tap: camera view · hold: these settings'], [label('start'), 'City map'], ['D-pad', 'Menus: move focus · combat: abilities']].map(([k, v]) => `<b>${k}</b><span>${v}</span>`).join('');
   }
   function ensurePanel() {
     if (panel) return panel;

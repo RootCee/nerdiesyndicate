@@ -67,7 +67,7 @@ export class RemotePlayer {
     if (!this.character) return;
     this.character.triggerFire(direction);
     const state = this.renderState;
-    if (Number.isFinite(state?.yaw)) this.character.update(0, this.position, state.yaw + Math.PI, (state.aim || 0) > 0.5, false, null, { moving: state.state !== 'idle' });
+    if (Number.isFinite(state?.yaw)) this.character.update(0, this.position, state.yaw + Math.PI, (state.aim || 0) > 0.5, false, null, { moving: state.state !== 'idle', crouch: this.crouchT || 0 });
   }
   push(state) {
     if (!Number.isFinite(state?.serverTime) || !Number.isSafeInteger(state.seq) || state.seq <= this.lastSeq) { this.metrics.staleSnapshots++; return; }
@@ -96,14 +96,17 @@ export class RemotePlayer {
     if (!this.character) { this.label.position.copy(this.position); this.label.position.y += 2.25; return; }
     this.character.obj.visible = !this.combat.dead && distance < 180 && (this.context?.space?.id || 'city') === viewerSpace;
     if (!this.character.obj.visible) return;
-    this.character.obj.position.copy(this.position); this.character.obj.rotation.y = state.yaw + Math.PI;
+    // NC-INPUT-01: their crouch (optional `crouch: 1` in the move state; servers that do not relay it leave it off),
+    // smoothed, and the crouched body stays lowered between the throttled animation ticks.
+    this.crouchT = (this.crouchT || 0) + ((this.snapshots.at(-1)?.crouch === 1 ? 1 : 0) - (this.crouchT || 0)) * Math.min(1, dt * 10);
+    this.character.obj.position.copy(this.position); this.character.obj.position.y -= this.character.crouchDrop || 0; this.character.obj.rotation.y = state.yaw + Math.PI;
     const armed = this.equipment.weaponId && !this.equipment.holstered;
     this.character.play(state.state === 'run' ? 'Run' : state.state === 'walk' ? 'Walk' : armed ? 'Idle_Gun' : 'Idle_Unarmed', LOCOMOTION_FADE);
     this.character.aimPitch = state.pitch || 0; // M6.9: their aim, interpolated like the rest of the state
     this.animationAccum += dt;
     const animationHz = distance < 28 ? 30 : distance < 75 ? 15 : 8, interval = 1 / animationHz;
     if (this.animationAccum >= interval) {
-      this.character.update(Math.min(0.15, this.animationAccum), this.position, state.yaw + Math.PI, (state.aim || 0) > 0.5, false, null, { moving: state.state !== 'idle' });
+      this.character.update(Math.min(0.15, this.animationAccum), this.position, state.yaw + Math.PI, (state.aim || 0) > 0.5, false, null, { moving: state.state !== 'idle', crouch: this.crouchT });
       this.animationAccum = 0; this.metrics.animationUpdates++;
     }
   }

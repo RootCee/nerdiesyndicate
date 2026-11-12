@@ -9,6 +9,11 @@ export function movementSubsteps(dx, dz, maxStep = PLAYER_MOVE_SUBSTEP) {
 
 // Push a circle out of an axis-aligned rectangle. Keeping this pure makes the
 // low-cost player/world collision path testable without loading Three.js.
+// NC-INPUT-01: does a circle (the player's footprint) overlap a box's x/z extent? (no push-out; a yes/no test)
+export function circleOverlapsBox(point, radius, box) {
+  const dx = point.x - Math.max(box.minX, Math.min(point.x, box.maxX)), dz = point.z - Math.max(box.minZ, Math.min(point.z, box.maxZ));
+  return dx * dx + dz * dz < radius * radius;
+}
 export function resolveCircleAabb(point, radius, box, outNormal = null) {
   const nearestX = Math.max(box.minX, Math.min(point.x, box.maxX));
   const nearestZ = Math.max(box.minZ, Math.min(point.z, box.maxZ));

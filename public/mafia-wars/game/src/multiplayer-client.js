@@ -189,8 +189,11 @@ export class MultiplayerClient extends EventTarget {
   sendMovement(player, now = performance.now(), aim = null) {
     const movement = { x: rounded(player.pos.x), y: rounded(player.pos.y), z: rounded(player.pos.z), yaw: rounded(player.yaw), speed: rounded(player.planar), state: player.sprinting ? 'run' : player.planar > 0.25 ? 'walk' : 'idle' };
     if (aim) { movement.aim = aim.raised ? 1 : 0; movement.pitch = Math.round(Math.max(-1.5, Math.min(1.5, aim.pitch || 0)) * 100) / 100; }
+    // NC-INPUT-01 (optional, like aim/pitch): crouched. Servers that do not know it ignore it; one that relays it lets
+    // other players see the crouch. Sent only while crouched, so the usual message is unchanged.
+    if (player.crouchT > 0.5) movement.crouch = 1;
     const prior = this.lastMovement, changed = !prior || movement.state !== prior.state || Math.abs(movement.x - prior.x) > 0.002 || Math.abs(movement.y - prior.y) > 0.002 || Math.abs(movement.z - prior.z) > 0.002 || Math.abs(movement.yaw - prior.yaw) > 0.002
-      || movement.aim !== prior.aim || Math.abs((movement.pitch || 0) - (prior.pitch || 0)) > 0.02;
+      || movement.aim !== prior.aim || movement.crouch !== prior.crouch || Math.abs((movement.pitch || 0) - (prior.pitch || 0)) > 0.02;
     if (!changed && movement.state === 'idle' && now - this.lastMovementAt < MULTIPLAYER_LIMITS.idleUpdateMs) { this.metrics.movementSkipped++; return false; }
     const sent = this.send({ type: 'move', seq: ++this.seq, clientTime: Math.round(now), ...movement });
     if (sent) { this.lastMovement = movement; this.lastMovementAt = now; }

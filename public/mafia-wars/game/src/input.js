@@ -33,7 +33,7 @@ export function poll() {
 }
 function initTouch() {
   document.getElementById('touch').classList.add('on');
-  const hint = document.getElementById('hint'); if (hint) hint.innerHTML = '<b>FREE ROAM</b> · left thumb moves · right thumb looks<br>Tap ENTER at marked doors · JUMP and AIM are on the right · CAM switches view · MAP or the minimap opens the city map';
+  const hint = document.getElementById('hint'); if (hint) hint.innerHTML = '<b>FREE ROAM</b> · left thumb moves · right thumb looks<br>Tap ENTER at marked doors · JUMP and AIM are on the right · CAM switches view · CROUCH toggles crouch · MAP or the minimap opens the city map';
   const stick = { id: null, x0: 0, y0: 0 }, look = { id: null, x: 0, y: 0 };
   const sEl = document.getElementById('stick'), knob = document.getElementById('knob');
   canvas.addEventListener('touchstart', (e) => {
@@ -72,6 +72,7 @@ function initTouch() {
   btn('tSwap', () => { const tray = document.getElementById('weaponTray'); const open = tray?.classList.toggle('on'); document.body.classList.toggle('weapon-selecting', !!open); });
   btn('tInteract', () => { input.interact = true; });
   btn('tCam', () => { input.camera = true; });
+  btn('tCrouch', () => { input.crouch = !input.crouch; }); // NC-INPUT-01: toggles like C and R3
   btn('tMap', () => { input.map = true; });
   for (const el of document.querySelectorAll('#weaponTray [data-weapon]')) {
     el.addEventListener('touchstart', (e) => {

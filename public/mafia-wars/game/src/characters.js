@@ -15,6 +15,7 @@ import * as SkeletonUtils from '/mafia-wars/game/vendor/three/jsm/utils/Skeleton
 import { loadGLB, prep } from './assets.js';
 import { AVATAR_PRESETS, isAvatarPreset } from './avatar-schema.js';
 import { applySeatedPose, findSeatBones } from './seated-pose.js';
+import { applyCrouchPose, findCrouchBones } from './crouch-pose.js';
 
 export const ROSTER = {
   blue: ['blue_zip', 'navy'],
@@ -337,7 +338,8 @@ export class Character {
   // pos, yaw = where the character aims (its facing convention); aiming: raise the weapon.
   // `moving`: the feet follow the aim at once (default, as bots and older callers expect);
   // standing, the upper body twists first and the feet turn only past AIM_RULES.turnStart.
-  update(dt, pos, yaw, aiming, dead, contactOffset = null, { moving = true } = {}) {
+  // `crouch` (0..1, NC-INPUT-01): bend into the crouched body on top of the current clip.
+  update(dt, pos, yaw, aiming, dead, contactOffset = null, { moving = true, crouch = 0 } = {}) {
     if (this.seat && !dead) {
       this.bodyYaw = this.seat.yaw; this.visualOffset.set(0, 0, 0); this.raise = this.ready = 0;
       this.play('Idle_Gun', 0.25); this.#mix(dt);
@@ -355,6 +357,11 @@ export class Character {
     else if (Math.abs(diff) < AIM_RULES.turnStop) this.turning = false;
     if (this.turning) { this.bodyYaw = wrapAngle(this.bodyYaw + diff * Math.min(1, dt * (moving ? AIM_RULES.moveTurnRate : AIM_RULES.turnRate))); diff = wrapAngle(aimYaw - this.bodyYaw); }
     this.obj.position.copy(pos).add(this.visualOffset); this.obj.rotation.y = this.bodyYaw; this.#mix(dt);
+    // Crouch after the mixer (so walking keeps its stride) and before aiming (so the gun follows the lowered body).
+    // The weapon contacts are measured once, standing, on the first armed frame.
+    this.crouch = dead || (!this.contacts && this.gun && !this.holstered) ? 0 : crouch;
+    if (this.crouch > 0.001 && this.crouchBones === undefined) this.crouchBones = findCrouchBones(this.inner);
+    this.crouchDrop = applyCrouchPose(this.obj, this.crouchBones, this.crouch);
     // The breathing and glances ride on the unarmed idle clip's own crossfade weight, so they fade in and out with
     // it (walk, run and the armed idle carry their own authored upper body). An action that never played still
     // reports weight 1, hence isRunning().

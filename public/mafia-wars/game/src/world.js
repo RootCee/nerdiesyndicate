@@ -3,7 +3,7 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { mergeGeometries } from '/mafia-wars/game/vendor/three/jsm/utils/BufferGeometryUtils.js';
 import { pbr, weather, prep, loadGLB } from './assets.js';
-import { moveCircleWithSubsteps, resolveCircleAabbs } from './collision-math.js';
+import { circleOverlapsBox, moveCircleWithSubsteps, resolveCircleAabbs } from './collision-math.js';
 import { CITY_BOUNDS, createCityPlan, DUPLICATED_ORIGINAL_NEIGHBORHOOD, ORIGINAL_EXPANSION_HOUSES, ORIGINAL_NEIGHBORHOOD_LAYOUT } from './city-layout.js';
 import { GROUND } from './city-ground-layout.js';
 import { hoodFrontage, ORIGINAL_STYLE_NEIGHBORHOODS } from './hood-neighborhood-layout.js';
@@ -716,6 +716,16 @@ export function moveAndSlide(p, dx, dz, r, y0, y1, feetY, contacts = null) {
   collisionBroadphaseStats.lastCandidates = _moveColliders.length;
   collisionBroadphaseStats.maxCandidates = Math.max(collisionBroadphaseStats.maxCandidates, _moveColliders.length);
   return moveCircleWithSubsteps(p, dx, dz, r, _moveColliders, undefined, contacts);
+}
+// NC-INPUT-01: is anything solid over the player's footprint between heights y0 and y1? Used before a crouched
+// player stands up (a table or a low beam overhead keeps them crouched). Same filters as moveAndSlide.
+export function headroomBlocked(p, r, y0, y1) {
+  for (const c of colliders) {
+    if (c.streamingId && c.streamingId !== activeNeighborhoodCollisionStream) continue;
+    if (y1 <= c.minY || y0 >= c.maxY) continue;
+    if (circleOverlapsBox(p, r, c)) return true;
+  }
+  return false;
 }
 // segment vs solid (non-fence) colliders; returns t in [0,1] of first hit or 1 if clear. Also normal.
 const _n = new THREE.Vector3();

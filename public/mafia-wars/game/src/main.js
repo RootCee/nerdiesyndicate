@@ -58,7 +58,7 @@ import { NPC_BEHAVIOR, personalityOf } from './npc-behavior.js';
 import { npcIdFor } from './npc-schema.js';
 import { CITY_SERVICE_ENDPOINT, CityServiceClient } from './city-service-client.js';
 import { CityPulsePanel } from './city-pulse-panel.js';
-import { GamepadController, controllerPrompt } from './gamepad-input.js';
+import { GamepadController, buttonLabel, controllerPrompt } from './gamepad-input.js';
 import { createGamepadUi } from './gamepad-ui.js';
 import { EconomyDemoService, economyDemoAllowed } from './economy-demo-service.js';
 import { relativeBearing } from './city-map-view.js';
@@ -80,9 +80,9 @@ import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
 import { createMobilePerformanceOverlay } from './mobile-performance-overlay.js';
 import { createAdaptiveResolution } from './adaptive-resolution.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-0.9.3-input01-rc1';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-0.9.3-input01-rc2';
 
-const GAME_BUILD_ID = 'nc-0.9.3-input01-rc1';
+const GAME_BUILD_ID = 'nc-0.9.3-input01-rc2';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -352,7 +352,7 @@ const cityPulsePanel = new CityPulsePanel({
 // keyboard, mouse and touch controls (gamepad-input.js), and drives open panels through their own buttons
 // (gamepad-ui.js). Nothing is read from a pad until the browser reports one; held actions are released when a
 // pad disconnects or the page loses focus. Settings (dead zone, sensitivity, invert Y) stay on this device.
-let gamepadArmed = false;
+let gamepadArmed = false, standBlockedShown = false;
 const gamepadUi = createGamepadUi({
   hud: { callout: (...args) => hud.callout(...args) }, getController: () => gamepad,
   onPanel: (open) => { if (open) { input.moveX = input.moveY = 0; input.fire = input.ads = input.sprint = false; document.exitPointerLock?.(); } else if (MATCH.started && !MATCH.over && !TOUCH && !gamepad.active) requestLock(); },
@@ -943,12 +943,12 @@ function configureEntryUi() {
   $('go').textContent = developerCombat ? 'Launch Developer Combat' : 'Enter City';
   $('hint').innerHTML = developerCombat
     ? '<b>DEVELOPER MODE</b> · original 6v6 · 10 minutes · first to 100'
-    : '<b>FREE ROAM</b> · expanded city · no timer · no forced fights<br>WASD move · mouse look · Shift sprint · Space jump · E enter buildings · V camera · M map · Shift+M mute';
+    : '<b>FREE ROAM</b> · expanded city · no timer · no forced fights<br>WASD move · mouse look · Shift sprint · Space jump · C crouch · E enter buildings · V camera · M map · Shift+M mute<br>Controller: hold View/Share for the button map and settings';
 }
 function setCameraMode(third, announce = false) {
   thirdCamera.setEnabled(third, true);
   document.body.classList.toggle('third-person', thirdCamera.enabled);
-  if (announce && MATCH.started) hud.callout(thirdCamera.enabled ? 'THIRD-PERSON CAMERA' : 'FIRST-PERSON CAMERA', TOUCH ? 'TAP CAM TO SWITCH' : 'PRESS [V] TO SWITCH');
+  if (announce && MATCH.started) hud.callout(thirdCamera.enabled ? 'THIRD-PERSON CAMERA' : 'FIRST-PERSON CAMERA', TOUCH ? 'TAP CAM TO SWITCH' : gamepad.active ? `TAP ${buttonLabel(gamepad.status.family, 'back')} TO SWITCH` : 'PRESS [V] TO SWITCH');
 }
 // Player choice from V / CAM: switches in place (no reload, respawn, or
 // network message) and is remembered on this device.
@@ -1769,7 +1769,10 @@ function loop(now) {
     if (input.camera) { input.camera = false; if (!combatLobbyOpen) toggleCamera(); }
     if (input.map) { input.map = false; setCityMap(!cityMap?.isOpen); }
     if (cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open || economyPanelOpen() || cityPulsePanel.open || gamepadUi.settingsOpen) { input.moveX = input.moveY = 0; input.fire = false; input.ads = false; input.jump = false; input.interact = false; input.reload = false; }
-    player.update(dt, MATCH.over || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open || economyPanelOpen() || cityPulsePanel.open || gamepadUi.settingsOpen ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
+    player.update(dt, MATCH.over || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open || economyPanelOpen() || cityPulsePanel.open || gamepadUi.settingsOpen ? { moveX: 0, moveY: 0, fire: false, ads: false, crouch: input.crouch } : input, look, time, !thirdCamera.enabled);
+    // NC-INPUT-01 crouch: the CROUCH button lights while crouched; standing up under something says why it waits.
+    $('tCrouch')?.classList.toggle('on', player.crouchT > 0.5);
+    if (player.standBlocked && !standBlockedShown) hud.callout('NO ROOM TO STAND', 'MOVE OUT FROM UNDER IT'); standBlockedShown = !!player.standBlocked;
     blendServerCorrection(dt);
     if (multiplayerActive && Number.isFinite(localCombat?.health)) {
       player.hp = localCombat.health; player.dead = localCombat.dead === true;
@@ -1892,7 +1895,7 @@ function loop(now) {
       if (player.collisionHit && player.planar > 0.25) avatarContactOffset.copy(player.collisionNormal).multiplyScalar(0.14);
       // M7.1D: seated at a chess table, the avatar sits on the stool (the server's seat list says where)
       localAvatar.setSeated(multiplayerActive && (localContext.space?.id || 'city') === 'city' ? chessClient.seatOf(multiplayer?.credentials?.playerId) : null);
-      updateLocalAim(); localAvatar.aimPitch = localAim.pitch; localAvatar.update(dt, player.pos, localAim.yaw, localAim.raised, player.dead, avatarContactOffset, { moving: player.planar > 0.25 });
+      updateLocalAim(); localAvatar.aimPitch = localAim.pitch; localAvatar.update(dt, player.pos, localAim.yaw, localAim.raised, player.dead, avatarContactOffset, { moving: player.planar > 0.25, crouch: player.crouchT });
       localAvatar.obj.visible = show; if (localAvatar.gun) localAvatar.gun.visible = show && !localAvatar.holstered && !localAvatar.seat;
     }
     if (multiplayerActive && multiplayer?.state === 'connected') {

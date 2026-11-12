@@ -1,5 +1,7 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
-import { groundAt, moveAndSlide, MAP } from './world.js';
+import { groundAt, headroomBlocked, moveAndSlide, MAP } from './world.js';
+export const CROUCH_HEIGHT = 0.65; // crouched collision height as a share of standing height (1.17 m of 1.8 m)
+export const CROUCH_SPEED = 0.55; // crouched speed as a share of walking speed
 import { PLAYER_COLLISION_RADIUS } from './collision-math.js';
 export { PLAYER_COLLISION_RADIUS } from './collision-math.js';
 
@@ -21,12 +23,20 @@ export class Player {
     if (!this.dead) {
       this.yaw -= look.dx * this.sens * (input.ads ? 0.6 : 1); this.pitch = THREE.MathUtils.clamp(this.pitch - look.dy * this.sens * (input.ads ? 0.6 : 1), -1.45, 1.45);
     }
-    const crouchTarget = input.crouch && !this.dead ? 1 : 0; this.crouchT += (crouchTarget - this.crouchT) * Math.min(1, dt * 12);
+    // Crouch (C, R3 or the CROUCH button toggle input.crouch) is a movement state: slower (0.55x), no sprint, a lower
+    // collision height and eye. Jumping from a crouch stands up instead. A crouched player only stands when nothing
+    // solid is overhead (standBlocked) and stands on their own once there is room.
+    let wantCrouch = !!input.crouch && !this.dead;
+    if (input.jump && this.crouchT > 0.5 && !this.dead) { input.crouch = false; input.jump = false; wantCrouch = false; }
+    this.standBlocked = !wantCrouch && this.crouchT > 0.02 && !this.dead && headroomBlocked(this.pos, this.radius * 0.9, this.pos.y + this.height * CROUCH_HEIGHT + 0.02, this.pos.y + this.height);
+    if (this.standBlocked) wantCrouch = true;
+    const crouchTarget = wantCrouch ? 1 : 0; this.crouchT += (crouchTarget - this.crouchT) * Math.min(1, dt * 12);
+    if (Math.abs(crouchTarget - this.crouchT) < 0.01) this.crouchT = crouchTarget;
     this.forward(FWD); RIGHT.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     WISH.set(0, 0, 0);
     if (!this.dead) { WISH.addScaledVector(FWD, input.moveY).addScaledVector(RIGHT, input.moveX); if (WISH.lengthSq() > 1) WISH.normalize(); }
     const sprint = input.sprint && input.moveY > 0.3 && !input.ads && this.crouchT < 0.5;
-    const speed = (sprint ? 6.6 : 4.4) * (1 - this.crouchT * 0.45) * (input.ads ? 0.6 : 1) * this.speedMul;
+    const speed = (sprint ? 6.6 : 4.4) * (1 - this.crouchT * (1 - CROUCH_SPEED)) * (input.ads ? 0.6 : 1) * this.speedMul;
     const accel = this.onGround ? 14 : 3;
     this.vel.x += (WISH.x * speed - this.vel.x) * Math.min(1, dt * accel);
     this.vel.z += (WISH.z * speed - this.vel.z) * Math.min(1, dt * accel);
@@ -36,7 +46,7 @@ export class Player {
     // Resolve all contacts as one iterative set. The previous per-collider,
     // single-pass pushout could re-enter the first collider at wall joins and
     // car overlaps, especially during diagonal mobile sprinting.
-    const h = this.height * (1 - this.crouchT * 0.35);
+    const h = this.height * (1 - this.crouchT * (1 - CROUCH_HEIGHT));
     const moveX = this.vel.x * dt, moveZ = this.vel.z * dt;
     this.collisionHit = moveAndSlide(this.pos, moveX, moveZ, this.radius, this.pos.y + 0.25, this.pos.y + h, this.pos.y, this.collisionContacts);
     this.collisionNormal.set(0, 0, 0);
