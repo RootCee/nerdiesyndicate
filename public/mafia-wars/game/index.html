@@ -256,6 +256,8 @@ body.map-open #touch, body.map-open #hud { visibility: hidden; }
 #go { margin-top: 26px; font: 600 18px/1 'Barlow'; letter-spacing: .25em; text-transform: uppercase; color: #15120d; background: linear-gradient(135deg, var(--gold-bright), var(--gold)); border: 1px solid #ffe6ad; border-radius: 6px; padding: 17px 42px; cursor: pointer; display: none; box-shadow: 0 12px 38px rgba(0,0,0,.58), 0 0 26px rgba(217,172,88,.12); touch-action: manipulation; }
 #go:hover { filter: brightness(1.08); transform: translateY(-1px); }
 #go.on { display: inline-block; }
+#controllerSettings { display: block; margin: 12px auto 0; min-height: 42px; padding: 0 16px; border: 1px solid rgba(217,172,88,.6); border-radius: 6px; background: rgba(255,255,255,.07); color: #fff; font: 700 11px/1 'Barlow'; letter-spacing: .14em; text-transform: uppercase; cursor: pointer; }
+#controllerSettings[hidden] { display: none; }
 #mpEntry { display: none; width: min(430px, 92vw); margin: 18px auto 0; padding: 14px; border: 1px solid rgba(217,172,88,.35); border-radius: 9px; background: rgba(0,0,0,.22); }
 body.multiplayer-dev #mpEntry { display: block; }
 #mpEntry .row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
@@ -459,6 +461,7 @@ body.multiplayer-active #avatarToggle { display: block; }
     <div id="idrow"><input id="gname" maxlength="16" placeholder="GAMERTAG" autocomplete="off" spellcheck="false"><input id="gwallet" maxlength="42" placeholder="BASE WALLET (COMING SOON)" autocomplete="off" spellcheck="false" disabled aria-label="Base wallet integration coming soon"></div>
     <div class="avatar-creator"><h3>Choose Your Character</h3><div class="avatar-presets" id="avatarPresets" role="radiogroup" aria-label="Character preset"></div><div class="avatar-status" id="avatarStatus" role="status">Four original character presets · appearance saves on this device</div></div>
     <button id="go">Enter City</button>
+    <button id="controllerSettings" type="button" hidden>Controller settings</button>
     <div id="mpEntry" aria-label="Twenty-player public-city multiplayer">
       <button id="mpPublic" type="button" disabled aria-disabled="true">Enter Public City</button>
       <div class="row"><button id="mpHost" type="button" disabled aria-disabled="true">Host Private Room</button><input id="mpCode" maxlength="12" placeholder="PRIVATE CODE" autocomplete="off" spellcheck="false"><button id="mpJoin" type="button" disabled aria-disabled="true">Join Private</button></div>
@@ -471,6 +474,6 @@ body.multiplayer-active #avatarToggle { display: block; }
 
 <script src="src/startup-fallback.js"></script>
 <link rel="preload" href="asset-manifest.json" as="fetch" crossorigin="anonymous">
-<script type="module" src="src/main.js?build=nc-0.9.2-pulse01-rc1"></script>
+<script type="module" src="src/main.js?build=nc-0.9.3-input01-rc1"></script>
 </body>
 </html>

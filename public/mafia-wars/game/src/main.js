@@ -58,6 +58,8 @@ import { NPC_BEHAVIOR, personalityOf } from './npc-behavior.js';
 import { npcIdFor } from './npc-schema.js';
 import { CITY_SERVICE_ENDPOINT, CityServiceClient } from './city-service-client.js';
 import { CityPulsePanel } from './city-pulse-panel.js';
+import { GamepadController, controllerPrompt } from './gamepad-input.js';
+import { createGamepadUi } from './gamepad-ui.js';
 import { EconomyDemoService, economyDemoAllowed } from './economy-demo-service.js';
 import { relativeBearing } from './city-map-view.js';
 import { findPlayerRoute } from './city-navigation.js'; // RC1 hotfix 1c: the player's GPS also starts from yards
@@ -78,9 +80,9 @@ import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
 import { createMobilePerformanceOverlay } from './mobile-performance-overlay.js';
 import { createAdaptiveResolution } from './adaptive-resolution.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-0.9.2-pulse01-rc1';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-0.9.3-input01-rc1';
 
-const GAME_BUILD_ID = 'nc-0.9.2-pulse01-rc1';
+const GAME_BUILD_ID = 'nc-0.9.3-input01-rc1';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -340,12 +342,36 @@ const cityService = economyDemoAllowed(location) ? new EconomyDemoService() : ne
 // preview reads its own service or shows "not connected" (resolveCityServiceEndpoint). One panel at a time.
 const cityPulsePanel = new CityPulsePanel({
   client: cityService.cityPulse ? cityService : null, productionEndpoint: CITY_SERVICE_ENDPOINT,
-  canOpen: () => !(cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open || economyPanelOpen()),
+  canOpen: () => !(cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open || economyPanelOpen() || gamepadUi.settingsOpen),
   onView: (view) => city?.rootsLounge?.setPulse(view),
   onOpen: (open) => {
     if (open) { input.moveX = input.moveY = 0; input.fire = input.ads = input.sprint = input.jump = false; document.exitPointerLock?.(); } else if (MATCH.started && !MATCH.over && !TOUCH) requestLock();
   },
 });
+// NC-INPUT-01 Xbox / PlayStation controllers (Gamepad API). The controller writes the same `input` state as the
+// keyboard, mouse and touch controls (gamepad-input.js), and drives open panels through their own buttons
+// (gamepad-ui.js). Nothing is read from a pad until the browser reports one; held actions are released when a
+// pad disconnects or the page loses focus. Settings (dead zone, sensitivity, invert Y) stay on this device.
+let gamepadArmed = false;
+const gamepadUi = createGamepadUi({
+  hud: { callout: (...args) => hud.callout(...args) }, getController: () => gamepad,
+  onPanel: (open) => { if (open) { input.moveX = input.moveY = 0; input.fire = input.ads = input.sprint = false; document.exitPointerLock?.(); } else if (MATCH.started && !MATCH.over && !TOUCH && !gamepad.active) requestLock(); },
+});
+const gamepad = new GamepadController({
+  input, ui: gamepadUi, settings: gamepadUi.settings,
+  getPads: () => { if (!gamepadArmed) return []; try { return navigator.getGamepads?.() || []; } catch { return []; } },
+  onChange: (status) => { gamepadUi.announce(status); const b = $('controllerSettings'); if (b) b.hidden = !status.connected; },
+  onSettingsRequest: () => gamepadUi.openSettings(),
+});
+addEventListener('gamepadconnected', () => { gamepadArmed = true; });
+try { if ([...(navigator.getGamepads?.() || [])].some(Boolean)) gamepadArmed = true; } catch { /* Gamepad API unavailable */ }
+addEventListener('blur', () => gamepad.blur());
+document.addEventListener('visibilitychange', () => { if (document.hidden) gamepad.blur(); });
+for (const type of ['keydown', 'mousedown', 'touchstart']) addEventListener(type, (e) => { if (e.isTrusted) gamepad.otherInput(); }, { capture: true, passive: true });
+addEventListener('mousemove', (e) => { if (e.isTrusted && input.locked) gamepad.otherInput(); }, { passive: true });
+$('controllerSettings')?.addEventListener('click', () => gamepadUi.openSettings());
+// Interaction prompts name the controller's button while the controller is the device in use.
+{ const showPrompt = hud.prompt.bind(hud); hud.prompt = (text = '', ...rest) => showPrompt(gamepad.active && text ? controllerPrompt(text, gamepad.status.family) : text, ...rest); }
 // Founder Executive Suite: the connected founder wallet signs a one-time challenge (through the website),
 // then the suite shows the oversight figures for a 30-minute session. Only the founder wallet is accepted.
 // Every read signs in again (one wallet prompt) if the 30-minute pass has ended.
@@ -1727,7 +1753,8 @@ function loop(now) {
   if (MATCH.started) adaptiveResolution.frame(dt * 1000, now);
   fpsAcc += dt; fpsN++; if (fpsAcc > 0.5) { hud.fps(Math.round(fpsN / fpsAcc)); fpsAcc = 0; fpsN = 0; }
   const look = poll();
-  if (!MATCH.started || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open || economyPanelOpen() || cityPulsePanel.open || (!input.locked && !TOUCH && !MATCH.over && MATCH.started)) { look.dx = look.dy = 0; }
+  { const pad = gamepad.update(dt); look.dx += pad.dx; look.dy += pad.dy; }
+  if (!MATCH.started || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open || economyPanelOpen() || cityPulsePanel.open || gamepadUi.settingsOpen || (!input.locked && !TOUCH && !gamepad.active && !MATCH.over && MATCH.started)) { look.dx = look.dy = 0; }
   if (!MATCH.started) { // idle camera drift on the title
     player.yaw += dt * 0.03; player.update(dt, { moveX: 0, moveY: 0 }, { dx: 0, dy: 0 }, time); input.camera = false;
   } else {
@@ -1741,8 +1768,8 @@ function loop(now) {
     if (input.ab) { if (isCombatMode(MATCH.mode)) useAbility(input.ab); input.ab = 0; }
     if (input.camera) { input.camera = false; if (!combatLobbyOpen) toggleCamera(); }
     if (input.map) { input.map = false; setCityMap(!cityMap?.isOpen); }
-    if (cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open || economyPanelOpen() || cityPulsePanel.open) { input.moveX = input.moveY = 0; input.fire = false; input.ads = false; input.jump = false; input.interact = false; input.reload = false; }
-    player.update(dt, MATCH.over || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open || economyPanelOpen() || cityPulsePanel.open ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
+    if (cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open || economyPanelOpen() || cityPulsePanel.open || gamepadUi.settingsOpen) { input.moveX = input.moveY = 0; input.fire = false; input.ads = false; input.jump = false; input.interact = false; input.reload = false; }
+    player.update(dt, MATCH.over || combatLobbyOpen || cityMap?.isOpen || chessClient.open || libraryPanel.open || bankPanel.open || residentPanel.open || floorPanel.open || economyPanelOpen() || cityPulsePanel.open || gamepadUi.settingsOpen ? { moveX: 0, moveY: 0, fire: false, ads: false } : input, look, time, !thirdCamera.enabled);
     blendServerCorrection(dt);
     if (multiplayerActive && Number.isFinite(localCombat?.health)) {
       player.hp = localCombat.health; player.dead = localCombat.dead === true;
@@ -1983,4 +2010,4 @@ boot().catch((e) => {
   window.__showGameEntryFeedback?.(`The city could not finish loading: ${e.message}`, { error: true, retryLabel: 'Reload and retry' });
 });
 // expose for QA
-window.__hw = { get netStatus() { return netStatusEl ? { text: netStatusEl.textContent, visible: netStatusEl.style.display !== 'none', state: netStatusEl.dataset.state } : null; }, get navLoader() { return navLoader; }, get bankStaff() { return bankStaff; }, get cityMap() { return cityMap; }, waypoints, npcRenderer, npcLibrary, homeResidents, residentHomes, scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, configureDestructionRendering, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, mobilePerformanceOverlay, adaptiveResolution, remotePlayers, applyLocalAppearance, applyLocalEquipment, requestMultiplayerEquipment, ensureWeaponVisual, characterAssetStats, get localAppearance() { return localAppearance; }, get localEquipment() { return localEquipment; }, get localEquipmentRevision() { return localEquipmentRevision; }, get localCombat() { return localCombat; }, get localContext() { return localContext; }, get undergroundMatch() { return undergroundMatch; }, get multiplayer() { return multiplayer; }, get multiplayerActive() { return multiplayerActive; }, get multiplayerDiagnostics() { return { client: multiplayer?.diagnostics?.() || null, localEquipment, localEquipmentRevision, localCombat, localContext, remotes: [...remotePlayers.values()].map((remote) => ({ id: remote.id, appearance: remote.appearance, ...remote.diagnostics() })) }; }, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };
+window.__hw = { gamepad, gamepadUi, get netStatus() { return netStatusEl ? { text: netStatusEl.textContent, visible: netStatusEl.style.display !== 'none', state: netStatusEl.dataset.state } : null; }, get navLoader() { return navLoader; }, get bankStaff() { return bankStaff; }, get cityMap() { return cityMap; }, waypoints, npcRenderer, npcLibrary, homeResidents, residentHomes, scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, configureDestructionRendering, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, mobilePerformanceOverlay, adaptiveResolution, remotePlayers, applyLocalAppearance, applyLocalEquipment, requestMultiplayerEquipment, ensureWeaponVisual, characterAssetStats, get localAppearance() { return localAppearance; }, get localEquipment() { return localEquipment; }, get localEquipmentRevision() { return localEquipmentRevision; }, get localCombat() { return localCombat; }, get localContext() { return localContext; }, get undergroundMatch() { return undergroundMatch; }, get multiplayer() { return multiplayer; }, get multiplayerActive() { return multiplayerActive; }, get multiplayerDiagnostics() { return { client: multiplayer?.diagnostics?.() || null, localEquipment, localEquipmentRevision, localCombat, localContext, remotes: [...remotePlayers.values()].map((remote) => ({ id: remote.id, appearance: remote.appearance, ...remote.diagnostics() })) }; }, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };
