@@ -25,6 +25,7 @@ import { hourAt } from './city-clock.js';
 import { isHomeLocation } from './home-ids.js';
 import { homePoi } from './neighborhood-housing.js';
 import { scheduledPlace, residentBankVisit, pacificDayKey } from './resident-schedule.js';
+import { ROOM_STAFFED_LOCATIONS } from './city-locations.js';
 
 export const NPC_SIM_RULES = Object.freeze({
   tickMs: 200,
@@ -48,9 +49,13 @@ export const NPC_ANIM = Object.freeze({ idle: 0, walk: 1, notice: 2, sit: 3 }); 
 const hard = (obstacles) => obstacles.filter((r) => !r.soft);
 // A scheduled resident this close to their place has arrived (#placeAt spreads them up to ~7 m around it).
 const SCHEDULE_ARRIVED_M = 8;
-// Workplaces whose staff work inside, out of the street simulation: the stores (store-hours.js) and, from the
-// RC1 hotfix, the bank (its tellers stood at the street door through their whole shift before).
-export const indoorWorkplace = (locationId) => !!storeById(locationId) || locationId === BANK_SPACE_ID;
+// Workplaces whose staff work inside, out of the street simulation: the stores (store-hours.js), from the
+// RC1 hotfix the bank (its tellers stood at the street door through their whole shift before), and from
+// NC-LIFE-02 0.9.4 City Hall and the Academy Library (city-locations.js; reported to players as `space-staff`).
+export const indoorWorkplace = (locationId) => !!storeById(locationId) || locationId === BANK_SPACE_ID || ROOM_STAFFED_LOCATIONS.has(locationId);
+// Workplaces the room itself reports (a player inside sees who is working there), so their shifts run even with
+// nobody out in the city: the bank (bank-staff) and City Hall and the library (space-staff).
+const roomReported = (locationId) => locationId === BANK_SPACE_ID || ROOM_STAFFED_LOCATIONS.has(locationId);
 // Who goes inside on arrival: staff at an indoor workplace, and (bank visits) customers visiting the bank.
 const insideFor = (r) => (r.economicActivity === 'work' && indoorWorkplace(r.economicLocation)) || (r.economicActivity === 'errand' && r.economicLocation === BANK_SPACE_ID);
 const HOME_DOOR_M = 2; // NC-LIFE-02B: a resident seen walking home goes in only on their doorstep
@@ -191,7 +196,9 @@ export class CityNpcSimulation {
   #bankUpkeep(now) {
     for (const r of this.residents) {
       const place = this.#scheduledPoi(r, now);
-      if (!place || !['work', 'errand'].includes(r.economicActivity) || r.economicLocation !== BANK_SPACE_ID || r.held) continue;
+      if (!place || r.held) continue;
+      const working = r.economicActivity === 'work' && roomReported(r.economicLocation), visiting = r.economicActivity === 'errand' && r.economicLocation === BANK_SPACE_ID;
+      if (!working && !visiting) continue;
       if (dist(place.entry, r) > SCHEDULE_ARRIVED_M || !r.placed) this.#placeAt(r, place);
       r.indoors = true;
     }
@@ -208,8 +215,11 @@ export class CityNpcSimulation {
     }));
   }
   bankVisitorsInside() { return this.#inBank('errand'); }
-  #inBank(activity) {
-    return this.residents.filter((r) => r.indoors && r.economicActivity === activity && r.economicLocation === BANK_SPACE_ID).map((r) => {
+  // NC-LIFE-02 0.9.4: the staff working inside City Hall or the library right now (on shift and arrived), lowest
+  // resident first, the same way as the bank's tellers.
+  staffInside(locationId) { return this.#inBank('work', locationId); }
+  #inBank(activity, locationId = BANK_SPACE_ID) {
+    return this.residents.filter((r) => r.indoors && r.economicActivity === activity && r.economicLocation === locationId).map((r) => {
       const s = this.schedules.get(r.identity.id); return { index: r.index, gameId: r.identity.id, residentId: s?.residentId || null, identity: r.identity };
     }).sort((a, b) => a.index - b.index);
   }

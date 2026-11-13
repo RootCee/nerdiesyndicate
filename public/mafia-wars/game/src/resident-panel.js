@@ -93,6 +93,7 @@ export class ResidentPanel {
       `Lives at ${esc((p && residentAddress(r.housing?.propertyId)) || homeAddress(r.housing?.propertyId) || PLACES['north-court'])}`, // NC-LIFE-02B-2: Neighborhood One address for everyone
       `${esc(PERSONALITY[r.personality] || 'Friendly')}${r.chess ? ` · chess: ${esc(r.chess.levelLabel || 'player')}` : ''}`,
     ];
+    if (r.station === 'registration') facts.push('At the <b>Registration desk</b> · registration opens soon'); // NC-LIFE-02 0.9.4: nothing to sign up for yet
     const today = r.residentId ? this.life?.plan?.(r.residentId) : null;
     if (today?.line) facts.push(`Today: <b>${esc(today.line)}</b>`);
     const money = p ? `<div class="rp-money"><div><b>CHECKING</b><span>${n(p.checking)}</span></div><div><b>SAVINGS</b><span>${n(p.savings)}</span></div><div><b>EARNED</b><span>${n(p.lifetime?.wages)}</span></div></div>` : '';

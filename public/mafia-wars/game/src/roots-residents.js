@@ -2,9 +2,10 @@ import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { seedPopulation } from './npc-population.js';
 import { applySeatedPose, findSeatBones } from './seated-pose.js';
 import { PERMANENT_RESIDENT_IDENTITIES } from './permanent-residents.js';
+import { barStations } from './city-locations.js';
 
 // NC-ECO-01C: residents settle clear of the doorway (exit range + TALK range) and at least `spacing` apart.
-export const ROOTS_RESIDENT_LIMITS = Object.freeze({ mobile: 10, desktop: 20, interactionRange: 1.5, speed: 1.25, spacing: 0.6, doorClearance: 4.1 });
+export const ROOTS_RESIDENT_LIMITS = Object.freeze({ mobile: 10, desktop: 20, interactionRange: 1.5, barReach: 2.3, speed: 1.25, spacing: 0.6, doorClearance: 4.1 });
 const SETTLED = 0.15;
 
 // A permanent resident (res_0007, NC-LIFE-01A) looks exactly as on the street; the room economy's
@@ -16,6 +17,16 @@ const lookFor = (resident) => {
   return { ...identity, id: `roots-${resident.id}` };
 };
 
+// NC-LIFE-02 0.9.4: the bartender on shift (the room's bank-backed residents list: occupation 'bartender', activity
+// 'bar') works behind the bar, facing the room (city-locations.js stations). Guests whose activity is 'bar' are
+// customers and stay on the room side, at the stools, as before.
+export const isBartender = (resident) => resident?.occupation === 'bartender' && resident?.activity === 'bar';
+const barCache = new WeakMap();
+function behindBar(layout, taken) {
+  if (!barCache.has(layout)) barCache.set(layout, barStations(layout));
+  const stations = barCache.get(layout), s = stations.find((st) => taken.every((t) => Math.hypot(st.x - t.x, st.z - t.z) >= ROOTS_RESIDENT_LIMITS.spacing)) || stations[0];
+  return { x: s.x, z: s.z, yaw: s.yaw, activity: 'bar', staff: true, via: s.route.slice(1, -1) };
+}
 export function rootsResidentDestination(layout, resident, index) {
   const activity = resident.activity || 'socializing', group = Number(String(resident.socialGroupId || '').match(/\d+/)?.[0] || index);
   if (activity === 'dancing') { const k = index % 8; return { x: layout.danceFloor.x + (k % 4 - 1.5) * 0.9, z: layout.danceFloor.z + 0.3 + (Math.floor(k / 4) - 0.5) * 1.15, yaw: (k % 4) * Math.PI / 2, activity }; }
@@ -29,6 +40,7 @@ export function rootsResidentDestination(layout, resident, index) {
 // Where a resident actually settles: their activity spot unless a seat is taken, another resident already
 // stands there, or it is in the doorway; then the nearest clear spot on a small spiral around it.
 function placeResident(layout, resident, slot, taken, door) {
+  if (isBartender(resident)) return behindBar(layout, taken);
   const base = rootsResidentDestination(layout, resident, slot), clearOf = (p) => Math.hypot(p.x - door.x, p.z - door.z) > ROOTS_RESIDENT_LIMITS.doorClearance && taken.every((t) => Math.hypot(p.x - t.x, p.z - t.z) >= ROOTS_RESIDENT_LIMITS.spacing);
   const inside = (p) => p.x > layout.minX + 0.5 && p.x < layout.maxX - 0.5 && p.z > layout.minZ + 0.5 && p.z < layout.maxZ - 0.5 && !inRect(p, layout.bar, 0.4) && !inRect(p, layout.stage, 0.4);
   if (base.activity === 'seated') {
@@ -54,7 +66,7 @@ export class RootsResidentRenderer {
   // places them again, so someone the player is talking to does not walk off when others come and go.
   setResidents(residents = []) {
     const selected = residents.slice(0, this.limit), wanted = new Set(selected.map((r) => r.id));
-    for (const entry of this.entries.values()) if (!wanted.has(entry.resident.id) && !entry.departing) { entry.departing = true; entry.destination = { x: this.layout.doorX, z: this.layout.minZ + 0.45, yaw: Math.PI, activity: 'leaving' }; }
+    for (const entry of this.entries.values()) if (!wanted.has(entry.resident.id) && !entry.departing) { entry.path = entry.destination?.staff ? [...entry.destination.via].reverse() : []; entry.departing = true; entry.destination = { x: this.layout.doorX, z: this.layout.minZ + 0.45, yaw: Math.PI, activity: 'leaving' }; }
     for (const resident of selected) {
       let entry = this.entries.get(resident.id);
       if (!entry) {
@@ -65,7 +77,9 @@ export class RootsResidentRenderer {
       entry.resident = resident;
       if (entry.departing || entry.activity !== resident.activity) {
         const taken = [...this.entries.values()].filter((e) => e !== entry && !e.departing && e.destination).map((e) => e.destination);
+        const wasStaff = !!entry.destination?.staff;
         entry.departing = false; entry.activity = resident.activity; entry.seatedBones = null; entry.destination = placeResident(this.layout, resident, entry.slot, taken, this.door);
+        entry.path = entry.destination.staff && !wasStaff ? entry.destination.via.slice() : []; // round the end of the bar
       }
     }
     this.stats.known = selected.length;
@@ -76,7 +90,7 @@ export class RootsResidentRenderer {
     let best = null;
     for (const entry of this.entries.values()) if (!entry.departing && entry.visual && Math.hypot(entry.destination.x - entry.x, entry.destination.z - entry.z) <= SETTLED) {
       const distance = Math.hypot(position.x - entry.x, position.z - entry.z);
-      if (distance > ROOTS_RESIDENT_LIMITS.interactionRange) continue;
+      if (distance > (entry.destination.staff ? ROOTS_RESIDENT_LIMITS.barReach : ROOTS_RESIDENT_LIMITS.interactionRange)) continue; // the bartender: across the bar
       if (entry.resident.id === preferId) return { ...entry.resident, distance };
       if (!best || distance < best.distance) best = { ...entry.resident, distance };
     }
@@ -90,9 +104,11 @@ export class RootsResidentRenderer {
         if (entry.visual) { entry.visual.root.traverse((o) => o.layers.set(1)); this.group.add(entry.visual.root); } // every mesh: layers are not inherited
       }
       if (!entry.visual) continue;
-      const dx = entry.destination.x - entry.x, dz = entry.destination.z - entry.z, distance = Math.hypot(dx, dz), moving = distance > 0.08;
+      while (entry.path?.length && Math.hypot(entry.path[0].x - entry.x, entry.path[0].z - entry.z) <= 0.08) entry.path.shift();
+      const target = entry.path?.length ? entry.path[0] : entry.destination;
+      const dx = target.x - entry.x, dz = target.z - entry.z, distance = Math.hypot(dx, dz) + (entry.path?.length ? 1 : 0), moving = distance > 0.08;
       if (moving) {
-        const step = Math.min(distance, ROOTS_RESIDENT_LIMITS.speed * dt); entry.x += dx / distance * step; entry.z += dz / distance * step; entry.yaw = Math.atan2(dx, dz); entry.visual.play('Walk', 0.2);
+        const leg = Math.hypot(dx, dz), step = Math.min(leg, ROOTS_RESIDENT_LIMITS.speed * dt); if (leg > 1e-6) { entry.x += dx / leg * step; entry.z += dz / leg * step; entry.yaw = Math.atan2(dx, dz); } entry.visual.play('Walk', 0.2);
       } else {
         entry.yaw = entry.destination.yaw; const activity = entry.destination.activity;
         entry.visual.play(activity === 'dancing' ? (entry.slot % 2 ? 'Interact' : 'Wave') : activity === 'socializing' && entry.slot % 4 === 0 ? 'Interact' : 'Idle', 0.25);

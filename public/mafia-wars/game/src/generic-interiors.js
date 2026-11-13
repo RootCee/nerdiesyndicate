@@ -409,6 +409,17 @@ export class GenericInteriorSystem {
       const fw = Math.min(w - 2, isLobby ? 6 : 9), fh = fw * 0.2, fz = L.minZ + 0.05; // a lobby's sign is above the lifts
       const fm = new THREE.Mesh(new THREE.PlaneGeometry(fw, fh), feature); fm.position.set(cx, y + Math.min(H - 0.4 - fh / 2, isLobby ? 3.05 : H * 0.62), fz); fm.name = `${e.spaceId}-feature`; g.add(fm);
     }
+    // NC-LIFE-02 0.9.4: City Hall's Registration desk sign, on the west wall above the clerk. Registration is not
+    // open yet (no transactions); the sign says so.
+    const desk = L.furniture.find((o) => o.station === 'registration');
+    if (desk) {
+      const reg = signMaterial(this.kit, (ctx, cw, ch) => {
+        ctx.fillStyle = '#100e14'; ctx.fillRect(0, 0, cw, ch); ctx.strokeStyle = '#c19a49'; ctx.lineWidth = 8; ctx.strokeRect(8, 8, cw - 16, ch - 16);
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#f2d28b'; ctx.font = '700 96px Barlow, sans-serif'; ctx.fillText('REGISTRATION', cw / 2, ch * 0.4, cw * 0.9);
+        ctx.fillStyle = '#e7e0f4'; ctx.font = '500 44px Barlow, sans-serif'; ctx.fillText('OPENING SOON', cw / 2, ch * 0.76, cw * 0.9);
+      }, { w: 1024, h: 300, preview: 0x100e14, day: 0.8, night: 0.8 });
+      const rm = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.76), reg); rm.rotation.y = Math.PI / 2; rm.position.set(L.minX + 0.06, y + 2.5, desk.z); rm.name = `${e.spaceId}-registration-sign`; g.add(rm);
+    }
     // Tower floor halls are permanent addresses, not anonymous model floors. Give every side-wall
     // door a readable brass unit number so residents and visitors can navigate the
     // hall without relying on the interaction prompt.

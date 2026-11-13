@@ -221,11 +221,14 @@ const TEMPLATES = {
         f('forklift', 3.6, -1.8, 1.4, 2.6, 2.1), f('desk', 9.4, -6.6, 1.6, 0.8, 0.76), f('shelf', 11.7, -6.5, 0.5, 4, 1.9), deco(k % 2 ? 'lines' : 'lines', 0, 2.5, 22, 0.15, 0.01)] };
   },
   // Nerdie City Hall: a lobby with the city seal, the clerks' counter, and the council chamber behind it.
+  // NC-LIFE-02 0.9.4: the Registration desk on the lobby's west wall, with a clerk behind it (city-locations.js).
+  // Registration itself is not open: no transaction, wallet or bank call exists behind it.
   'city-hall': () => {
     const w = 26, d = 36;
     return { w, d, h: 9, palette: 'civic', rooms: ['Lobby', 'Clerk counter', 'Council chamber'],
       partitions: [wallX(1, -w / 2, w / 2, [[0, 4]])],
       furniture: [deco('seal', 0, 12.4, 6, 6, 0.01), f('counter', -7, 6.6, 9, 1.0, 1.1), f('counter', 7, 6.6, 9, 1.0, 1.1), f('bench', -8.5, 13.5, 3, 0.6, 0.45), f('bench', 8.5, 13.5, 3, 0.6, 0.45),
+        f('desk', -10.6, 10.4, 0.9, 2.6, 0.95, { station: 'registration' }),
         f('dais', 0, -14.6, 14, 4.8, 0.5, { step: true }), f('council-desk', 0, -14.8, 11, 1.2, 1.25), f('flag', -8, -16.6, 0.5, 0.5, 3.2), f('flag', 8, -16.6, 0.5, 0.5, 3.2),
         ...[-9, -5.5, -2].flatMap((z) => [f('pew', -6.2, z, 7, 0.7, 0.9), f('pew', 6.2, z, 7, 0.7, 0.9)]), f('plant', -12, 16.6, 0.8, 0.8, 1.6), f('plant', 12, 16.6, 0.8, 0.8, 1.6)] };
   },
