@@ -5,6 +5,9 @@ import { useAccount, useReadContract, useSignMessage, useSwitchChain } from 'wag
 import { BASE_CHAIN_ID, CONTRACTS } from '../lib/contracts';
 import {
   createFounderSignatureMessage,
+  createResidentSignatureMessage,
+  isResidentSignInText,
+  isResidentSignRequest,
   createGameWalletMessage,
   createGameWalletState,
   isFounderSignInText,
@@ -108,18 +111,28 @@ export default function MafiaWarsBank() {
     try { reply({ signature: await signMessageAsync({ account: walletAddress, message }) }); }
     catch { reply({ error: 'The wallet did not sign. Nothing was changed.' }); }
   }, [signMessageAsync, walletAddress]);
+  // NC-LIFE-02 Milestone 4: resident registration at City Hall: sign only the City Service's resident sign-in text (EIP-4361) for
+  // this site and the connected wallet. Free; no transaction, approval or transfer.
+  const signResidentChallenge = useCallback(async (gameWindow: Window, requestId: string, message: string) => {
+    const reply = (result: { signature: `0x${string}` } | { error: string }) => gameWindow.postMessage(createResidentSignatureMessage(requestId, result), window.location.origin);
+    if (!walletAddress) return reply({ error: 'Connect your wallet with MY WALLET, then register.' });
+    if (!isResidentSignInText(message, window.location.host, window.location.origin, walletAddress)) return reply({ error: 'That registration request was not recognised, so nothing was signed.' });
+    try { reply({ signature: await signMessageAsync({ account: walletAddress, message }) }); }
+    catch { reply({ error: 'The wallet did not sign. Nothing was changed.' }); }
+  }, [signMessageAsync, walletAddress]);
   useEffect(() => {
     const onMessage = (event: MessageEvent<unknown>) => {
       const gameWindow = iframeRef.current?.contentWindow;
       if (!gameWindow || !isTrustedGameWalletEvent(event, window.location.origin, gameWindow)) return;
       if (isFounderSignRequest(event.data)) { void signFounderChallenge(gameWindow, event.data.payload.requestId, event.data.payload.message); return; }
+      if (isResidentSignRequest(event.data)) { void signResidentChallenge(gameWindow, event.data.payload.requestId, event.data.payload.message); return; }
       if (!isGameWalletRequest(event.data)) return;
       if (event.data.type === 'request-state') sendWalletState();
       if (event.data.type === 'open-bank') setWalletOpen(true);
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [sendWalletState, signFounderChallenge]);
+  }, [sendWalletState, signFounderChallenge, signResidentChallenge]);
 
   return (
     <main className="fixed inset-0 z-[60] overflow-hidden bg-black text-neutral-100">

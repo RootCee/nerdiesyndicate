@@ -127,6 +127,43 @@ export function createFounderSignatureMessage(requestId: string, result: { signa
   return { channel: GAME_WALLET_BRIDGE_CHANNEL, version: GAME_WALLET_BRIDGE_VERSION, type: 'founder-signature' as const, payload: { requestId, ...result } };
 }
 
+// ---- Resident registration (NC-LIFE-02 Milestone 4). The game asks the site to sign the City Service's one-time Sign-In with
+// Ethereum (EIP-4361) text with the connected wallet. The site signs nothing but that exact text: its own domain and origin, the
+// connected address, the fixed statement, Base (8453), a server nonce and the issue/expiry times. Signing is free and moves nothing.
+export const RESIDENT_SIGN_IN_STATEMENT = 'Register or sign in as a Nerdie City resident. Signing is free and does not transfer funds, approve tokens or send any transaction.';
+export interface ResidentSignRequest {
+  channel: typeof GAME_WALLET_BRIDGE_CHANNEL;
+  version: typeof GAME_WALLET_BRIDGE_VERSION;
+  type: 'sign-resident-challenge';
+  payload: { requestId: string; message: string };
+}
+export function isResidentSignRequest(value: unknown): value is ResidentSignRequest {
+  if (typeof value !== 'object' || value === null) return false;
+  const message = value as Record<string, unknown>;
+  const payload = message.payload as Record<string, unknown> | undefined;
+  return message.channel === GAME_WALLET_BRIDGE_CHANNEL
+    && message.version === GAME_WALLET_BRIDGE_VERSION
+    && message.type === 'sign-resident-challenge'
+    && Object.keys(message).every((key) => ['channel', 'version', 'type', 'payload'].includes(key))
+    && typeof payload === 'object' && payload !== null
+    && Object.keys(payload).every((key) => ['requestId', 'message'].includes(key))
+    && typeof payload.requestId === 'string' && /^[a-z0-9-]{4,64}$/.test(payload.requestId)
+    && typeof payload.message === 'string' && payload.message.length <= 1024;
+}
+const ISO_TIME = '\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z';
+export function isResidentSignInText(message: string, host: string, origin: string, address: string): boolean {
+  const pattern = new RegExp(
+    `^${escapeRegExp(host)} wants you to sign in with your Ethereum account:\\n(0x[0-9a-fA-F]{40})\\n\\n`
+    + `${escapeRegExp(RESIDENT_SIGN_IN_STATEMENT)}\\n\\n`
+    + `URI: ${escapeRegExp(origin)}\\nVersion: 1\\nChain ID: 8453\\nNonce: [0-9a-f]{32}\\nIssued At: ${ISO_TIME}\\nExpiration Time: ${ISO_TIME}$`,
+  );
+  const match = pattern.exec(message);
+  return !!match && match[1].toLowerCase() === address.toLowerCase();
+}
+export function createResidentSignatureMessage(requestId: string, result: { signature: `0x${string}` } | { error: string }) {
+  return { channel: GAME_WALLET_BRIDGE_CHANNEL, version: GAME_WALLET_BRIDGE_VERSION, type: 'resident-signature' as const, payload: { requestId, ...result } };
+}
+
 export function isTrustedGameWalletEvent(
   event: Pick<MessageEvent, 'origin' | 'source'>,
   expectedOrigin: string,

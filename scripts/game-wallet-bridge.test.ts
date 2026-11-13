@@ -88,3 +88,29 @@ test('founder signature requests and replies have a strict shape', () => {
   assert.equal(isFounderSignRequest({ ...request, payload: { requestId: 'abc-123', message: 'x'.repeat(2000) } }), false);
   assert.deepEqual(createFounderSignatureMessage('abc-123', { error: 'no' }), { channel: 'nerdie-city-wallet', version: 1, type: 'founder-signature', payload: { requestId: 'abc-123', error: 'no' } });
 });
+
+// NC-LIFE-02 Milestone 4: resident registration signing (EIP-4361). Only the exact City Service text, for this site and wallet.
+import { RESIDENT_SIGN_IN_STATEMENT, createResidentSignatureMessage, isResidentSignInText, isResidentSignRequest } from '../src/lib/gameWalletBridge';
+const RESIDENT_ADDRESS = '0x4b138bd7e18a3a725a4672814f84b00711c1939d';
+const residentText = (overrides: Partial<Record<'host' | 'origin' | 'address' | 'statement' | 'chain' | 'nonce' | 'extra', string>> = {}) =>
+  `${overrides.host ?? 'nerdieblaq.xyz'} wants you to sign in with your Ethereum account:\n${overrides.address ?? '0x4B138bd7E18A3A725a4672814F84B00711c1939D'}\n\n`
+  + `${overrides.statement ?? RESIDENT_SIGN_IN_STATEMENT}\n\nURI: ${overrides.origin ?? 'https://nerdieblaq.xyz'}\nVersion: 1\nChain ID: ${overrides.chain ?? '8453'}\n`
+  + `Nonce: ${overrides.nonce ?? '0123456789abcdef0123456789abcdef'}\nIssued At: 2026-11-13T18:00:00.000Z\nExpiration Time: 2026-11-13T18:05:00.000Z${overrides.extra ?? ''}`;
+
+test('resident registration: the site signs only the exact sign-in text for its own domain, origin and connected wallet on Base', () => {
+  assert.equal(isResidentSignInText(residentText(), 'nerdieblaq.xyz', 'https://nerdieblaq.xyz', RESIDENT_ADDRESS), true);
+  assert.match(RESIDENT_SIGN_IN_STATEMENT, /free/); assert.match(RESIDENT_SIGN_IN_STATEMENT, /does not transfer funds/);
+  for (const [why, text, host, origin, address] of [
+    ['another site', residentText({ host: 'evil.example', origin: 'https://evil.example' }), 'nerdieblaq.xyz', 'https://nerdieblaq.xyz', RESIDENT_ADDRESS],
+    ['another wallet', residentText(), 'nerdieblaq.xyz', 'https://nerdieblaq.xyz', '0x1111111111111111111111111111111111111111'],
+    ['another chain', residentText({ chain: '1' }), 'nerdieblaq.xyz', 'https://nerdieblaq.xyz', RESIDENT_ADDRESS],
+    ['a changed statement', residentText({ statement: 'Approve unlimited spending.' }), 'nerdieblaq.xyz', 'https://nerdieblaq.xyz', RESIDENT_ADDRESS],
+    ['an extra line', residentText({ extra: '\nResources:\n- https://evil.example' }), 'nerdieblaq.xyz', 'https://nerdieblaq.xyz', RESIDENT_ADDRESS],
+    ['a bad nonce', residentText({ nonce: 'xyz' }), 'nerdieblaq.xyz', 'https://nerdieblaq.xyz', RESIDENT_ADDRESS],
+    ['the founder text', 'nerdieblaq.xyz wants you to sign in with your Ethereum account:\n0x4B138bd7E18A3A725a4672814F84B00711c1939D\n\nNerdie City Bank: Founder Executive Suite access.', 'nerdieblaq.xyz', 'https://nerdieblaq.xyz', RESIDENT_ADDRESS],
+  ] as const) assert.equal(isResidentSignInText(text, host, origin, address), false, why);
+  const request = { channel: 'nerdie-city-wallet', version: 1, type: 'sign-resident-challenge', payload: { requestId: 'abc-123', message: residentText() } };
+  assert.equal(isResidentSignRequest(request), true);
+  assert.equal(isResidentSignRequest({ ...request, extra: 1 }), false); assert.equal(isResidentSignRequest({ ...request, payload: { ...request.payload, message: 'x'.repeat(2000) } }), false);
+  assert.deepEqual(createResidentSignatureMessage('abc-123', { error: 'no' }).type, 'resident-signature');
+});
