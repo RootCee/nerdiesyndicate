@@ -9,6 +9,7 @@ import { KitBatch, signMaterial } from './city-showcase-kit.js';
 import { interiorCatalog, interiorLayout, interiorSpace, apartmentUnit, apartmentUnitSpace, towerFloorEntry, towerFloorSpace, towerHomeEntry, towerHomeSpace, LOBBY_LIFT_Z, PROPERTY_TIERS } from './interior-catalog.js';
 import { APARTMENT_FLOORS } from './apartment-building.js';
 import { towerDefinitionForLobby, towerDefinitionForSpace, towerHomeForSpace } from './tower-residences.js';
+import { NORTH_COURT_FLOORS, NORTH_COURT_TOWER, northCourtFloorEntry, northCourtFloorForSpace, northCourtFloorSpace, northCourtHomeForSpace, northCourtHomeSpace } from './north-court-residences.js';
 import { streetAddress } from './city-addresses.js';
 
 // Stage 2: every building without a hand-built interior can be entered (interior-catalog.js). One system
@@ -126,11 +127,30 @@ export class GenericInteriorSystem {
     Object.assign(this, { scene, addCollider, removeColliders, worldColliders, mobile, storeMinute });
     this.entries = interiorCatalog().map((e) => { const tower = towerDefinitionForLobby(e.spaceId); return { e, name: buildingName(e), door: new THREE.Vector3(e.door.x, 0, e.door.z), apartments: e.template === 'apartments' || e.template === 'lofts' || !!tower, tower }; });
     this.active = null; this.unit = null; this.towerFloor = null; this.towerHome = null; this.group = null; this.colliders = []; this.shelved = []; this.transitionReadyAt = 0; this.kit = { night: [], mobile };
+    // NC-LIFE-02 Milestone 2: North Court's hallways and units. Its ground floor is the hand-built interior (apartment-system.js),
+    // so this entry has no street door; the stairs there lead here (enterLinkedFloor) and floor 1 leads back (returnToLinkedLobby).
+    this.northCourt = { e: Object.freeze({ spaceId: 'north-court', buildingId: 'north-court', template: 'linked', name: NORTH_COURT_TOWER.building.name }), name: NORTH_COURT_TOWER.building.name, door: null, apartments: true, tower: NORTH_COURT_TOWER, linked: true };
+  }
+  // Tower helpers: North Court (a linked ground floor) builds its own hallway entries and spaces; catalog Towers as before.
+  #floorEntry(tower, floor) { return tower.linkedLobby ? northCourtFloorEntry(floor) : towerFloorEntry(tower, floor); }
+  #floorSpace(tower, floor) { return tower.linkedLobby ? northCourtFloorSpace(floor) : towerFloorSpace(tower, floor, interiorSpace(this.active.e)); }
+  #homeSpace(tower, home, floorSpace) { return tower.linkedLobby ? northCourtHomeSpace(home, floorSpace) : towerHomeSpace(tower, home, floorSpace); }
+  // The stairs on North Court's ground floor offer its residential floors (the hand-built interior shows this menu).
+  northCourtMenu() { return { building: NORTH_COURT_TOWER.building.name, current: 1, linked: 'north-court', floors: [{ floor: 1, title: 'Ground floor · Lounge', open: true }, ...NORTH_COURT_FLOORS.map((floor) => ({ floor, title: `Floor ${floor}`, summary: `${NORTH_COURT_TOWER.floor(floor).homes.length} apartments`, open: true }))] }; }
+  // From North Court's ground-floor stairs up to a hallway: the server moves the player from north-court into north-court-f<n>.
+  enterLinkedFloor(floor, player, now = 0) {
+    if (!NORTH_COURT_FLOORS.includes(floor)) return null;
+    this.#dispose(); this.active = this.northCourt;
+    if (!this.#buildTowerFloor(floor)) { this.active = null; return null; }
+    const p = this.towerFloor.space.inside; player.pos.set(p.x, p.y, p.z + 0.6); player.yaw = 0; player.vel.set(0, 0, 0); player.onGround = true; this.transitionReadyAt = now + TRANSITION_COOLDOWN;
+    return { active: true, transitioned: true, prompt: '', name: this.active.name, mobileLabel: '', spaceId: this.towerFloor.space.id, isolated: true, leftLinkedLobby: 'north-court',
+      transitions: [{ spaceId: this.towerFloor.space.id, action: 'enter' }], subtitle: `${this.towerFloor.record.title.toUpperCase()} · ${this.towerFloor.record.homes.length} APARTMENTS` };
   }
   get site() { return this.active ? { id: this.unit?.space.id || this.towerFloor?.space.id || this.active.e.spaceId, name: this.towerHome ? `${this.active.name} · ${this.towerHome.title}` : this.towerFloor ? `${this.active.name} · ${this.towerFloor.record.title}` : this.unit ? `${this.active.name} · ${this.unit.U.title}` : this.active.name } : null; }
   // The floors a lift offers: the lobby and storeys 2-6, each with its tier, value and size (all open to visit for now).
   floorMenu() {
     if (!this.active?.apartments) return null;
+    if (this.active.linked) return { ...this.northCourtMenu(), current: this.towerFloor?.record.floor || this.towerHome?.floor || 1 };
     if (this.active.tower) { const tower = this.active.tower; return { building: this.active.name, current: this.towerFloor?.record.floor || this.towerHome?.floor || 1, floors: [{ floor: 1, title: 'Grand Lobby', open: true },
       ...tower.residentialFloors.map((floor) => { const count = tower.floor(floor).homes.length; return { floor, title: floor === tower.penthouseFloor ? `Penthouse Level · ${count} homes` : `Residences · Floor ${floor}`, summary: floor === tower.penthouseFloor ? `${count} penthouses · private roof terraces` : `${count} luxury residences`, open: true }; })] }; }
     return { building: this.active.name, current: this.unit?.floor || 1, floors: [{ floor: 1, title: 'Lobby', open: true },
@@ -153,7 +173,7 @@ export class GenericInteriorSystem {
     }
     // A Tower residence opens back into its six-home floor hall at the private lift landing.
     if (this.towerHome && Math.hypot(player.pos.x - this.unit.U.lift.x, player.pos.z - this.unit.U.lift.z) < 1.8 && Math.abs(player.pos.y - this.unit.U.level) < 1) {
-      if (!interact || !interactionCooldownReady(now, this.transitionReadyAt)) return idle(`RESIDENCE ${this.towerHome.code} · ${tap} EXIT TO HALL`, 'HALL');
+      if (!interact || !interactionCooldownReady(now, this.transitionReadyAt)) return idle(`${this.active.linked ? this.towerHome.title.toUpperCase() : `RESIDENCE ${this.towerHome.code}`} · ${tap} EXIT TO HALL`, 'HALL');
       return this.#leaveTowerHome(player, now);
     }
     // On a Tower floor, each of the six permanent addresses has its own door and multiplayer space.
@@ -204,6 +224,9 @@ export class GenericInteriorSystem {
   // that is the one built. The server's state sets the position.
   enterSpace(spaceId) {
     if ((this.unit?.space.id || this.active?.e.spaceId) === spaceId) return true;
+    // North Court's hallways and units (reconnect, or the server's confirmation)
+    const ncHome = northCourtHomeForSpace(spaceId), ncFloor = northCourtFloorForSpace(spaceId);
+    if (ncHome || ncFloor) { this.#dispose(); this.active = this.northCourt; if (ncHome) this.#buildTowerHome(ncHome); else this.#buildTowerFloor(ncFloor); return true; }
     const towerDefinition = towerDefinitionForSpace(spaceId), tower = towerDefinition && this.entries.find((x) => x.e.spaceId === towerDefinition.lobbySpaceId), towerHomeRecord = towerHomeForSpace(spaceId), towerFloorMatch = towerDefinition && new RegExp(`^${towerDefinition.lobbySpaceId}-f(\\d+)$`).exec(spaceId);
     if (tower && (towerHomeRecord || towerFloorMatch)) {
       this.#dispose(); this.active = tower;
@@ -221,6 +244,8 @@ export class GenericInteriorSystem {
   // NC-LIFE-02B-2: the home the player is standing in, for drawing who is home (home-residents.js): a house's own
   // layout, or an apartment unit. Lobbies, towers, shops and every other building: null.
   get homeView() {
+    // North Court units: who is home there (their own residents) is drawn like any apartment
+    if (this.towerHome && this.active?.linked) return { spaceId: this.unit.space.id, kind: 'unit', unit: this.unit.U, layer: this.unit.space.layer ?? 0, avoid: [this.unit.U.lift, this.unit.space.inside] };
     if (!this.active || this.towerHome || this.towerFloor) return null;
     if (this.unit) return { spaceId: this.unit.space.id, kind: 'unit', unit: this.unit.U, layer: this.unit.space.layer ?? 0, avoid: [this.unit.U.lift, this.unit.space.inside] };
     if (this.active.e.template !== 'house') return null;
@@ -241,14 +266,14 @@ export class GenericInteriorSystem {
     this.group = this.buildUnit(it.e, U); this.scene.add(this.group);
   }
   #buildTowerFloor(floor) {
-    const tower = this.active.tower, record = tower?.floor(floor), entry = towerFloorEntry(tower, floor); if (!record || !entry) return false;
-    const layout = interiorLayout(entry), space = towerFloorSpace(tower, floor, interiorSpace(this.active.e));
+    const tower = this.active.tower, record = tower?.floor(floor), entry = this.#floorEntry(tower, floor); if (!record || !entry) return false;
+    const layout = interiorLayout(entry), space = this.#floorSpace(tower, floor);
     this.towerFloor = { record, entry, layout, space }; this.layout = layout; this.space = { ...space, liftLobby: space.inside };
     this.group = this.build(entry, layout); this.scene.add(this.group); this.exit = new THREE.Vector3(space.exit.x, space.exit.y, space.exit.z);
     return true;
   }
   #buildTowerHome(home) {
-    const tower = this.active.tower, entry = towerHomeEntry(tower, home), U = apartmentUnit(entry, home.floor), floorSpace = towerFloorSpace(tower, home.floor, interiorSpace(this.active.e)), space = towerHomeSpace(tower, home, floorSpace);
+    const tower = this.active.tower, entry = towerHomeEntry(tower, home), U = apartmentUnit(entry, home.floor), floorSpace = this.#floorSpace(tower, home.floor), space = this.#homeSpace(tower, home, floorSpace);
     this.towerHome = home; this.towerFloor = { record: tower.floor(home.floor), space: floorSpace }; this.unit = { floor: home.floor, U, space, home, entry };
     if (this.worldColliders && this.removeColliders) { this.shelved = this.worldColliders.filter((c) => c.cityChunk === this.active.e.buildingId && !c.entrySteps && !c.vehicle); this.removeColliders(this.shelved); }
     this.group = this.buildUnit(entry, U); this.scene.add(this.group); return true;
@@ -258,6 +283,10 @@ export class GenericInteriorSystem {
     if (this.towerHome) transitions.push({ spaceId: this.towerHome.spaceId, action: 'exit' });
     if (currentFloor) transitions.push({ spaceId: `${tower.lobbySpaceId}-f${currentFloor}`, action: 'exit' });
     this.#dispose();
+    if (floor === 1 && this.active.linked) { // North Court: back down the stairs to the hand-built ground floor (main.js re-opens it)
+      const name = this.active.name; this.active = null; player.vel.set(0, 0, 0); this.transitionReadyAt = now + TRANSITION_COOLDOWN;
+      return { active: true, transitioned: true, prompt: '', name, mobileLabel: '', spaceId: 'north-court', isolated: true, transitions, returnToLinkedLobby: 'north-court', subtitle: 'GROUND FLOOR · LOUNGE' };
+    }
     if (floor === 1) {
       this.#buildLobby(this.active); const l = this.space.liftLobby; player.pos.set(l.x, l.y, l.z + 0.6); player.yaw = Math.PI;
     } else {
@@ -270,7 +299,8 @@ export class GenericInteriorSystem {
   #enterTowerHome(home, player, now) {
     const floor = this.towerFloor.record, floorSpaceId = this.towerFloor.space.id; this.#dispose(); this.#buildTowerHome(home);
     const p = this.unit.space.inside; player.pos.set(p.x, p.y, p.z); player.vel.set(0, 0, 0); player.onGround = true; this.transitionReadyAt = now + TRANSITION_COOLDOWN;
-    return { active: true, transitioned: true, prompt: '', name: this.active.name, mobileLabel: '', spaceId: home.spaceId, isolated: false, transitions: [{ spaceId: home.spaceId, action: 'enter' }], subtitle: `${home.title.toUpperCase()} · ${PROPERTY_TIERS[home.tier].label.toUpperCase()} · VALUE ${PROPERTY_TIERS[home.tier].value.toLocaleString('en-US')} SNERDIE`, floor: floor.floor, from: floorSpaceId };
+    const subtitle = this.active.linked ? `${home.title.toUpperCase()} · NORTH COURT · PRIVATE RESIDENCE` : `${home.title.toUpperCase()} · ${PROPERTY_TIERS[home.tier].label.toUpperCase()} · VALUE ${PROPERTY_TIERS[home.tier].value.toLocaleString('en-US')} SNERDIE`;
+    return { active: true, transitioned: true, prompt: '', name: this.active.name, mobileLabel: '', spaceId: home.spaceId, isolated: false, transitions: [{ spaceId: home.spaceId, action: 'enter' }], subtitle, floor: floor.floor, from: floorSpaceId };
   }
   #leaveTowerHome(player, now) {
     const home = this.towerHome, floor = home.floor, space = this.unit.space; this.#dispose(); this.#buildTowerFloor(floor);

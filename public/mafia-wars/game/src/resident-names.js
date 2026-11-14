@@ -2,6 +2,7 @@
 // res_<i+1> (game id n_<index>) of the genesis seed. Each name fits the resident's body and look. The ten
 // chess players (chess-residents.js) keep the names they already had. Pure data: the bank's genesis, its
 // naming migration (0012) and the game all read this list, and a test keeps them in step.
+import { arrivalByNo } from './arrival-cohort.js';
 export const RESIDENT_NAMES = Object.freeze([
   'Denise Carter',    // res_0001 · bank teller
   'Marcus Bell',      // res_0002 · bank teller
@@ -40,4 +41,5 @@ export const RESIDENT_NAMES = Object.freeze([
   'Ms. Pearl',        // res_0035 · Laundromat early · chess
   'Carmen Ortiz',     // res_0036 · Sneaker Shop late
 ]);
-export const residentName = (index) => RESIDENT_NAMES[index] || null;
+// Arrivals (arrival-cohort.js) follow genesis: resident res_<n> for n > 36 takes its cohort name. Genesis itself names only the 36.
+export const residentName = (index) => RESIDENT_NAMES[index] || arrivalByNo(index + 1)?.name || null;

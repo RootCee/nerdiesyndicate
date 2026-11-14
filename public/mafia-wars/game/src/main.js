@@ -51,8 +51,8 @@ import { BankPanel } from './bank-panel.js';
 import { loadEconomyReports } from './economy-dashboard.js';
 import { ResidentPanel } from './resident-panel.js';
 import { FloorPanel } from './floor-panel.js';
-import { RESIDENT_NAMES } from './resident-names.js';
-import { PERMANENT_RESIDENT_IDENTITIES, PERMANENT_RESIDENT_SCHEDULES } from './permanent-residents.js';
+import { residentName } from './resident-names.js';
+import { CITY_RESIDENT_IDENTITIES, CITY_RESIDENT_SCHEDULES } from './permanent-residents.js';
 import { chessLevel, chessResident } from './chess-residents.js';
 import { NPC_BEHAVIOR, personalityOf } from './npc-behavior.js';
 import { npcIdFor } from './npc-schema.js';
@@ -72,6 +72,8 @@ import * as npcLibrary from './npc-library.js';
 import { StoreStaff } from './store-staff.js';
 import { BankStaff } from './bank-staff.js';
 import { WorkplaceStaff } from './workplace-staff.js';
+import { QaTime, qaTimePanelAllowed } from './qa-time.js';
+import { ResidentRegistration } from './resident-registration.js';
 import { HomeResidents } from './home-residents.js';
 import { isStoreOpen } from './store-hours.js';
 import { economicMinuteOfDay, setEconomicClock } from './resident-schedule.js';
@@ -81,9 +83,9 @@ import { createNetworkAudioDeduper } from './weapon-audio.js';
 import { createRendererDiagnostics } from './render-diagnostics.js';
 import { createMobilePerformanceOverlay } from './mobile-performance-overlay.js';
 import { createAdaptiveResolution } from './adaptive-resolution.js';
-import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-0.9.4-life02-p1-rc1';
+import { formatNerdieCash, setupCityWalletBridge } from './wallet-bridge.js?build=nc-0.10.0-m11-rc1';
 
-const GAME_BUILD_ID = 'nc-0.9.4-life02-p1-rc1';
+const GAME_BUILD_ID = 'nc-0.10.0-m11-rc1';
 const qs = new URLSearchParams(location.search);
 if (window.parent === window && location.pathname.startsWith('/mafia-wars/game/') && qs.get('standalone') !== '1') {
   location.replace('/mafia-wars/play');
@@ -268,7 +270,15 @@ function closeEconomyPanel(id) { $(id).hidden = true; if (!economyPanelOpen() &&
 // Service /v1/economy/activity): today's wages and sales, Roots visits, stock, decisions and manager changes.
 const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 // A preview room on the bank's accelerated clock sends it; store hours, staff and talk then follow it too.
-function followEconomicClock(e) { const c = e?.life?.clock; if (c) setEconomicClock({ minute: c.minute, acceleration: c.acceleration, at: c.at - multiplayerServerOffset }); }
+// Founder QA time (QA preview build): a QA room's clock arrives with qa: true (banner on); qa: false returns to real time.
+let qaTime = null;
+function followEconomicClock(e) {
+  const c = e?.life?.clock;
+  if (c?.qa === false) { setEconomicClock(null); qaTime?.setActive(false); storeHoursCheckAt = 0; return; }
+  if (c) { setEconomicClock({ minute: c.minute, acceleration: c.acceleration, at: c.at - multiplayerServerOffset }); if (c.qa === true || qaTime?.active) { qaTime?.setActive(c.qa === true, c.minute); storeHoursCheckAt = 0; } }
+}
+// Leaving a QA room (session over, rejoin, another room): its simulated clock never follows the player out.
+function endQaTime() { if (qaTime?.active) { setEconomicClock(null); qaTime.setActive(false); storeHoursCheckAt = 0; } }
 function openCityEconomy() {
   const a = cityService.activity?.() || { status: 'offline' };
   $('rootsTreasuryTitle').textContent = 'City Economy';
@@ -394,6 +404,15 @@ const founderAccess = cityService.founderSignIn ? {
     return loadEconomyReports(cityService, days);
   },
   room() { return latestEconomy || null; }, // this room's own economy model, shown beside the bank (never merged)
+  // NC Milestone 10: the Founder Command Center (read-only, full screen), opened from the Founder Executive Suite
+  async openCommand() {
+    await founderSession();
+    const { FounderCommandCenter } = await import('./founder-command.js');
+    (founderAccess.command ||= new FounderCommandCenter({
+      load: async (view, opts) => { await founderSession(); return cityService.founderCommand(view, opts); },
+      loadHistory: async () => ((await cityService.founderEconomy('history', 30))?.report?.days || []).map((d) => ({ day: d.day, treasury: Number(d.treasuryClose) || 0 })),
+    })).open();
+  },
 } : null;
 const bankPanel = new BankPanel({ cityService, founderAccess, onOpen: (open) => {
   if (open) { input.moveX = input.moveY = 0; input.fire = input.ads = input.sprint = false; document.exitPointerLock?.(); } else if (MATCH.started && !MATCH.over && !TOUCH) requestLock();
@@ -402,7 +421,15 @@ const bankPanel = new BankPanel({ cityService, founderAccess, onOpen: (open) => 
 // shift and where they are now; a signed-in founder also sees balances and the full address. While the panel
 // is open the server holds the resident in place, facing the player (npc-talk, refreshed every few seconds).
 const TALK_RANGE_M = 2.6, TALK_REFRESH_MS = 8000;
+// NC-LIFE-02 Milestone 4: City Hall registration (offered by the Registration clerk only when the City Service says it is open).
+const residentRegistration = new ResidentRegistration({
+  bridge: walletBridge, walletAddress: () => (latestWalletState?.connected && latestWalletState.chainId === 8453 ? latestWalletState.address : null),
+  sendIdentify: (pass) => (multiplayerActive ? multiplayer?.send({ type: 'identify', pass }) ?? false : false),
+  onRegistered: (profile, isNew) => hud.callout(isNew ? 'REGISTERED' : 'SIGNED IN', `RESIDENT ${profile.residentNo} · ${profile.displayName.toUpperCase()}`),
+});
+residentRegistration.loadConfig();
 const residentPanel = new ResidentPanel({
+  registration: residentRegistration,
   founder: { signedIn: () => !!cityService.founderSignedIn, resident: (id) => cityService.founderResident(id) },
   life: { plan: (id) => cityService.lifePlans?.().plans?.find((p) => p.residentId === id) || null },
   onWaypoint: (placeId) => {
@@ -414,8 +441,14 @@ const residentPanel = new ResidentPanel({
   },
 });
 // Stage 2 apartment buildings: the lift's floor menu (the lobby and storeys 2-6). Choosing a floor rides there.
+// NC-LIFE-02 Milestone 2: the same menu on North Court's ground-floor stairs (northCourtStairs), up to a hallway.
+let northCourtStairs = false;
 const floorPanel = new FloorPanel({
-  onChoose: (floor) => { const st = city?.interiors?.goToFloor(floor, player, time); if (st) applyBuildingTransition(st); },
+  onChoose: (floor) => {
+    const fromStairs = northCourtStairs && !!city?.apartment?.active; northCourtStairs = false;
+    const st = fromStairs ? (floor === 1 ? null : city?.interiors?.enterLinkedFloor(floor, player, time)) : city?.interiors?.goToFloor(floor, player, time);
+    if (st) applyBuildingTransition(st);
+  },
   onOpen: (open) => {
     if (open) { input.moveX = input.moveY = 0; input.fire = input.ads = input.sprint = false; document.exitPointerLock?.(); } else if (MATCH.started && !MATCH.over && !TOUCH) requestLock();
   },
@@ -423,6 +456,8 @@ const floorPanel = new FloorPanel({
 // A building door or a lift ride: the interior's render mode (an apartment shows the real city outside its
 // windows; other rooms are isolated), the callout, and the space messages the server needs, in order.
 function applyBuildingTransition(st) {
+  if (st.leftLinkedLobby) city?.apartment?.leaveUpstairs(); // North Court: up the stairs from the ground floor
+  if (st.returnToLinkedLobby) city?.apartment?.returnFromUpstairs(player, time); // and back down to it
   setInteriorRenderLayer(!!st.isolated);
   setCameraMode(thirdCamera.enabled); // re-snap after the teleport, keeping the player's view
   hud.callout(st.active ? st.name.toUpperCase() : 'BACK ON THE BLOCK', st.active ? (st.subtitle || 'SAFE ZONE') : 'EXPLORE THE CITY');
@@ -430,10 +465,10 @@ function applyBuildingTransition(st) {
 }
 // Only the city's permanent residents (the bank's 36) can talk: they have names, jobs and homes.
 function talkableResident(index, identity) {
-  const schedule = PERMANENT_RESIDENT_SCHEDULES[index];
-  if (!schedule || PERMANENT_RESIDENT_IDENTITIES[index]?.id !== identity?.id || !RESIDENT_NAMES[index]) return null;
+  const schedule = CITY_RESIDENT_SCHEDULES[index];
+  if (!schedule || CITY_RESIDENT_IDENTITIES[index]?.id !== identity?.id || !residentName(index)) return null;
   const chess = chessResident(npcIdFor(index));
-  return { index, residentId: schedule.residentId, name: RESIDENT_NAMES[index], personality: personalityOf(identity), job: schedule.employment,
+  return { index, residentId: schedule.residentId, name: residentName(index), personality: personalityOf(identity), job: schedule.employment,
     housing: { propertyId: residentHomes.get(index) || schedule.propertyId }, chess: chess ? { hello: chess.hello, levelLabel: chessLevel(chess.level)?.label } : null };
 }
 const CALM_FOR_TALK = new Set([NPC_BEHAVIOR.calm, NPC_BEHAVIOR.greet, NPC_BEHAVIOR.alert]);
@@ -466,12 +501,14 @@ const storeStaff = new StoreStaff(scene, { library: npcLibrary });
 let bankStaff = null; // the bank's tellers on shift (bank-staff.js), once the city is built
 // NC-LIFE-02 0.9.4: City Hall's clerks and the library's assistants at their stations (workplace-staff.js).
 const workplaceStaff = new WorkplaceStaff(scene, { library: npcLibrary });
+// Founder QA time (QA preview build): the banner for anyone in a QA room; the panel only on preview/local with ?qaTime=1.
+qaTime = new QaTime({ send: (m) => multiplayer?.send(m) ?? false, panel: qaTimePanelAllowed(), minuteNow: () => economicMinuteOfDay() });
 let talkStaff = false, storeHoursCheckAt = 0;
 const staffTalk = {
   update(interact) {
     const none = { prompt: '', mobileLabel: '' };
     // a store clerk across the counter, or (bank visits) a resident visiting the bank
-    const near = (reach) => { const i = storeStaff.nearby(player, reach); return i >= 0 ? { index: i, identity: PERMANENT_RESIDENT_IDENTITIES[i] } : workplaceStaff.nearby(player, reach) || bankStaff?.nearbyVisitor(player, reach) || null; };
+    const near = (reach) => { const i = storeStaff.nearby(player, reach); return i >= 0 ? { index: i, identity: CITY_RESIDENT_IDENTITIES[i] } : workplaceStaff.nearby(player, reach) || bankStaff?.nearbyVisitor(player, reach) || null; };
     if (residentPanel.open) { if (talkStaff && near(TALK_RANGE_M * 3)?.index !== talkIndex) residentPanel.close(); return none; }
     const who = near(TALK_RANGE_M + 1); if (!who || player.dead) return none;
     const index = who.index, resident = talkableResident(index, who.identity); if (!resident) return none;
@@ -630,6 +667,7 @@ function showShopReject(message) {
   if (message.reason === 'shop_cooldown') hud.callout('RESTOCK COOLING DOWN', Number.isFinite(message.readyAt) ? `READY IN ${Math.max(1, Math.ceil((message.readyAt - (Date.now() + multiplayerServerOffset)) / 1000))} S` : 'TRY AGAIN SOON');
   else if (message.reason === 'ammo_full') hud.callout('AMMO FULL', 'NOTHING TO RESTOCK');
   else if (message.reason === 'not_at_counter' || message.reason === 'not_in_shop') hud.callout('STEP UP TO THE COUNTER', 'AMMO · GUN SHOP');
+  else if (message.reason === 'private_residence') hud.callout('PRIVATE RESIDENCE', 'RESIDENTS AND INVITED GUESTS ONLY'); // NC-LIFE-02 Milestone 2
 }
 function updateDayNight() {
   if (!dayNight) return;
@@ -1024,6 +1062,7 @@ function startGame(mode = selectedMode, options = {}) {
   setCombatLobby(false);
   score.red = score.blue = 0; MATCH.left = MATCH.time; MATCH.over = false; MATCH.started = true; for (const n in ab) ab[n].have = 0; snitchUntil = 0;
   for (const interior of [city?.rootsLounge, city?.gunShop, city?.library, city?.bankInterior, city?.apartment, city?.originalHouse, city?.duplicatedHouse, city?.house]) if (interior) { interior.active = false; interior.interior.visible = false; }
+  if (city?.apartment) city.apartment.upstairs = false;
   city?.interiors?.reset(); floorPanel.close();
   libraryPanel.close(); bankPanel.close(); residentPanel.close(); cityPulsePanel.close();
   setInteriorRenderLayer(false);
@@ -1176,7 +1215,8 @@ function applyLocalContext(context, revision = localContextRevision + 1, state =
   if (target !== city?.bankInterior) bankPanel.close();
   residentPanel.close();
   // Stage 2 buildings: the server's word decides which one (if any) this client is in (a reconnect restores it)
-  const building = spaceId.startsWith('bld-') ? spaceId : null;
+  const building = spaceId.startsWith('bld-') || /^north-court-[fu]\d/.test(spaceId) ? spaceId : null; // North Court hallways and units too
+  if (city?.apartment) city.apartment.upstairs = /^north-court-[fu]\d/.test(spaceId);
   if (building) city?.interiors?.enterSpace(building); else city?.interiors?.reset();
   if (!building) floorPanel.close();
   setInteriorRenderLayer(!!target || (!!building && !city?.interiors?.inApartment)); // an apartment shows the city outside
@@ -1301,10 +1341,11 @@ function configureMultiplayerClient() {
     // RC1 hotfix 1c: back after an interruption. Resumed: the same session, so everything the room knows comes
     // again (welcome: players; the residents' roster afresh; the bank's staff): rebuild from it. Rejoined: the
     // room had let the session go, so this is a fresh one, entered as on first arrival at the spawn it assigns.
+    if (detail.state === 'connected' && multiplayerActive) residentRegistration.identify(); // Milestone 4: each connection gets our room pass (registered players only)
     if (detail.state === 'connected' && multiplayerActive && (detail.resumed || detail.rejoined)) {
       clearRemotePlayers(); npcRenderer.clear();
       if (detail.rejoined) {
-        bankStaff?.clear('rejoined'); workplaceStaff.clear();
+        bankStaff?.clear('rejoined'); workplaceStaff.clear(); endQaTime();
         const target = MULTIPLAYER_SPAWNS[(detail.spawnIndex || 0) % MULTIPLAYER_SPAWNS.length];
         startGame(GAME_MODES.FREE_ROAM, { multiplayer: true, spawn: freeCellNear(target.x, target.z, 4) });
       }
@@ -1332,7 +1373,7 @@ function configureMultiplayerClient() {
     if (['connection-lost', 'session-expired', 'room-full', 'disconnected'].includes(detail.state)) { clearRemotePlayers(); npcRenderer.clear(); }
     // RC1 hotfix: a dropped connection keeps the bank's tellers (the room re-sends who is there after reconnecting); a
     // finished session clears them.
-    if (['session-expired', 'room-full', 'disconnected'].includes(detail.state)) { bankStaff?.clear(detail.state); workplaceStaff.clear(); }
+    if (['session-expired', 'room-full', 'disconnected'].includes(detail.state)) { bankStaff?.clear(detail.state); workplaceStaff.clear(); endQaTime(); }
   });
   multiplayer.addEventListener('message', ({ detail: message }) => {
     if (message.type === 'welcome') {
@@ -1412,6 +1453,8 @@ function configureMultiplayerClient() {
       else { const remote = ensureRemote({ id: message.playerId, name: 'PLAYER', context: message.context, contextRevision: message.contextRevision, combat: message.combat }); remote?.setContext(message.context, message.contextRevision); remote?.setCombat(message.combat); if (remote && message.state) remote.teleport(message.state); }
     }
     else if (message.type === 'shop') { hud.callout('AMMO RESTOCKED', 'ALL RESERVES FULL · FREE'); sfx.ding(); }
+    else if (message.type === 'qa-time' || (message.type === 'reject' && message.qaTime)) qaTime?.result(message); // Founder QA time
+    else if (message.type === 'identity') residentRegistration.onIdentity(message); // Milestone 4: the room verified our room pass
     else if (message.type === 'reject' && message.chess) chessClient.onReject(message);
     else if (message.type === 'reject' && message.talk) { /* a busy resident just keeps walking; the card still works */ }
     else if (message.type === 'reject' && message.economy) {
@@ -1805,6 +1848,7 @@ function loop(now) {
       // Phase 2.1 the Nerdie City Bank: an explicit ENTER at the North Market door; its stations open the bank panel or the wallet
       const bankInteriorState = rootsState.active || rootsState.transitioned || gunShopState.active || gunShopState.transitioned || libraryState.active || libraryState.transitioned || !city.bankInterior || bankPanel.open ? { active: !!city.bankInterior?.active, transitioned: false, prompt: '' } : city.bankInterior.update(player, input, time, dt);
       const apartmentState = rootsState.active || rootsState.transitioned || gunShopState.active || gunShopState.transitioned || libraryState.active || libraryState.transitioned || bankInteriorState.active || bankInteriorState.transitioned ? { active: false, transitioned: false, prompt: '' } : city.apartment.update(player, input, time);
+      if (apartmentState.stairsMenu && city.interiors) { northCourtStairs = true; floorPanel.show(city.interiors.northCourtMenu()); } // North Court stairs
       const originalHouseState = apartmentState.active || apartmentState.transitioned
         ? { active: false, transitioned: false, prompt: '' }
         : city.originalHouse.update(player, input, time);
@@ -1821,7 +1865,7 @@ function loop(now) {
       const interiorActive = rootsState.active || gunShopState.active || libraryState.active || bankInteriorState.active || apartmentState.active || originalHouseState.active || duplicatedHouseState.active || houseState.active || buildingState.active;
       const interiorSite = rootsState.active ? city.rootsLounge.site : gunShopState.active ? city.gunShop.site : libraryState.active ? city.library.site : bankInteriorState.active ? city.bankInterior.site : apartmentState.active ? city.apartment.site : originalHouseState.active ? city.originalHouse.site : duplicatedHouseState.active ? city.duplicatedHouse.site : houseState.active ? city.house.site : buildingState.active ? city.interiors.site : null;
       cityInteriorName = interiorSite?.name || ''; cityInteriorId = interiorSite?.id || '';
-      if (time >= storeHoursCheckAt) { storeHoursCheckAt = time + 5; city.setStoresOpen?.(isStoreOpen(economicMinuteOfDay())); } // lights off after 10 PM Pacific
+      if (time >= storeHoursCheckAt) { storeHoursCheckAt = time + 5; city.setStoresOpen?.(isStoreOpen(economicMinuteOfDay())); qaTime?.refresh(); } // lights off after 10 PM Pacific
       homeResidents.update(dt, buildingState.active ? city.interiors.homeView : null, player);
       bankStaff?.update(dt, !!bankInteriorState.active, player);
       workplaceStaff.update(dt, libraryState.active ? 'academy-library' : buildingState.active ? city.interiors.site?.id : null, player, { solo: !multiplayerActive });
@@ -2019,4 +2063,4 @@ boot().catch((e) => {
   window.__showGameEntryFeedback?.(`The city could not finish loading: ${e.message}`, { error: true, retryLabel: 'Reload and retry' });
 });
 // expose for QA
-window.__hw = { gamepad, gamepadUi, get netStatus() { return netStatusEl ? { text: netStatusEl.textContent, visible: netStatusEl.style.display !== 'none', state: netStatusEl.dataset.state } : null; }, get navLoader() { return navLoader; }, get bankStaff() { return bankStaff; }, get workplaceStaff() { return workplaceStaff; }, get cityMap() { return cityMap; }, waypoints, npcRenderer, npcLibrary, homeResidents, residentHomes, scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, configureDestructionRendering, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, mobilePerformanceOverlay, adaptiveResolution, remotePlayers, applyLocalAppearance, applyLocalEquipment, requestMultiplayerEquipment, ensureWeaponVisual, characterAssetStats, get localAppearance() { return localAppearance; }, get localEquipment() { return localEquipment; }, get localEquipmentRevision() { return localEquipmentRevision; }, get localCombat() { return localCombat; }, get localContext() { return localContext; }, get undergroundMatch() { return undergroundMatch; }, get multiplayer() { return multiplayer; }, get multiplayerActive() { return multiplayerActive; }, get multiplayerDiagnostics() { return { client: multiplayer?.diagnostics?.() || null, localEquipment, localEquipmentRevision, localCombat, localContext, remotes: [...remotePlayers.values()].map((remote) => ({ id: remote.id, appearance: remote.appearance, ...remote.diagnostics() })) }; }, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };
+window.__hw = { gamepad, gamepadUi, get netStatus() { return netStatusEl ? { text: netStatusEl.textContent, visible: netStatusEl.style.display !== 'none', state: netStatusEl.dataset.state } : null; }, get navLoader() { return navLoader; }, get bankStaff() { return bankStaff; }, get workplaceStaff() { return workplaceStaff; }, get homeResidents() { return homeResidents; }, get qaTime() { return qaTime; }, get cityMap() { return cityMap; }, waypoints, npcRenderer, npcLibrary, homeResidents, residentHomes, scene, camera, player, bots, weapon, guns, launcher, arsenal, practiceResupply, combatSession, combatEvents, selectArenaSpawn, destruction, blast, configureDestructionRendering, score, MATCH, startMatch, startGame, startPracticeMatch, returnToCity, useAbility, thirdCamera, Q, renderer, input, THREE, fx, colliders, collisionBroadphaseStats, interiorSceneState, performanceProfile, mobilePerformanceOverlay, adaptiveResolution, remotePlayers, applyLocalAppearance, applyLocalEquipment, requestMultiplayerEquipment, ensureWeaponVisual, characterAssetStats, get localAppearance() { return localAppearance; }, get localEquipment() { return localEquipment; }, get localEquipmentRevision() { return localEquipmentRevision; }, get localCombat() { return localCombat; }, get localContext() { return localContext; }, get undergroundMatch() { return undergroundMatch; }, get multiplayer() { return multiplayer; }, get multiplayerActive() { return multiplayerActive; }, get multiplayerDiagnostics() { return { client: multiplayer?.diagnostics?.() || null, localEquipment, localEquipmentRevision, localCombat, localContext, remotes: [...remotePlayers.values()].map((remote) => ({ id: remote.id, appearance: remote.appearance, ...remote.diagnostics() })) }; }, get time() { return time; }, get destructionStreamingStats() { return destructionStreamingStats; }, get practiceCombat() { return practiceCombat; }, get combatLobbyOpen() { return combatLobbyOpen; }, get city() { return city; }, get localAvatar() { return localAvatar; }, get collisionDebug() { return collisionDebug; } };

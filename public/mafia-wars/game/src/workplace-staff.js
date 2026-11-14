@@ -8,14 +8,15 @@
 // Presence only: nothing here posts, pays, or reads balances.
 import { PERMANENT_RESIDENT_IDENTITIES, PERMANENT_RESIDENT_SCHEDULES } from './permanent-residents.js';
 import { economicMinuteOfDay } from './resident-schedule.js';
-import { assignStations, onDutyAt, staffedLocationForSpace, stationById } from './city-locations.js';
+import { assignStationsStable, onDutyAt, staffedLocationForSpace, stationById } from './city-locations.js';
 
 const WALK_SPEED = 1.25, ARRIVED = 0.06, NOTICE_M = 6, WAVE_MS = 2600, PLACE_WINDOW_MS = 1500, SOLO_REFRESH_MS = 5000;
 export const WORKPLACE_STAFF_LIMIT = 3; // one per station: City Hall's two counters and Registration desk, the library's three
 
 // Solo play: who works at a location this minute, with their stations ([{ index, residentId, station }]).
-export function soloStaff(locationId, minute, schedules = PERMANENT_RESIDENT_SCHEDULES) {
-  return assignStations(locationId, onDutyAt(locationId, minute, schedules).map((s) => ({ index: schedules.indexOf(s), residentId: s.residentId }))).filter((o) => o.station);
+// previous: Map(residentId -> station) from the last answer, so whoever holds a station keeps it (as the room does).
+export function soloStaff(locationId, minute, schedules = PERMANENT_RESIDENT_SCHEDULES, previous = new Map()) {
+  return assignStationsStable(locationId, onDutyAt(locationId, minute, schedules).map((s) => ({ index: schedules.indexOf(s), residentId: s.residentId })), previous).filter((o) => o.station);
 }
 // The residents to draw from a room message or solo list: known permanent residents at a real station of this
 // location, each resident and each station once, at most the limit. Returns [{ index, station }].
@@ -47,7 +48,10 @@ export class WorkplaceStaff {
   #wanted(locationId, solo) {
     if (!solo) return staffToDraw(locationId, this.room.spaceId === this.spaceId ? this.room.staff : []);
     const now = this.clock();
-    if (now - this.solo.at >= SOLO_REFRESH_MS || this.solo.locationId !== locationId) this.solo = { at: now, locationId, list: staffToDraw(locationId, soloStaff(locationId, this.minute())) };
+    if (now - this.solo.at >= SOLO_REFRESH_MS || this.solo.locationId !== locationId) {
+      const previous = this.solo.locationId === locationId ? this.solo.held || new Map() : new Map(), staff = soloStaff(locationId, this.minute(), undefined, previous);
+      this.solo = { at: now, locationId, held: new Map(staff.map((o) => [o.residentId, o.station])), list: staffToDraw(locationId, staff) };
+    }
     return this.solo.list;
   }
   // Each frame: the space the player is in (any space id; only staffed ones draw anyone), and solo or not.

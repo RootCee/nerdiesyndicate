@@ -4,7 +4,8 @@
 import { NPC_LIBRARY, NPC_PALETTES, NPC_ROLE_LABELS, NPC_SCHEMA_VERSION, npcIdFor } from './npc-schema.js';
 
 export const NPC_POPULATION = Object.freeze({
-  max: 36,         // identities per city room
+  max: 36,         // identities per city room seeded per room (rooms without the permanent population)
+  identityMax: 200, // identities a room accepts from the permanent population (36 at genesis, arrivals after; planning target ~200)
   maxActive: 24,   // hard ceiling on simultaneously simulated residents
   startActive: 12, // default active cap until device measurements justify more
   roles: Object.freeze({ civilian: 15, defensive: 7, worker: 8, guard: 6 }),

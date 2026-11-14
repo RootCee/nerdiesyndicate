@@ -108,6 +108,10 @@ export class BankPanel {
   async founderAction(action) {
     if (!this.founderAccess || this.founder.status === 'working') return;
     const [kind, arg] = String(action).split(':'), f = this.founder, access = this.founderAccess;
+    if (kind === 'command') { // NC Milestone 10: the full-screen, read-only Founder Command Center
+      try { await access.openCommand?.(); } catch (err) { f.error = err?.message || String(err); this.render(); }
+      return;
+    }
     if (kind === 'tab') {
       f.tab = arg === 'residents' && access.residents ? 'residents' : arg === 'economy' && access.economy ? 'economy' : 'overview'; f.selected = null; f.history = null; f.error = null;
       if (f.tab === 'residents' && !f.residents) return this.#founderLoad(async () => { f.residents = (await access.residents()).residents; });
@@ -201,7 +205,7 @@ export class BankPanel {
       const body = tab === 'overview' ? overview : tab === 'economy' ? (f.economy ? economyDashboardHtml(buildEconomyModel({ ...f.economy, room: this.founderAccess.room?.() || null })) : f.error ? '<p class="bp-note">The economy reports did not load. Press Refresh to try again.</p>' : '<p class="bp-note">Loading the economy…</p>') : f.selected && f.history ? this.#residentHtml(f.history) : this.#residentsHtml();
       return `<p class="bp-note">Signed in as ${esc(f.data.founder)} · session ends ${esc(new Date(f.data.sessionExpiresAt).toLocaleTimeString())}</p>
         ${tabs}${f.error ? `<div class="bp-warn"><p>${esc(f.error)}</p></div>` : ''}${body}
-        <div class="bp-actions"><button type="button" class="bp-b" data-founder="refresh">Refresh</button></div>`;
+        <div class="bp-actions"><button type="button" class="bp-b" data-founder="refresh">Refresh</button>${this.founderAccess.openCommand ? '<button type="button" class="bp-b on" data-founder="command">Open Command Center</button>' : ''}</div>`;
     }
     return `<p>The Founder Executive Suite is reserved for the founder's oversight of the treasury, residents, businesses, payroll, ledger integrity and security alerts.</p>
       ${f.status === 'error' ? `<div class="bp-warn"><p>${esc(f.error)}</p></div>` : ''}

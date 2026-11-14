@@ -13,6 +13,10 @@ export const isProductionHost = (hostname) => PRODUCTION_HOSTS.includes(String(h
 // NC release candidate 1: the protected Vercel preview of website branch mw-rc1 (its branch alias, or one of its
 // deployment URLs) talks only to its own preview Worker and a City Service stand-in, never to production.
 export const RC1_PREVIEW_MULTIPLAYER_SERVICE = 'https://nerdie-city-rc1-preview.buddieroots.workers.dev';
+// Founder QA time override build (QA preview only, never production): its preview deployments talk to the separate QA
+// preview Worker, so the RC1 preview Worker stays exactly as approved.
+export const QA_TIME_BUILD = true;
+export const QA_PREVIEW_MULTIPLAYER_SERVICE = 'https://nerdie-city-qa-preview.buddieroots.workers.dev';
 export const RC1_PREVIEW_CITY_SERVICE = 'https://nerdie-city-service-rc1-stub.buddieroots.workers.dev';
 export function isRc1PreviewHost(hostname) {
   return /^nerdiesyndicate-(git-mw-rc1(-[a-z0-9]+)*|[a-z0-9]{9})-rootcees-projects\.vercel\.app$/.test(String(hostname || '').toLowerCase());
@@ -36,7 +40,7 @@ export function resolveMultiplayerService(locationLike = globalThis.location) {
   const override = new URLSearchParams(locationLike?.search || '').get('mp');
   if (override && (isLocal || isPrivateLan)) return override.replace(/\/$/, '');
   if (isLocal) return LOCAL_MULTIPLAYER_SERVICE;
-  if (isRc1PreviewHost(hostname)) return RC1_PREVIEW_MULTIPLAYER_SERVICE;
+  if (isRc1PreviewHost(hostname)) return QA_TIME_BUILD ? QA_PREVIEW_MULTIPLAYER_SERVICE : RC1_PREVIEW_MULTIPLAYER_SERVICE;
   const previewService = PREVIEW_MULTIPLAYER_SERVICES[hostname]
     || (isHoodExpansionPreviewDeploymentHost(hostname)
       ? PREVIEW_MULTIPLAYER_SERVICES[HOOD_EXPANSION_PREVIEW_HOST]

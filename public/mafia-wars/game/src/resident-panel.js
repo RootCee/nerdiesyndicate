@@ -5,6 +5,8 @@ import { residentConversation } from './resident-talk.js';
 import { economicMinuteOfDay, pacificDayKey } from './resident-schedule.js';
 import { residentAddress } from './city-addresses.js';
 import { homeAddress } from './neighborhood-housing.js';
+import { homeActivityLabel, profileFromTraits } from './home-routine.js';
+import { CITY_RESIDENT_IDENTITIES } from './permanent-residents.js';
 
 const STYLE = `
 #residentPanel{position:fixed;inset:0;z-index:60;display:none;align-items:flex-end;justify-content:center;background:rgba(5,3,10,.45);font-family:'Barlow Condensed',system-ui,sans-serif;color:#f3eefc;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))}
@@ -40,7 +42,8 @@ const pacificDay = pacificDayKey; // a day key; only needs to change once a day 
 export class ResidentPanel {
   // founder: { signedIn(): boolean, resident(residentId): Promise<{ history }> } or null (balances only when signed in).
   // life (NC-LIFE-01A): { plan(residentId) -> { line, roots } | null }, today's recorded decision from the bank.
-  constructor({ founder = null, life = null, onWaypoint = () => {}, onOpen = () => {}, document: doc = globalThis.document, now = () => Date.now() } = {}) {
+  constructor({ founder = null, life = null, registration = null, onWaypoint = () => {}, onOpen = () => {}, document: doc = globalThis.document, now = () => Date.now() } = {}) {
+    this.registration = registration; // NC-LIFE-02 Milestone 4: the Registration clerk opens it when registration is open
     Object.assign(this, { founder, life, onWaypoint, onOpen, doc, now }); this.resident = null; this.log = []; this.mode = 'topics'; this.private = null;
   }
   get open() { return !!this.resident; }
@@ -57,6 +60,7 @@ export class ResidentPanel {
   close() { if (!this.resident) return; this.resident = null; this.root?.classList.remove('on'); this.onOpen(false); }
   choose(topic, placeId = null) {
     if (!this.resident) return;
+    if (topic === 'register') { if (this.registration?.available) { this.close(); this.registration.open(); } return {}; }
     if (topic === 'back') { this.mode = 'topics'; this.render(); return {}; }
     const label = topic === 'where' && placeId ? (PLACES[placeId] || placeId) : this.talk.topics.find((t) => t.id === topic)?.label;
     if (label) this.log.push({ who: 'you', text: label });
@@ -86,21 +90,24 @@ export class ResidentPanel {
   html() {
     const r = this.resident; if (!r) return '';
     const job = r.job, at = this.talk, p = this.private;
-    const where = at.activity === 'home' ? 'At home' : `${NOW[at.activity] || 'At'} ${esc(PLACES[at.locationId] || at.locationId)}`;
+    // NC-LIFE-02 Milestone 3: at home, what they are doing (never where home is)
+    const homeDoing = at.activity === 'home' ? homeActivityLabel({ residentId: r.residentId, minute: economicMinuteOfDay(this.now()), work: job || null, profile: profileFromTraits(CITY_RESIDENT_IDENTITIES[r.index]?.traits) }) : '';
+    const where = at.activity === 'home' ? `At home · ${esc(homeDoing)}` : `${NOW[at.activity] || 'At'} ${esc(PLACES[at.locationId] || at.locationId)}`;
     const facts = [
       job ? `<b>${esc(job.title)}</b> at ${esc(PLACES[job.workplaceId] || job.workplaceId)} · ${clock(job.shiftStartMinute)}–${clock(job.shiftStartMinute + job.shiftDurationMinutes)}` : '<b>No steady job</b> · city temp work',
       `Now: <b>${where}</b>`,
       `Lives at ${esc((p && residentAddress(r.housing?.propertyId)) || homeAddress(r.housing?.propertyId) || PLACES['north-court'])}`, // NC-LIFE-02B-2: Neighborhood One address for everyone
       `${esc(PERSONALITY[r.personality] || 'Friendly')}${r.chess ? ` · chess: ${esc(r.chess.levelLabel || 'player')}` : ''}`,
     ];
-    if (r.station === 'registration') facts.push('At the <b>Registration desk</b> · registration opens soon'); // NC-LIFE-02 0.9.4: nothing to sign up for yet
+    const canRegister = r.station === 'registration' && !!this.registration?.available; // Milestone 4: only when the City Service says it is open
+    if (r.station === 'registration') facts.push(canRegister ? 'At the <b>Registration desk</b> · registration is open' : 'At the <b>Registration desk</b> · registration opens soon');
     const today = r.residentId ? this.life?.plan?.(r.residentId) : null;
     if (today?.line) facts.push(`Today: <b>${esc(today.line)}</b>`);
     const money = p ? `<div class="rp-money"><div><b>CHECKING</b><span>${n(p.checking)}</span></div><div><b>SAVINGS</b><span>${n(p.savings)}</span></div><div><b>EARNED</b><span>${n(p.lifetime?.wages)}</span></div></div>` : '';
     const log = this.log.map((l) => `<div class="${l.who === 'you' ? 'rp-you' : 'rp-say'}">${esc(l.text)}</div>`).join('');
     const buttons = this.mode === 'places'
       ? [...at.reply('where').places.map((pl) => `<button type="button" class="rp-b" data-talk="where" data-place="${esc(pl.id)}">${esc(PLACES[pl.id] || pl.name)}</button>`), '<button type="button" class="rp-b" data-talk="back">Never mind</button>']
-      : at.topics.map((t) => `<button type="button" class="rp-b" data-talk="${esc(t.id)}">${esc(t.label)}</button>`);
+      : [...(canRegister ? ['<button type="button" class="rp-b" data-talk="register">Register as a resident</button>'] : []), ...at.topics.map((t) => `<button type="button" class="rp-b" data-talk="${esc(t.id)}">${esc(t.label)}</button>`)];
     return `<p class="rp-facts">${facts.join('<br>')}</p>${money}<div class="rp-log">${log}</div><div class="rp-actions">${buttons.join('')}</div>`;
   }
   render() {

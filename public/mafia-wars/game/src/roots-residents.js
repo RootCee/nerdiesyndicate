@@ -1,7 +1,7 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { seedPopulation } from './npc-population.js';
 import { applySeatedPose, findSeatBones } from './seated-pose.js';
-import { PERMANENT_RESIDENT_IDENTITIES } from './permanent-residents.js';
+import { CITY_RESIDENT_IDENTITIES } from './permanent-residents.js';
 import { barStations } from './city-locations.js';
 
 // NC-ECO-01C: residents settle clear of the doorway (exit range + TALK range) and at least `spacing` apart.
@@ -11,7 +11,7 @@ const SETTLED = 0.15;
 // A permanent resident (res_0007, NC-LIFE-01A) looks exactly as on the street; the room economy's
 // generated residents keep their seeded looks.
 const lookFor = (resident) => {
-  const permanent = /^res_\d{4}$/.test(resident.id) && PERMANENT_RESIDENT_IDENTITIES[Number(resident.id.slice(4)) - 1];
+  const permanent = /^res_\d{4}$/.test(resident.id) && CITY_RESIDENT_IDENTITIES[Number(resident.id.slice(4)) - 1];
   if (permanent) return { ...permanent, id: `roots-${resident.id}` };
   const index = Math.max(0, Number(String(resident.id).match(/\d+/)?.[0] || 1) - 1), batch = Math.floor(index / 36), identity = seedPopulation(`roots-economy-${batch}`, 36)[index % 36];
   return { ...identity, id: `roots-${resident.id}` };

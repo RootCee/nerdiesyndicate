@@ -47,7 +47,8 @@ function cityHallStations() {
   const L = cityHallLayout(), door = { x: L.doorX, z: L.maxZ - 1.6 }, counters = L.furniture.filter((f) => f.type === 'counter').sort((a, b) => a.x - b.x);
   const out = counters.map((c, i) => { const z = c.z - c.d / 2 - 0.5; return station(`counter-${i + 1}`, 'City Hall clerk', c.x, L.y, z, 0, [door, { x: L.doorX, z }, { x: c.x, z }]); });
   const desk = L.furniture.find((f) => f.station === 'registration');
-  if (desk) { const x = desk.x - desk.w / 2 - 0.5; out.push(station('registration', 'City Hall clerk', x, L.y, desk.z, Math.PI / 2, [door, { x, z: L.maxZ - 3 }, { x, z: desk.z }])); }
+  // Founder (13 Nov 2026): a lone clerk works counter 1; a second clerk on shift staffs the Registration desk; a third, counter 2.
+  if (desk) { const x = desk.x - desk.w / 2 - 0.5; out.splice(1, 0, station('registration', 'City Hall clerk', x, L.y, desk.z, Math.PI / 2, [door, { x, z: L.maxZ - 3 }, { x, z: desk.z }])); }
   return out;
 }
 // The library: an assistant behind the front desk (the directory desk by the door), and one beside each of the
@@ -84,9 +85,16 @@ export function stationsFor(locationId) {
 // Who works at which station: on-duty residents sorted by resident id take the stations in order, so the
 // answer is stable and the same in the room, in solo play and in tests. Extra residents (more on duty than
 // stations) get no station and are not drawn. residents: [{ residentId, ... }]
-export function assignStations(locationId, residents) {
-  const stations = stationsFor(locationId);
-  return [...residents].sort((a, b) => String(a.residentId).localeCompare(String(b.residentId))).map((r, i) => ({ ...r, station: stations[i]?.id || null }));
+export function assignStations(locationId, residents) { return assignStationsStable(locationId, residents, new Map()); }
+// The same with memory (previous: Map(residentId -> station id)): a queue in station order. Whoever is already working
+// keeps their place in it and newcomers join at the end, so an arrival never moves anyone; when someone leaves, those
+// after them move up one station, so the first stations (City Hall's counter 1, the library's front desk) stay covered.
+export function assignStationsStable(locationId, residents, previous = new Map()) {
+  const ids = stationsFor(locationId).map((s) => s.id), rank = (r) => { const i = ids.indexOf(previous.get(r.residentId)); return i < 0 ? Infinity : i; };
+  const sorted = [...residents].sort((a, b) => String(a.residentId).localeCompare(String(b.residentId)));
+  const queue = [...sorted].sort((a, b) => rank(a) - rank(b) || String(a.residentId).localeCompare(String(b.residentId)));
+  const out = new Map(queue.map((r, i) => [r.residentId, ids[i] || null]));
+  return sorted.map((r) => ({ ...r, station: out.get(r.residentId) || null }));
 }
 export const stationById = (locationId, id) => stationsFor(locationId).find((s) => s.id === id) || null;
 

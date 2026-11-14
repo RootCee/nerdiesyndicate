@@ -67,8 +67,8 @@ export function assignHomes(count, homes = neighborhoodHomes()) {
 // registry.set_neighborhood_homes(true) gives. Used only where there is no bank: local QA (NEIGHBORHOOD_HOMES=1)
 // and the no-database release-candidate preview Worker (HOUSING_PLAN). Never changes the bank or its records.
 export function schedulesWithPlannedHomes(schedules) {
-  const plan = new Map(assignHomes(schedules.length).map((h) => [h.residentId, h.propertyId]));
-  return schedules.map((s) => ({ ...s, propertyId: plan.get(s.residentId), homeLocationId: homeLocationFor(plan.get(s.residentId)) }));
+  const plan = new Map(assignHomes(schedules.filter((s) => !s.arrival).length).map((h) => [h.residentId, h.propertyId]));
+  return schedules.map((s) => (s.arrival ? s : { ...s, propertyId: plan.get(s.residentId), homeLocationId: homeLocationFor(plan.get(s.residentId)) }));   // arrivals have no planned home
 }
 
 let byProperty = null, byLocation = null;

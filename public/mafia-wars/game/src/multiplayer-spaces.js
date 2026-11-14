@@ -1,3 +1,4 @@
+import { northCourtSpaces } from './north-court-residences.js';
 import { APARTMENT_SITE } from './city-layout.js';
 import { gunShopSpace } from './gun-shop-layout.js';
 import { CHESS_PLAZA } from './city-park-layout.js';
@@ -37,6 +38,8 @@ export const MULTIPLAYER_SPACES = Object.freeze({
   'hood-duplicate-west-5': Object.freeze({ id: 'hood-duplicate-west-5', layer: 1, safeZone: true, entry: { x: 173.25, y: 0, z: 5.55 }, inside: { x: 159.7, y: 85, z: 4 }, exit: { x: 159.9, y: 85, z: 4 }, outside: { x: 173.55, y: 0, z: 5.55 }, bounds: { minX: 158.5, maxX: 171.5, minY: 84, maxY: 90, minZ: -1.5, maxZ: 9.5 } }),
   // Stage 2: every other building (interior-catalog.js): houses, apartments, shops, warehouses, City Hall, the Academy halls
   ...genericInteriorSpaces(),
+  // NC-LIFE-02 Milestone 2: North Court's hallways (storeys 2-4) and its 36 units, children of the ground floor
+  ...northCourtSpaces(),
 });
 
 export const MULTIPLAYER_SAFE_ZONES = Object.freeze(Object.values(MULTIPLAYER_SPACES)

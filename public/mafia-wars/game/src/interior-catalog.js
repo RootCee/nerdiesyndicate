@@ -130,7 +130,7 @@ const TEMPLATES = {
   },
   // A private lift hall. Door slabs are generated from the selected tower's permanent address registry.
   'tower-floor': (_k, entry) => {
-    const w = 18, d = 14;
+    const w = entry.towerFloor?.w || 18, d = entry.towerFloor?.d || 14; // North Court's hallways are longer corridors
     const doors = entry.towerFloor?.doors || neonTowerFloor(Number(/-f(\d+)$/.exec(entry.spaceId)?.[1]))?.doors || [];
     return { w, d, h: 3.2, palette: 'luxury', rooms: ['Lift hall'], partitions: [],
       furniture: [
@@ -340,7 +340,7 @@ export function apartmentUnit(entry, floor) {
     roof = { y: top, rect: rect(-A - 0.3, A + 0.3, -Dh - 0.3, Dh + 0.3), furniture: [box('lounger', -A + 2.0, Dh - 2.1, 0.8, 2.0, 0.4), box('lounger', -A + 4.6, Dh - 2.1, 0.8, 2.0, 0.4), box('tub', -A + 2.3, -Dh + 2.4, 2.2, 2.2, 0.8), box('plant', -A + 0.75, Dh - 0.75, 0.7, 0.7, 1.6), box('plant', A - 0.75, Dh - 0.75, 0.7, 0.7, 1.6), box('table', A - 2.6, Dh - 2.6, 1.2, 1.2, 0.74), box('rug', -A + 3.3, Dh - 2.1, 4.2, 2.6, 0.01, { collide: false })].map((o) => ({ ...o, y: 0 })) };
   }
   // the facade's windows on every side (facadeBays), with the front balcony bays as doors
-  const balcony = balconyFor(b, floor), openings = [];
+  const balcony = entry.towerHome?.noBalcony ? null : balconyFor(b, floor), openings = []; // North Court's facade has no balconies
   for (const [side, [sx, sz]] of Object.entries(NORMALS)) {
     const length = sx ? b.depth : b.width, half = sx ? b.width / 2 : b.depth / 2, bays = facadeBays(length), sux = sz, suz = -sx, front = side === b.front;
     for (let i = 0; i < bays.bays; i++) {

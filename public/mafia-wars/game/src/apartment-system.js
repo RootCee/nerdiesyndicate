@@ -1,6 +1,7 @@
 import * as THREE from '/mafia-wars/game/vendor/three/three.module.js';
 import { ceilingIntersection, insideInteractionRange, interactionCooldownReady, shouldTransitionApartment } from './city-layout.js';
 import { northCourtExterior } from './city-showcase.js';
+import { NORTH_COURT_STAIRS } from './north-court-residences.js';
 
 const TRANSITION_COOLDOWN = 0.65;
 
@@ -38,6 +39,7 @@ export class HybridApartmentSystem {
     this.addCollider = addCollider;
     this.mobile = mobile;
     this.active = false;
+    this.upstairs = false; // NC-LIFE-02 Milestone 2: on a hallway or in a unit (generic-interiors.js has the player)
     this.prompt = '';
     this.transitionReadyAt = 0;
     this.exterior = new THREE.Group(); this.exterior.name = `apartment-exterior-${site.id}`;
@@ -52,6 +54,15 @@ export class HybridApartmentSystem {
     this.insideSpawn = new THREE.Vector3(interiorFrontX + 1.2, site.interiorY, site.z);
     this.exit = new THREE.Vector3(interiorFrontX + 0.8, site.interiorY, site.z);
     this.outsideSpawn = new THREE.Vector3(frontX - 1.2, 0, site.z);
+    this.stairs = site.id === 'north-court' ? new THREE.Vector3(NORTH_COURT_STAIRS.x, NORTH_COURT_STAIRS.y, NORTH_COURT_STAIRS.z) : null;
+  }
+  // Up to a hallway: this interior closes; the generic interior system shows the hallway (player not moved here).
+  leaveUpstairs() { this.active = false; this.interior.visible = false; this.upstairs = true; this.prompt = ''; }
+  // Back down from a hallway: the ground floor again, standing by the stairs facing the lounge.
+  returnFromUpstairs(player, now = 0) {
+    this.upstairs = false; this.active = true; this.interior.visible = true;
+    player.pos.set(this.stairs.x - 0.9, this.stairs.y, this.stairs.z); player.vel.set(0, 0, 0); player.onGround = true; player.yaw = Math.PI / 2;
+    this.transitionReadyAt = now + TRANSITION_COOLDOWN;
   }
 
   buildExterior() {
@@ -155,10 +166,23 @@ export class HybridApartmentSystem {
     wallCollider(this.addCollider, cx + 5.4, y + 0.9, cz - 4.25, 1.2, 1.8, 0.75, { interior: s.id, furniture: 'fridge' });
     wallCollider(this.addCollider, cx + 3.4, y + 0.325, cz + 2.7, 3.4, 0.65, 1.8, { interior: s.id, furniture: 'sofa' });
     wallCollider(this.addCollider, cx - 2.4, y + 0.225, cz - 2.25, 2.8, 0.45, 4.2, { interior: s.id, furniture: 'bed' });
+    // NC-LIFE-02 Milestone 2: the stairway up to the apartment floors, a door in the east wall (decor; the stairs point is
+    // in front of it). Nothing else in this interior changes.
+    if (s.id === 'north-court') {
+      box(g, doorMat, [0.12, 2.4, 1.5], [cx + w / 2 - 0.12, y + 1.2, cz], 'north-court-stairs-door');
+      box(g, brass, [0.08, 0.32, 1.1], [cx + w / 2 - 0.14, y + 2.62, cz], 'north-court-stairs-sign');
+    }
   }
 
   update(player, input, now = 0) {
+    if (this.upstairs) return { active: false, transitioned: false, prompt: '', cooldownReady: false };
     const wantsInteract = !!input.interact;
+    // Milestone 2: the stairs to the apartment floors (a floor menu; only on an explicit interaction, never on contact)
+    if (this.active && this.stairs && insideInteractionRange(player.pos, this.stairs, 1.8)) {
+      this.prompt = `NORTH COURT STAIRS · ${this.mobile ? 'TAP' : '[E]'} CHOOSE FLOOR`;
+      const open = wantsInteract && interactionCooldownReady(now, this.transitionReadyAt);
+      return { active: true, transitioned: false, prompt: this.prompt, mobileLabel: 'STAIRS', stairsMenu: open, cooldownReady: true };
+    }
     const target = this.active ? this.exit : this.entry;
     const near = insideInteractionRange(player.pos, target, this.active ? 2.7 : 2.8);
     const action = this.mobile ? (this.active ? 'TAP EXIT' : 'TAP ENTER') : (this.active ? '[E] EXIT' : '[E] ENTER');

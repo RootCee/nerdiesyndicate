@@ -88,6 +88,14 @@ export class CityServiceClient {
     if (!/^res_[0-9]{4}$/.test(String(residentId))) return Promise.reject(new Error('Unknown resident.'));
     return this.#founderGet(`/v1/founder/residents/${residentId}`, 'This resident\'s history');
   }
+  // NC Milestone 10: the Founder Command Center's read-only views (server checks the founder session and logs every view).
+  founderCommand(view, { target = null, params = {} } = {}) {
+    const views = ['overview', 'economy', 'residents', 'resident', 'organizations', 'territory', 'leadership', 'businesses', 'property', 'nfts', 'ledger', 'events', 'health', 'explain'];
+    if (!views.includes(view)) return Promise.reject(new Error('Unknown view.'));
+    if (target !== null && !/^[a-z0-9_]{2,40}$/.test(String(target))) return Promise.reject(new Error('Unknown record.'));
+    const q = new URLSearchParams(Object.entries(params || {}).filter(([k, v]) => ['q', 'kind', 'party', 'limit', 'ref'].includes(k) && v !== '' && v != null).map(([k, v]) => [k, String(v).slice(0, 60)]));
+    return this.#founderGet(`/v1/founder/command/${view}${target ? `/${target}` : ''}${q.size ? `?${q}` : ''}`, 'This Command Center view');
+  }
   async #founderGet(path, label) {
     if (!this.founderSignedIn) throw new Error('Sign in with the founder wallet first.');
     const r = await this.fetch(`${this.endpoint}${path}`, { method: 'GET', headers: { accept: 'application/json', authorization: `Bearer ${this.founderSession.token}` } });

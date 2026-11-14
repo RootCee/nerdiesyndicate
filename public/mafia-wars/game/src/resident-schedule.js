@@ -65,12 +65,15 @@ export function rootsEvening(work) {
 // talk card and the Founder Executive Suite agree without storing anything. Tuned (40 minutes, 70% of free
 // mornings) to about 1.5 customers in the bank on average during teller hours, at most 8. A visit is only a place in the day:
 // no ledger entry, no balance change, no tokens.
-export const BANK_VISIT_RULES = Object.freeze({ locationId: 'nerdie-city-bank', open: 480, close: 720, minutes: 40, step: 5, perThousand: 700 });
+// Bank visits (approved 11 November 2026: a four-hour morning window, about 1.5 customers at a time) start when the bank
+// opens: 9 AM-1 PM since migration 0017 (the bank is open 9 AM-6 PM).
+export const BANK_VISIT_RULES = Object.freeze({ locationId: 'nerdie-city-bank', open: 540, close: 780, minutes: 40, step: 5, perThousand: 700 });
 // The day key the talk card already uses (resident-panel.js); it only needs to change once a day.
 export const pacificDayKey = (ms = Date.now()) => new Date(ms - 7 * 3_600_000).toISOString().slice(0, 10);
 const fnv = (text) => { let h = 0x811c9dc5; for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h >>> 0; };
 export function residentBankVisit(residentId, dayKey, work, homeLocationId = 'north-court', index = null, evening = null, rules = BANK_VISIT_RULES) {
   if (typeof residentId !== 'string' || typeof dayKey !== 'string') return null;
+  if (work?.workplaceId === rules.locationId) return null; // the bank's own tellers never visit it as customers (staggered shifts, 0017)
   const h = fnv(`${residentId}|${dayKey}|bank-visit`);
   if (h % 1000 >= rules.perThousand) return null;
   const slots = Math.floor((rules.close - rules.open - rules.minutes) / rules.step) + 1, from = rules.open + (fnv(`${h}`) % slots) * rules.step, to = from + rules.minutes;

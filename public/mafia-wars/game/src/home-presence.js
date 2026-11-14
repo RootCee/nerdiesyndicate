@@ -3,6 +3,7 @@
 // Only interiors the game already builds are used — a house's own layout (interiorLayout) or an apartment
 // unit (apartmentUnit) — never new geometry. North Court (one interior for 36 homes) and lobbies show no one.
 import { parseHomePropertyId } from './home-ids.js';
+import { HOME_ACTIVITIES } from './home-routine.js';
 
 // iPhone / desktop caps on residents drawn inside one home (the outdoor caps are 10 / 16).
 export const HOME_PRESENCE_LIMITS = Object.freeze({ mobile: 2, desktop: 4 });
@@ -28,7 +29,7 @@ const boxOf = (f) => ({ minX: f.x - f.w / 2, maxX: f.x + f.w / 2, minZ: f.z - f.
 // avoid: [{ x, z }] points to keep clear (arrival point, exit, lift). Returns up to `count` spots
 // { x, y, z, yaw } on the main floor, clear of furniture, walls, stairs and doorways, spaced apart,
 // living room first (nearest the sofa), facing into the room. Deterministic.
-export function homePresenceSpots(view, count, avoid = []) {
+export function homePresenceSpots(view, count, avoid = [], anchorPoint = null) {
   if (!view || count <= 0) return [];
   const house = view.kind === 'house', L = house ? view.layout : null, U = house ? null : view.unit;
   const bounds = house ? { minX: L.minX, maxX: L.maxX, minZ: L.minZ, maxZ: L.maxZ } : U?.inner;
@@ -47,7 +48,7 @@ export function homePresenceSpots(view, count, avoid = []) {
     for (const r of U.runs || []) walls.push(r);
     for (const o of U.openings || []) if (o.door) avoid = [...avoid, { x: o.x, z: o.z }];
   }
-  const anchor = (house ? L.furniture : U.furniture).find((f) => f.type === 'sofa') || { x: (bounds.minX + bounds.maxX) / 2, z: (bounds.minZ + bounds.maxZ) / 2 };
+  const anchor = anchorPoint || (house ? L.furniture : U.furniture).find((f) => f.type === 'sofa') || { x: (bounds.minX + bounds.maxX) / 2, z: (bounds.minZ + bounds.maxZ) / 2 };
   const free = [];
   for (let x = bounds.minX + WALL_PAD + BODY; x <= bounds.maxX - WALL_PAD - BODY + 1e-9; x += STEP) {
     for (let z = bounds.minZ + WALL_PAD + BODY; z <= bounds.maxZ - WALL_PAD - BODY + 1e-9; z += STEP) {
@@ -65,4 +66,26 @@ export function homePresenceSpots(view, count, avoid = []) {
     spots.push({ x: p.x, y, z: p.z, yaw: Math.atan2(anchor.x - p.x, anchor.z - p.z) }); // face the living area
   }
   return spots;
+}
+
+// NC-LIFE-02 Milestone 3: where a resident is while doing a home activity (home-routine.js), using the home's own furniture:
+// sleep -> lying on the bed; relax -> seated on the sofa facing the room; cook / eat / tidy -> standing at the counter,
+// table or wardrobe, facing it. taken: placements already used (another resident). Returns
+// { pose: 'lie'|'sit'|'stand', x, y, z, yaw, seatTop? } or null when the home has no such furniture (fallback: a free spot).
+const ANCHOR_TYPES = Object.freeze({ bed: ['bed'], sofa: ['sofa', 'armchair'], counter: ['counter', 'island', 'fridge'], table: ['table', 'round-table', 'desk'], wardrobe: ['wardrobe', 'shelf', 'dresser'] });
+export function homeActivityPlacement(view, kind, avoid = [], taken = []) {
+  const info = HOME_ACTIVITIES[kind]; if (!view || !info) return null;
+  const house = view.kind === 'house', L = house ? view.layout : null, U = house ? null : view.unit;
+  const bounds = house ? { minX: L.minX, maxX: L.maxX, minZ: L.minZ, maxZ: L.maxZ } : U?.inner; if (!bounds) return null;
+  const y = house ? L.y : U.level, cx = (bounds.minX + bounds.maxX) / 2, cz = (bounds.minZ + bounds.maxZ) / 2;
+  const f = (house ? L.furniture : U.furniture).find((o) => ANCHOR_TYPES[info.anchor].includes(o.type)); if (!f) return null;
+  const used = (p) => taken.some((t) => Math.hypot(t.x - p.x, t.z - p.z) < SPACING);
+  const r2 = (v) => Math.round(v * 100) / 100;
+  if (info.pose === 'lie') { const p = { pose: 'lie', x: f.x, y: r2(y + Math.min(f.h, 0.55)), z: f.z, yaw: f.w >= f.d ? Math.PI / 2 : 0 }; return used(p) ? null : p; }
+  if (info.pose === 'sit') { // the sofa's long front edge, toward the middle of the room
+    const alongX = f.w >= f.d, dx = alongX ? 0 : Math.sign(cx - f.x) || 1, dz = alongX ? Math.sign(cz - f.z) || 1 : 0, half = (alongX ? f.d : f.w) / 2;
+    const p = { pose: 'sit', x: r2(f.x + dx * half * 0.25), y, z: r2(f.z + dz * half * 0.25), yaw: Math.atan2(dx, dz), seatTop: r2(y + 0.45) }; return used(p) ? null : p;
+  }
+  const spot = homePresenceSpots(view, 8, avoid, { x: f.x, z: f.z }).find((p) => !used(p)); if (!spot) return null;
+  return { pose: 'stand', x: spot.x, y: spot.y, z: spot.z, yaw: Math.atan2(f.x - spot.x, f.z - spot.z) };
 }

@@ -15,9 +15,9 @@ import { buildNavGraph, findRoute, insideObstacle, segmentClear } from './city-n
 import { NPC_POPULATION, seedPopulation, seededRandom } from './npc-population.js';
 import { PROTOCOL_VERSION } from './multiplayer-protocol.js';
 import { NPC_BEHAVIOR, NPC_BEHAVIOR_RULES, greetingFor, personalityOf, reactionTo, severityOf } from './npc-behavior.js';
-import { NPC_COMBAT_RULES, assessThreat, strikeProfile, weaponClass } from './npc-combat.js';
+import { NPC_COMBAT_RULES, armedProfile, assessThreat, strikeProfile, weaponClass } from './npc-combat.js';
 import { isInsideSafeZone } from './multiplayer-spaces.js';
-import { cityShotOccluded, publicCityShotOccluded, targetDistance } from './multiplayer-combat.js';
+import { cityShotOccluded, publicCityShotOccluded, targetDistance, MULTIPLAYER_WEAPON_RULES } from './multiplayer-combat.js';
 import { storeById } from './store-hours.js';
 import { BANK_SPACE_ID } from './bank-layout.js';
 import { bodyHit, residentBodyOptions } from './hit-regions.js';
@@ -26,6 +26,7 @@ import { isHomeLocation } from './home-ids.js';
 import { homePoi } from './neighborhood-housing.js';
 import { scheduledPlace, residentBankVisit, pacificDayKey } from './resident-schedule.js';
 import { ROOM_STAFFED_LOCATIONS } from './city-locations.js';
+import { patrolPoi, zoneAt } from './territory-zones.js';
 
 export const NPC_SIM_RULES = Object.freeze({
   tickMs: 200,
@@ -68,7 +69,7 @@ export class CityNpcSimulation {
   // scheduleMinute: (nowMs) => minute of the economic day. Given, schedules follow it (the bank's real
   // Pacific day) instead of the sky's fast cycle, so a resident is where the ledger says they are.
   constructor({ seed = 'room', identities = null, schedules = null, cityClock = null, scheduleMinute = null, maxActive = NPC_POPULATION.startActive, population = NPC_POPULATION.max, plan = createCityPlan(), rules = NPC_SIM_RULES, reactions = false, combat = false, structureOcclusion = false, homesIndoors = false } = {}) {
-    this.reactions = reactions === true; this.combat = this.reactions && combat === true; this.panicQueue = []; this.strikes = [];
+    this.reactions = reactions === true; this.combat = this.reactions && combat === true; this.panicQueue = []; this.strikes = []; this.ammoUsed = new Map();
     // NC-LIFE-02B (NPC_HOMES): residents at home go inside their own front door, like store staff on shift.
     this.homesIndoors = homesIndoors === true;
     // true: the static structures; a function: the room's live test (M6.8B open faces included).
@@ -76,9 +77,10 @@ export class CityNpcSimulation {
     this.rules = rules; this.plan = plan; this.random = seededRandom(`sim:${seed}`);
     this.maxActive = Math.max(0, Math.min(NPC_POPULATION.maxActive, maxActive | 0));
     // Bank P1.2: a room given the city's permanent identities shows those residents; otherwise it seeds its own (unchanged)
-    this.identities = Array.isArray(identities) && identities.length ? identities.slice(0, NPC_POPULATION.max) : seedPopulation(seed, population);
+    this.identities = Array.isArray(identities) && identities.length ? identities.slice(0, NPC_POPULATION.identityMax) : seedPopulation(seed, population);
     this.schedules = new Map((Array.isArray(schedules) ? schedules : []).map((s) => [s.gameId, s]));
     this.evenings = new Map(); // NC-LIFE-01A: residentId -> tonight's window (setEvenings)
+    this.patrols = new Map(); this.gang = null; this.clashes = []; // NC Milestone 9: gang patrols and challenges (setGangs)
     this.cityClock = cityClock?.enabled ? cityClock : null; this.scheduleMinute = typeof scheduleMinute === 'function' ? scheduleMinute : null;
     this.graph = null; this.hard = null; this.pois = cityPois(plan).filter((p) => !p.spaceId || p.kind === 'apartment');
     // Scheduled destinations include workplaces with an interior (the bank, Ammo): staff wait at the street door.
@@ -138,12 +140,26 @@ export class CityNpcSimulation {
   forgetViewer(playerId) { this.viewers.delete(playerId); }
   // NC-LIFE-01A: tonight's plans from the bank (residentId -> { locationId, from, to }); replaces the last set.
   setEvenings(evenings) { this.evenings = new Map(evenings); }
+  // Milestone 11: residents without a genesis job (arrivals, and genesis residents with none) work where the bank says: a City job or a
+  // business staff job. Genesis jobs never change here. Returns how many changed.
+  setArrivalWork(work) {
+    const byResident = new Map((Array.isArray(work) ? work : []).map((w) => [w?.residentId, w])); let changed = 0;
+    for (const [gameId, s] of this.schedules) {
+      if (!s.arrival && !s.flexibleWork && s.employment) continue;
+      const w = byResident.get(s.residentId), next = w && typeof w.workplaceId === 'string' && Number.isInteger(w.shiftStartMinute) && w.shiftStartMinute >= 0 && w.shiftStartMinute < 1440
+        && Number.isInteger(w.shiftDurationMinutes) && w.shiftDurationMinutes > 0 && w.shiftDurationMinutes <= 480
+        ? Object.freeze({ jobId: String(w.jobId || '').slice(0, 80), title: String(w.title || 'Staff').replace(/[<>]/g, '').slice(0, 60), workplaceId: w.workplaceId.slice(0, 60), shiftStartMinute: w.shiftStartMinute, shiftDurationMinutes: w.shiftDurationMinutes }) : null;
+      if (JSON.stringify(next) === JSON.stringify(s.employment)) continue;
+      this.schedules.set(gameId, Object.freeze({ ...s, employment: next, flexibleWork: true })); changed++;
+    }
+    return changed;
+  }
   // Who the schedules put at a place at this minute (every permanent resident, simulated nearby or not).
   scheduledAt(locationId, minute) {
     const here = [];
     const now = Date.now(), indexOf = new Map(this.residents.map((r) => [r.identity.id, r.index]));
     for (const [gameId, s] of this.schedules) {
-      const index = indexOf.get(gameId) ?? null, evening = this.evenings.get(s.residentId) || null;
+      const index = indexOf.get(gameId) ?? null, evening = this.evenings.get(s.residentId) || this.patrols.get(s.residentId) || null;
       const place = scheduledPlace(s.employment, minute, s.homeLocationId || 'north-court', index, evening, this.#visitFor(s, index, evening, now));
       if (place.locationId === locationId) here.push({ gameId, residentId: s.residentId, activity: place.activity, employment: s.employment });
     }
@@ -154,7 +170,7 @@ export class CityNpcSimulation {
     if (!schedule || (!this.scheduleMinute && !this.cityClock)) return null;
     if (this.minuteAt?.now !== now) this.minuteAt = { now, minute: this.scheduleMinute ? this.scheduleMinute(now) : Math.floor(hourAt(now, this.cityClock) * 60) }; // once per tick
     const minute = this.minuteAt.minute;
-    const evening = this.evenings.get(schedule.residentId) || null;
+    const evening = this.evenings.get(schedule.residentId) || this.patrols.get(schedule.residentId) || null;
     const { activity, locationId } = scheduledPlace(schedule.employment, minute, schedule.homeLocationId || 'north-court', r.index, evening, this.#visitFor(schedule, r.index, evening, now));
     r.economicActivity = activity; r.economicLocation = locationId;
     // NC-LIFE-02A-1: a Neighborhood One home (home:<buildingId>) resolves to its own street door, found
@@ -225,7 +241,7 @@ export class CityNpcSimulation {
   }
   get indoorsAtHome() { return this.residents.reduce((n, r) => n + (r.homeDoor ? 1 : 0), 0); }
   #homePoi(locationId) {
-    if (!this.schedulePois.has(locationId)) { const poi = homePoi(locationId); if (!poi) return null; this.schedulePois.set(locationId, poi); }
+    if (!this.schedulePois.has(locationId)) { const poi = homePoi(locationId) || patrolPoi(locationId); if (!poi) return null; this.schedulePois.set(locationId, poi); }
     return this.schedulePois.get(locationId);
   }
   // A free spot around a scheduled place (staff and visitors gather by the door, neighbours around the
@@ -419,6 +435,103 @@ export class CityNpcSimulation {
   }
 
   drainStrikes() { const strikes = this.strikes; this.strikes = []; return strikes; }
+  // Milestone 5 expansion: which residents carry a gun and how many rounds (the City Service's registry.resident_arms, refreshed by the
+  // transport). A newer inventory version replaces what the room holds, less rounds fired here and not yet reported (never more).
+  setResidentArms(map = {}) {
+    for (const r of this.residents) {
+      const residentId = this.schedules.get(r.identity.id)?.residentId, fed = residentId ? map[residentId] : null;
+      if (!fed || !MULTIPLAYER_WEAPON_RULES[fed.weaponId] || fed.weaponId === 'rpg') { r.arms = null; continue; }
+      if (r.arms && r.arms.weaponId === fed.weaponId && (fed.version ?? 0) <= r.arms.version) continue;
+      const pending = this.ammoUsed.get(`${residentId}|${fed.weaponId}`) || 0;
+      r.arms = { weaponId: fed.weaponId, rounds: Math.max(0, (Number(fed.rounds) | 0) - pending), version: fed.version ?? 0, residentId };
+    }
+  }
+  // Rounds residents fired since the last call: [{ owner, weaponId, rounds }] for the bank's keyed settlement (registry.arms_consume).
+  drainAmmoUsage() { const out = [...this.ammoUsed].map(([k, rounds]) => { const [owner, weaponId] = k.split('|'); return { owner, weaponId, rounds }; }); this.ammoUsed.clear(); return out; }
+  // NC Milestone 9: the gangs (the City Service's registry.gang_feed): who belongs to which crew, which crews are hostile, tonight's
+  // challenges and patrols (a patrol is an evening plan to the zone's doorstep anchor; a Roots night takes precedence).
+  setGangs(feed = {}) {
+    const members = feed.members || {}, recovering = new Set(feed.recovering || []);
+    this.gang = { hostile: new Set((feed.hostile || []).map(([a, b]) => `${a}|${b}`)), challenges: (feed.challenges || []).filter((c) => c && c.zoneId && Array.isArray(c.orgs)) };
+    for (const r of this.residents) { const rid = this.schedules.get(r.identity.id)?.residentId; r.gangOrg = (rid && members[rid]) || null; r.recovering = !!rid && recovering.has(rid); }
+    this.patrols = new Map((feed.patrols || []).filter((p) => !recovering.has(p.residentId)).map((p) => [p.residentId, { locationId: `zone:${p.zoneId}`, from: p.from, to: p.to }]));
+  }
+  drainClashes() { const out = this.clashes; this.clashes = []; return out; }
+  #hostile(a, b) { return !!a && !!b && a !== b && (this.gang?.hostile.has(`${a}|${b}`) || this.gang?.hostile.has(`${b}|${a}`)); }
+  // A gang member in a challenge window, in its zone, armed, healthy and with the nerve for it, may open fire on a rival close by,
+  // never in a protected place, never with a civilian right beside either of them; most of the time nothing happens.
+  #gangStep(r, active, now, players = []) {
+    if (r.clash) return this.#clashStep(r, now, players);
+    if (!this.gang || !r.gangOrg || r.recovering || !(r.arms?.rounds > 0) || r.behavior !== NPC_BEHAVIOR.calm || r.health < 60 || now < (r.clashCheckAt || 0)) return false;
+    r.clashCheckAt = now + 1000;
+    const minute = this.minuteAt?.minute ?? (this.scheduleMinute ? this.scheduleMinute(now) : null); if (minute === null) return false;
+    const zone = zoneAt(r.x, r.z); if (!zone || zone.protected || isInsideSafeZone({ x: r.x, y: 0, z: r.z })) return false;
+    const c = this.gang.challenges.find((x) => x.zoneId === zone.zoneId && x.orgs.includes(r.gangOrg) && minute >= x.from && minute < x.to); if (!c) return false;
+    const nerve = (Number(r.identity.traits?.bravery) || 0) >= 0.35 || (Number(r.identity.traits?.aggression) || 0) >= 0.2; if (!nerve) return false;
+    const rival = active.find((t) => t !== r && t.active && t.gangOrg && this.#hostile(r.gangOrg, t.gangOrg) && c.orgs.includes(t.gangOrg) && t.behavior !== NPC_BEHAVIOR.defeated
+      && dist(t, r) <= 15 && !isInsideSafeZone({ x: t.x, y: 0, z: t.z }) && segmentClear(r, t, this.hard, { pad: 0 }));
+    // Milestone 10: players who chose a crew (verified membership) in tonight's challenge may be engaged too; never anyone else, never
+    // anyone safe, dead, spawn-protected or recently downed by a crew (no spawn camping)
+    const player = !rival && players.find((p) => p.gangOrg && this.#hostile(r.gangOrg, p.gangOrg) && c.orgs.includes(p.gangOrg) && !p.safe && !p.dead && !p.protected && !p.gangImmune
+      && dist(p, r) <= 15 && !isInsideSafeZone({ x: p.x, y: 0, z: p.z }) && segmentClear(r, p, this.hard, { pad: 0 }));
+    if (!rival && !player) return false;
+    const target = rival || player;
+    if (active.some((x) => x !== r && x !== rival && x.active && !x.gangOrg && (dist(x, r) < 6 || dist(x, target) < 6))) return false;   // civilians close: hold fire
+    const profile = armedProfile(r.personality === 'peaceful' || r.personality === 'cautious' ? 'defensive' : r.personality, r.arms.weaponId, MULTIPLAYER_WEAPON_RULES[r.arms.weaponId]);
+    if (!profile) return false;
+    r.clash = { target: rival ? rival.index : null, player: player ? player.id : null, challengeId: c.challengeId, since: now, nextShotAt: now + 600, profile, rounds: 0 };
+    Object.assign(r, { behavior: NPC_BEHAVIOR.fight, route: null, fleeing: false }); this.metrics.combat.clashes = (this.metrics.combat.clashes || 0) + 1;
+    return true;
+  }
+  #clashStep(r, now, players = []) {
+    if (r.clash.player) return this.#playerClashStep(r, now, players);
+    const c = r.clash, t = this.residents[c.target], B = NPC_BEHAVIOR;
+    const end = (defeated) => {
+      if (c.rounds > 0) this.clashes.push({ challengeId: c.challengeId, attacker: this.schedules.get(r.identity.id)?.residentId, victim: t ? this.schedules.get(t.identity.id)?.residentId : null, rounds: c.rounds, defeated, witnesses: t ? this.witnessesOf(t.index) : [], at: now });
+      r.clash = null; r.clashCheckAt = now + 60_000; Object.assign(r, { behavior: B.alert, behaviorUntil: now + 4000 });
+      if (r.health < 40) this.#startFlee(r, now);
+      return true;
+    };
+    if (!t || !t.active || t.behavior === B.defeated) return end(!!t && t.behavior === B.defeated);
+    if (now - c.since > 20_000 || r.health < 40 || !(r.arms?.rounds > 0) || dist(t, r) > c.profile.range || isInsideSafeZone({ x: r.x, y: 0, z: r.z }) || isInsideSafeZone({ x: t.x, y: 0, z: t.z })) return end(false);
+    this.#face(r, t); Object.assign(r, { speed: 0, anim: NPC_ANIM.notice });
+    if (now >= c.nextShotAt && segmentClear(r, t, this.hard, { pad: 0 })) {
+      r.arms.rounds--; c.rounds++; const k = `${r.arms.residentId}|${r.arms.weaponId}`; this.ammoUsed.set(k, (this.ammoUsed.get(k) || 0) + 1);
+      this.damageResident(t.index, { damage: c.profile.damage, sourceId: `npc:${r.index}`, weaponId: r.arms.weaponId, from: r, at: now });
+      Object.assign(r, { behavior: B.strike, strikeUntil: now + 300 }); c.nextShotAt = now + c.profile.cooldownMs;
+      if (t.behavior === B.defeated) return end(true);
+    } else if (r.behavior === B.strike && now >= r.strikeUntil) r.behavior = B.fight;
+    return true;
+  }
+  // A crew member against a consenting rival crew player: shots go through the room's validated strike path (the gun's damage, reach,
+  // line of sight, safe zones), rounds are real; it ends when the player is down, gone, protected, out of reach or the window closes.
+  #playerClashStep(r, now, players) {
+    const c = r.clash, B = NPC_BEHAVIOR, p = players.find((x) => x.id === c.player);
+    const end = () => { r.clash = null; r.clashCheckAt = now + 60_000; Object.assign(r, { behavior: B.alert, behaviorUntil: now + 4000 }); return true; };
+    if (!p || p.dead || p.safe || p.protected || p.gangImmune || now - c.since > 20_000 || !(r.arms?.rounds > 0) || dist(p, r) > c.profile.range || r.health < 40) return end();
+    this.#face(r, p); Object.assign(r, { speed: 0, anim: NPC_ANIM.notice });
+    if (now >= c.nextShotAt && this.canShoot(r, p, c.profile.range)) {
+      r.arms.rounds--; c.rounds++; const k = `${r.arms.residentId}|${r.arms.weaponId}`; this.ammoUsed.set(k, (this.ammoUsed.get(k) || 0) + 1);
+      this.strikes.push({ npcIndex: r.index, targetId: p.id, damage: c.profile.damage, at: now, weaponId: r.arms.weaponId }); c.nextShotAt = now + c.profile.cooldownMs;
+      Object.assign(r, { behavior: B.strike, strikeUntil: now + 300 });
+    }
+    return true;
+  }
+  // NC Milestone 7: which residents saw something happen to resident `index` (awake on the street, within radius, a clear line
+  // of sight): only they may remember it. Resident ids from the bank's schedules.
+  witnessesOf(index, radius = 20) {
+    const v = this.residents[index]; if (!v) return [];
+    return this.residents.filter((r) => r !== v && r.active && !r.indoors && r.behavior !== NPC_BEHAVIOR.defeated && dist(r, v) <= radius && segmentClear(r, v, this.hard, { pad: 0 }))
+      .map((r) => this.schedules.get(r.identity.id)?.residentId).filter(Boolean).slice(0, 12);
+  }
+  residentIdOf(index) { const r = this.residents[index]; return r ? this.schedules.get(r.identity.id)?.residentId || null : null; }
+  // A resident's gunshot: within the gun's reach, a clear line through the city, a valid target.
+  canShoot(r, p, range) {
+    const d = dist(r, p);
+    if (!this.#targetable(p) || d > range || !segmentClear(r, p, this.hard, { pad: 0 })) return false;
+    const origin = { x: r.x, y: 1.35, z: r.z }, dir = { x: (p.x - r.x) / (d || 1), y: 0, z: (p.z - r.z) / (d || 1) };
+    return d < 0.05 || !publicCityShotOccluded(origin, dir, d);
+  }
 
   // M7.1D: a resident playing chess sits at its seat (on the stool, facing the board; anim `sit`) until
   // released; it stays active and visible, skips its routine and reactions, and resumes them afterwards,
@@ -460,10 +573,11 @@ export class CityNpcSimulation {
     const at = attacker || attack, distance = attacker ? dist(attacker, r) : Infinity;
     const attackers = new Set(r.threats.filter((t) => now - t.at < 10_000 && players.some((p) => p.id === t.sourceId && dist(p, r) < C.engageRadius)).map((t) => t.sourceId)).size || 1;
     const escape = this.#fleeCandidates(r, at).length > 0;
-    const decision = assessThreat({ personality: r.personality, health: r.health, distance, weapon: attack.weapon, attackers, escape, attacked: !ally, allyAttacked: ally });
+    const armed = !!(r.arms && r.arms.rounds > 0) && !isInsideSafeZone({ x: r.x, y: 0, z: r.z });
+    const decision = assessThreat({ personality: r.personality, health: r.health, distance, weapon: attack.weapon, attackers, escape, attacked: !ally, allyAttacked: ally, armed });
     this.metrics.combat[decision]++;
     r.threat = { x: at.x, z: at.z, sourceId: attack.sourceId };
-    const profile = decision === 'fight' && this.#targetable(attacker) ? strikeProfile(r.personality, !escape) : null;
+    const profile = decision === 'fight' && this.#targetable(attacker) ? ((armed && armedProfile(r.personality, r.arms.weaponId, MULTIPLAYER_WEAPON_RULES[r.arms.weaponId], !escape)) || strikeProfile(r.personality, !escape)) : null;
     if (profile) { Object.assign(r, { behavior: B.fight, fight: { targetId: attacker.id, profile, since: now, nextStrikeAt: now + 400, repathAt: 0 }, route: null, fleeing: false }); return; }
     if (decision === 'warn') { Object.assign(r, { behavior: B.warn, behaviorUntil: now + C.warnMs }); return; }
     if (decision === 'flee' && this.#startFlee(r, now)) return;
@@ -483,7 +597,13 @@ export class CityNpcSimulation {
       return;
     }
     const d = dist(target, r); this.#face(r, target);
-    if (d > C.strikeRange) {
+    // an armed fighter that has run out of rounds (or stepped into a protected place) fights on bare-handed, or gets away
+    if (f.profile.ranged && (!(r.arms?.rounds > 0) || isInsideSafeZone({ x: r.x, y: 0, z: r.z }))) {
+      const melee = strikeProfile(r.personality, true);
+      if (melee) f.profile = melee; else { Object.assign(r, { fight: null, route: null }); if (!this.#startFlee(r, now)) Object.assign(r, { behavior: B.alert, behaviorUntil: now + NPC_BEHAVIOR_RULES.alertMs }); return; }
+    }
+    const reach = f.profile.ranged ? f.profile.range : C.strikeRange;
+    if (d > reach || (f.profile.ranged && !this.canShoot(r, target, reach))) {
       r.behavior = B.fight;
       if (!r.route || now >= f.repathAt) {
         if (segmentClear(r, target, this.hard, { pad: 0.2 })) r.route = [{ x: r.x, z: r.z }, { x: target.x, z: target.z }];
@@ -497,7 +617,12 @@ export class CityNpcSimulation {
     }
     Object.assign(r, { route: null, speed: 0, anim: NPC_ANIM.notice });
     if (now >= f.nextStrikeAt) {
-      if (this.canStrike(r, target)) { this.strikes.push({ npcIndex: r.index, targetId: target.id, damage: f.profile.damage, at: now }); Object.assign(r, { behavior: B.strike, strikeUntil: now + 500 }); this.metrics.combat.strikes++; }
+      if (f.profile.ranged) {
+        if (this.canShoot(r, target, reach)) {
+          r.arms.rounds--; const k = `${r.arms.residentId}|${r.arms.weaponId}`; this.ammoUsed.set(k, (this.ammoUsed.get(k) || 0) + 1);
+          this.strikes.push({ npcIndex: r.index, targetId: target.id, damage: f.profile.damage, at: now, weaponId: r.arms.weaponId }); Object.assign(r, { behavior: B.strike, strikeUntil: now + 300 }); this.metrics.combat.shots = (this.metrics.combat.shots || 0) + 1;
+        }
+      } else if (this.canStrike(r, target)) { this.strikes.push({ npcIndex: r.index, targetId: target.id, damage: f.profile.damage, at: now }); Object.assign(r, { behavior: B.strike, strikeUntil: now + 500 }); this.metrics.combat.strikes++; }
       f.nextStrikeAt = now + f.profile.cooldownMs;
     } else if (r.behavior === B.strike && now >= r.strikeUntil) r.behavior = B.fight;
   }
@@ -539,6 +664,7 @@ export class CityNpcSimulation {
   // reaction (not the walking routine) controls the resident.
   #behave(r, players, active, dt, now) {
     const B = NPC_BEHAVIOR, R = NPC_BEHAVIOR_RULES;
+    if (this.combat && this.#gangStep(r, active, now, players)) return true;
     if (this.combat && this.#combatStep(r, players, active, dt, now)) return true;
     const react = (behavior, ms, reaction, threat) => {
       Object.assign(r, { behavior, behaviorUntil: now + ms, reaction, threat, fleeing: false, speed: 0 });

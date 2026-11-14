@@ -22,11 +22,16 @@ export const NPC_COMBAT_RULES = Object.freeze({
   allyRadius: 6,           // aggressive residents defend a resident hit this close
 });
 
+// Milestone 5 expansion: residents who bought a gun and carry it (bank: registry.weapon_inventory, rounds from ammo_inventory) may
+// answer an attack with it. Still never the first to shoot, never at a peaceful player, never inside a protected place (the caller
+// passes armed=false there), never against explosives; peaceful and cautious residents still run and look for help even when armed.
+export const NPC_ARMED_RULES = Object.freeze({ range: 18, burstFactor: 3, minCooldownMs: 450 });
+
 export const weaponClass = (weaponId) => (weaponId === 'rpg' ? 'explosive' : weaponId ? 'gun' : 'melee');
 
 // fight | flee | warn | cower. `attacked`: the resident itself was hit;
 // `allyAttacked`: a resident within allyRadius was hit.
-export function assessThreat({ personality, health, distance, weapon, attackers = 1, escape = true, attacked = false, allyAttacked = false }) {
+export function assessThreat({ personality, health, distance, weapon, attackers = 1, escape = true, attacked = false, allyAttacked = false, armed = false }) {
   const flee = escape ? 'flee' : 'cower';
   // Shot at from afar: hide or get away; nobody charges an attacker beyond engagement range.
   if (distance > NPC_COMBAT_RULES.engageRadius) return flee;
@@ -35,10 +40,12 @@ export function assessThreat({ personality, health, distance, weapon, attackers 
     case 'cautious': return weapon === 'melee' && distance > 3 && !attacked ? 'warn' : flee;
     case 'defensive':
       if (!attacked) return flee;
+      if (armed && health >= 40 && attackers <= 2 && weapon !== 'explosive' && distance <= NPC_ARMED_RULES.range) return 'fight';
       if (health >= 50 && attackers <= 1 && distance <= (weapon === 'melee' ? 8 : 4) && weapon !== 'explosive') return 'fight';
       return escape ? 'flee' : health >= 25 ? 'fight' : 'cower'; // cornered: defend
     case 'aggressive':
       if (!attacked && !allyAttacked) return flee;
+      if (armed && health >= 30 && attackers <= 3 && weapon !== 'explosive' && distance <= NPC_ARMED_RULES.range) return 'fight';
       if (health >= 35 && attackers <= 2 && weapon !== 'explosive' && (weapon === 'melee' || distance <= 12)) return 'fight';
       return escape ? 'flee' : health >= 20 ? 'fight' : 'cower';
     default: return flee;
@@ -50,4 +57,11 @@ export function strikeProfile(personality, cornered = false) {
   if (personality === 'aggressive') return { damage: NPC_COMBAT_RULES.damage.aggressive, cooldownMs: NPC_COMBAT_RULES.cooldownMs.aggressive, retreatAt: NPC_COMBAT_RULES.retreatAt.aggressive };
   if (personality === 'defensive') return { damage: NPC_COMBAT_RULES.damage.defensive, cooldownMs: NPC_COMBAT_RULES.cooldownMs.defensive, retreatAt: NPC_COMBAT_RULES.retreatAt.defensive };
   return cornered ? { damage: NPC_COMBAT_RULES.damage.cornered, cooldownMs: NPC_COMBAT_RULES.cooldownMs.cornered, retreatAt: NPC_COMBAT_RULES.retreatAt.cornered } : null;
+}
+
+// An armed fighter's profile: the gun's own damage (the same server rule players use), its reach capped for residents, a deliberate
+// rate of fire (bursts, not the gun's full cyclic rate). rule: MULTIPLAYER_WEAPON_RULES[weaponId].
+export function armedProfile(personality, weaponId, rule, cornered = false) {
+  const base = strikeProfile(personality, cornered); if (!base || !rule || weaponId === 'rpg') return null;
+  return { ...base, ranged: true, weaponId, damage: rule.damage, range: Math.min(rule.range, NPC_ARMED_RULES.range), cooldownMs: Math.max(NPC_ARMED_RULES.minCooldownMs, Math.round(NPC_ARMED_RULES.burstFactor * 60_000 / rule.rpm)) };
 }

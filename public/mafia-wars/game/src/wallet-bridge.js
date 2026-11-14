@@ -53,6 +53,16 @@ export function isFounderSignatureMessage(value) {
     && ((typeof payload.signature === 'string' && /^0x[0-9a-fA-F]{130}$/.test(payload.signature)) || typeof payload.error === 'string');
 }
 
+// NC-LIFE-02 Milestone 4: resident registration. Smart-contract wallets (ERC-1271) sign with longer signatures than ordinary wallets.
+export function isResidentSignatureMessage(value) {
+  if (!value || typeof value !== 'object') return false;
+  const message = value, payload = message.payload;
+  return message.channel === WALLET_BRIDGE_CHANNEL && message.version === WALLET_BRIDGE_VERSION && message.type === 'resident-signature'
+    && Object.keys(message).every((key) => ['channel', 'version', 'type', 'payload'].includes(key))
+    && !!payload && typeof payload === 'object' && typeof payload.requestId === 'string'
+    && ((typeof payload.signature === 'string' && /^0x(?:[0-9a-fA-F]{2}){65,8192}$/.test(payload.signature)) || typeof payload.error === 'string');
+}
+
 export function setupCityWalletBridge({ windowObject = window, onWalletState = () => {} } = {}) {
   const isEmbedded = windowObject.parent !== windowObject;
   const targetOrigin = windowObject.location.origin;
@@ -71,7 +81,7 @@ export function setupCityWalletBridge({ windowObject = window, onWalletState = (
   function onMessage(event) {
     if (!isEmbedded || event.origin !== targetOrigin || event.source !== windowObject.parent) return;
     if (isWalletStateMessage(event.data)) onWalletState(event.data.payload);
-    else if (isFounderSignatureMessage(event.data)) {
+    else if (isFounderSignatureMessage(event.data) || isResidentSignatureMessage(event.data)) {
       const pending = pendingSignatures.get(event.data.payload.requestId);
       if (!pending) return;
       pendingSignatures.delete(event.data.payload.requestId); clearTimeout(pending.timer);
@@ -112,6 +122,17 @@ export function setupCityWalletBridge({ windowObject = window, onWalletState = (
           type: 'sign-founder-challenge',
           payload: { requestId, message },
         }, targetOrigin);
+      });
+    },
+    // NC-LIFE-02 Milestone 4: ask the website's wallet to sign the City Service's resident sign-in text (EIP-4361). The website signs
+    // only that exact text for its own domain and the connected wallet; signing is free and moves nothing.
+    signResidentChallenge(message) {
+      if (!isEmbedded) return Promise.reject(new Error('Open the game from nerdieblaq.xyz to register with your wallet.'));
+      const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => { pendingSignatures.delete(requestId); reject(new Error('The wallet did not answer in time.')); }, 180_000);
+        pendingSignatures.set(requestId, { resolve, reject, timer });
+        windowObject.parent.postMessage({ channel: WALLET_BRIDGE_CHANNEL, version: WALLET_BRIDGE_VERSION, type: 'sign-resident-challenge', payload: { requestId, message } }, targetOrigin);
       });
     },
     dispose() {

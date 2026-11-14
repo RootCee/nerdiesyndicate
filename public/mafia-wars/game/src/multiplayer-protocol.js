@@ -51,7 +51,9 @@ export function validMovement(message) {
     && ['idle', 'walk', 'run'].includes(message.state)
     // M6.9 (optional; older clients omit them): weapon raised (0/1) and aim pitch in radians.
     && (message.aim === undefined || message.aim === 0 || message.aim === 1)
-    && (message.pitch === undefined || (Number.isFinite(message.pitch) && Math.abs(message.pitch) <= AIM_PITCH_LIMIT));
+    && (message.pitch === undefined || (Number.isFinite(message.pitch) && Math.abs(message.pitch) <= AIM_PITCH_LIMIT))
+    // NC-INPUT-01 (optional; older clients omit it): crouched (0/1).
+    && (message.crouch === undefined || message.crouch === 0 || message.crouch === 1);
 }
 export const AIM_PITCH_LIMIT = 1.5;
 
